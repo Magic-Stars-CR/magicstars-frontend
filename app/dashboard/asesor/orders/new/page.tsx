@@ -130,7 +130,7 @@ export default function NewOrderPage() {
               <CardTitle className="flex items-center gap-2">
                 <Package className="w-5 h-5" />
                 Detalles del Pedido
-              </CardHeader>
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">

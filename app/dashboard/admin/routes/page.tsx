@@ -96,7 +96,7 @@ export default function AdminRoutesPage() {
     const matchesSearch = 
       order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.customer.phone.includes(searchTerm);
+      (order.customer.phone && order.customer.phone.includes(searchTerm));
     
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     const matchesMessenger = messengerFilter === 'all' || order.assignedMessenger?.id === messengerFilter;
@@ -272,7 +272,7 @@ export default function AdminRoutesPage() {
 
                   <div>
                     <p className="font-medium text-sm">{order.customer.name}</p>
-                    <p className="text-xs text-muted-foreground">{order.customer.phone}</p>
+                    <p className="text-xs text-muted-foreground">{order.customer.phone || 'Sin teléfono'}</p>
                   </div>
 
                   <div>
@@ -284,7 +284,7 @@ export default function AdminRoutesPage() {
 
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm">{order.deliveryAddress}</span>
+                    <span className="text-sm">{order.deliveryAddress || 'Sin dirección'}</span>
                   </div>
 
                   <div>
@@ -341,7 +341,7 @@ export default function AdminRoutesPage() {
 
                   <div>
                     <p className="font-medium text-sm">{order.customer.name}</p>
-                    <p className="text-xs text-muted-foreground">{order.customer.phone}</p>
+                    <p className="text-xs text-muted-foreground">{order.customer.phone || 'Sin teléfono'}</p>
                   </div>
 
                   <div>
@@ -353,7 +353,7 @@ export default function AdminRoutesPage() {
 
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm">{order.deliveryAddress}</span>
+                    <span className="text-sm">{order.deliveryAddress || 'Sin dirección'}</span>
                   </div>
 
                   <div className="flex items-center gap-2">

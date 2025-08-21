@@ -225,7 +225,7 @@ const generateOrderItems = (count: number): OrderItem[] => {
       id: `item-${Date.now()}-${i}`,
       product,
       quantity,
-      unitPrice: product.price,
+      price: product.price,
       totalPrice: product.price * quantity,
     });
   }
@@ -522,8 +522,8 @@ const generateMockOrders = (): Order[] => {
     const origin = origins[Math.floor(Math.random() * origins.length)];
     
     // Assign messenger based on status
-    let assignedMessengerId;
-    let assignedMessenger;
+    let assignedMessengerId: string | undefined;
+    let assignedMessenger: User | undefined;
     
     if (['en_ruta', 'entregado', 'devolucion'].includes(status)) {
       assignedMessengerId = messengers[Math.floor(Math.random() * messengers.length)].id;

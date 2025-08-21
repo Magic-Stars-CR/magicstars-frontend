@@ -42,7 +42,7 @@ export default function MessengerProfilePage() {
     name: user?.name || '',
     email: user?.email || '',
     phone: user?.phone || '',
-    address: user?.address || ''
+    address: ''
   });
 
   useEffect(() => {
@@ -126,8 +126,10 @@ export default function MessengerProfilePage() {
   const getTopAreas = () => {
     const areaStats: { [key: string]: number } = {};
     orders.forEach(order => {
-      const area = order.deliveryAddress.split(',')[0].trim();
-      areaStats[area] = (areaStats[area] || 0) + 1;
+      if (order.deliveryAddress) {
+        const area = order.deliveryAddress.split(',')[0].trim();
+        areaStats[area] = (areaStats[area] || 0) + 1;
+      }
     });
     
     return Object.entries(areaStats)

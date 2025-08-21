@@ -112,8 +112,8 @@ export default function MessengerDashboard() {
       filtered = filtered.filter(order => 
         order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         order.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.customer.phone.includes(searchTerm) ||
-        order.deliveryAddress.toLowerCase().includes(searchTerm.toLowerCase())
+        (order.customer.phone && order.customer.phone.includes(searchTerm)) ||
+        (order.deliveryAddress && order.deliveryAddress.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
 
@@ -352,11 +352,11 @@ export default function MessengerDashboard() {
                           </div>
                           <div className="flex items-center gap-2">
                             <Phone className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm">{order.customer.phone}</span>
+                            <span className="text-sm">{order.customer.phone || 'No especificado'}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <MapPin className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm">{order.deliveryAddress}</span>
+                            <span className="text-sm">{order.deliveryAddress || 'Sin dirección'}</span>
                           </div>
                         </div>
                         
@@ -442,8 +442,9 @@ export default function MessengerDashboard() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => window.open(`tel:${order.customer.phone}`)}
+                          onClick={() => order.customer.phone && window.open(`tel:${order.customer.phone}`)}
                           className="border-blue-200 text-blue-600 hover:bg-blue-50"
+                          disabled={!order.customer.phone}
                         >
                           <Phone className="w-3 h-3 mr-1" />
                           Llamar
@@ -481,7 +482,7 @@ export default function MessengerDashboard() {
                         <div>
                           <p className="font-semibold">{order.id}</p>
                           <p className="text-sm text-muted-foreground">
-                            {order.customer.name} - {order.deliveryAddress}
+                            {order.customer.name} - {order.deliveryAddress || 'Sin dirección'}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {formatDate(order.createdAt)}
@@ -526,7 +527,7 @@ export default function MessengerDashboard() {
                         <div>
                           <p className="font-semibold">{order.id}</p>
                           <p className="text-sm text-muted-foreground">
-                            {order.customer.name} - {order.deliveryAddress}
+                            {order.customer.name} - {order.deliveryAddress || 'Sin dirección'}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {formatDate(order.createdAt)}

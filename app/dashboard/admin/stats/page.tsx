@@ -95,8 +95,10 @@ export default function AdminStatsPage() {
   const getTopAreas = () => {
     const areaStats: { [key: string]: number } = {};
     orders.forEach(order => {
-      const area = order.deliveryAddress.split(',')[0].trim();
-      areaStats[area] = (areaStats[area] || 0) + 1;
+      if (order.deliveryAddress) {
+        const area = order.deliveryAddress.split(',')[0].trim();
+        areaStats[area] = (areaStats[area] || 0) + 1;
+      }
     });
     
     return Object.entries(areaStats)

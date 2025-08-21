@@ -72,7 +72,7 @@ export default function AdminUsersPage() {
     const matchesSearch = 
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.phone.includes(searchTerm);
+      (user.phone && user.phone.includes(searchTerm));
     
     const matchesRole = roleFilter === 'all' || user.role === roleFilter;
     const matchesStatus = statusFilter === 'all' || user.isActive === (statusFilter === 'active');
@@ -247,12 +247,12 @@ export default function AdminUsersPage() {
 
                   <div className="flex items-center gap-2">
                     <Phone className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm">{user.phone}</span>
+                    <span className="text-sm">{user.phone || 'No especificado'}</span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm">{user.address || 'No especificada'}</span>
+                    <span className="text-sm">No especificada</span>
                   </div>
 
                   <div>

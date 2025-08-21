@@ -8,7 +8,7 @@ export type OrderStatus =
   | 'devolucion'
   | 'reagendado';
 
-export type PaymentMethod = 'contra_entrega' | 'sinpe' | 'tarjeta' | 'transferencia';
+export type PaymentMethod = 'efectivo' | 'sinpe';
 
 export type OrderOrigin = 'shopify' | 'manual' | 'csv';
 
@@ -26,7 +26,7 @@ export interface User {
 export interface Customer {
   id: string;
   name: string;
-  phone: string;
+  phone?: string;
   email?: string;
   address: string;
   province: string;
@@ -47,7 +47,7 @@ export interface OrderItem {
   id: string;
   product: Product;
   quantity: number;
-  unitPrice: number;
+  price: number;
   totalPrice: number;
 }
 
@@ -71,6 +71,7 @@ export interface Order {
   notes?: string;
   deliveryNotes?: string;
   trackingUrl?: string;
+  deliveryAddress?: string;
 }
 
 export interface Stats {
@@ -87,6 +88,8 @@ export interface Stats {
 export interface MessengerStats extends Stats {
   assignedToday: number;
   completedToday: number;
+  pendingToday: number;
+  inRouteToday: number;
 }
 
 export interface DashboardFilters {

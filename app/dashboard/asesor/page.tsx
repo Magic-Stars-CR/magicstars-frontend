@@ -190,7 +190,7 @@ export default function AsesorDashboard() {
                     <OrderStatusBadge status={order.status} />
                   </div>
                   <p className="text-sm text-muted-foreground mb-1">
-                    {order.customer.name} • {order.customer.phone}
+                    {order.customer.name} • {order.customer.phone || 'Sin teléfono'}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {order.customer.district}, {order.customer.canton}
@@ -199,7 +199,7 @@ export default function AsesorDashboard() {
                 <div className="text-right">
                   <p className="font-bold">{formatCurrency(order.totalAmount)}</p>
                   <p className="text-xs text-muted-foreground capitalize">
-                    {order.paymentMethod.replace('_', ' ')}
+                    {order.paymentMethod}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {new Date(order.createdAt).toLocaleDateString('es-CR')}

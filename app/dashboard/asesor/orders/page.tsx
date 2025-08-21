@@ -70,7 +70,7 @@ export default function AsesorOrdersPage() {
     const matchesSearch = 
       order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.customer.phone.includes(searchTerm);
+      (order.customer.phone && order.customer.phone.includes(searchTerm));
     
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     
@@ -269,7 +269,7 @@ export default function AsesorOrdersPage() {
 
                   <div>
                     <p className="font-medium text-sm">{order.customer.name}</p>
-                    <p className="text-xs text-muted-foreground">{order.customer.phone}</p>
+                    <p className="text-xs text-muted-foreground">{order.customer.phone || 'Sin teléfono'}</p>
                   </div>
 
                   <div>
@@ -280,7 +280,7 @@ export default function AsesorOrdersPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className="text-sm">{order.deliveryAddress}</span>
+                    <span className="text-sm">{order.deliveryAddress || 'Sin dirección'}</span>
                   </div>
 
                   <div className="flex items-center gap-2">

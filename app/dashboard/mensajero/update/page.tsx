@@ -36,7 +36,7 @@ export default function UpdateOrderPage() {
       const foundOrder = orders.find(o => 
         o.id.toLowerCase().includes(orderId.toLowerCase()) ||
         o.customer.name.toLowerCase().includes(orderId.toLowerCase()) ||
-        o.customer.phone.includes(orderId)
+        (o.customer.phone && o.customer.phone.includes(orderId))
       );
       
       if (foundOrder) {
@@ -155,10 +155,11 @@ export default function UpdateOrderPage() {
                     <Button
                       variant="link"
                       className="p-0 h-auto font-medium"
-                      onClick={() => window.open(`tel:${order.customer.phone}`)}
+                      onClick={() => order.customer.phone && window.open(`tel:${order.customer.phone}`)}
+                      disabled={!order.customer.phone}
                     >
                       <Phone className="w-3 h-3 mr-1" />
-                      {order.customer.phone}
+                      {order.customer.phone || 'Sin teléfono'}
                     </Button>
                   </div>
                   <div>
@@ -177,7 +178,7 @@ export default function UpdateOrderPage() {
                   <div>
                     <p className="text-sm text-muted-foreground">Método de Pago</p>
                     <Badge variant="outline" className="capitalize">
-                      {order.paymentMethod.replace('_', ' ')}
+                      {order.paymentMethod}
                     </Badge>
                   </div>
                   <div>
@@ -185,7 +186,7 @@ export default function UpdateOrderPage() {
                     <div className="flex items-start gap-2">
                       <Navigation className="w-4 h-4 mt-1 text-muted-foreground" />
                       <div>
-                        <p className="text-sm">{order.customer.address}</p>
+                        <p className="text-sm">{order.deliveryAddress || 'Sin dirección'}</p>
                         <p className="text-xs text-muted-foreground">
                           {order.customer.district}, {order.customer.canton}
                         </p>
@@ -205,7 +206,7 @@ export default function UpdateOrderPage() {
                     <div>
                       <p className="font-medium text-sm">{item.product.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {item.quantity}x {formatCurrency(item.unitPrice)}
+                        {item.quantity}x {formatCurrency(item.price)}
                       </p>
                     </div>
                     <p className="font-medium">{formatCurrency(item.totalPrice)}</p>
