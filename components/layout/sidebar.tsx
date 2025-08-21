@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   Star,
+  User,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -35,6 +36,7 @@ const menuItems = {
   ],
   mensajero: [
     { icon: LayoutDashboard, label: 'Mis Pedidos', href: '/dashboard/mensajero' },
+    { icon: User, label: 'Mi Perfil', href: '/dashboard/mensajero/profile' },
     { icon: UserCheck, label: 'Actualizar', href: '/dashboard/mensajero/update' },
   ],
 };
