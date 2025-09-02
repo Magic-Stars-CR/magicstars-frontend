@@ -492,7 +492,7 @@ export default function MessengerProfilePage() {
                           <div>
                             <p className="font-medium">{order.id}</p>
                             <p className="text-sm text-muted-foreground">
-                              {order.customer.name} - {formatDate(order.createdAt)}
+                              {order.customerName} - {formatDate(order.createdAt)}
                             </p>
                           </div>
                         </div>

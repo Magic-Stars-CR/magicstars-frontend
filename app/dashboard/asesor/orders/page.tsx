@@ -1,41 +1,54 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { mockApi } from '@/lib/mock-api';
-import { Order } from '@/lib/types';
-import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
+import { mockApi } from '@/lib/mock-api';
+import { Order } from '@/lib/types';
+import { useAuth } from '@/contexts/auth-context';
 import { 
-  Package, 
+  ArrowLeft, 
   Search, 
   Filter, 
-  Plus, 
-  Download, 
+  Package, 
+  CheckCircle, 
+  Clock, 
+  TrendingUp,
+  Loader2,
+  Phone,
+  MessageCircle,
+  MapPin,
+  Plus,
+  Download,
   Eye,
-  Edit,
-  ArrowLeft
+  Edit
 } from 'lucide-react';
-import { Loader2 } from 'lucide-react';
-import Link from 'next/link';
 
-export default function AsesorOrdersPage() {
+export default function AsesorOrders() {
+  const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [dateFilter, setDateFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all');
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user) {
+      loadData();
+    }
+  }, [user]);
 
   const loadData = async () => {
+    if (!user?.companyId) return;
+    
     try {
       setLoading(true);
-      const ordersRes = await mockApi.getOrders();
+      const ordersRes = await mockApi.getOrders({ userCompanyId: user.companyId });
       setOrders(ordersRes);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -69,8 +82,8 @@ export default function AsesorOrdersPage() {
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 
       order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (order.customer.phone && order.customer.phone.includes(searchTerm));
+      order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.customerPhone && order.customerPhone.includes(searchTerm));
     
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     
@@ -268,8 +281,8 @@ export default function AsesorOrdersPage() {
                   </div>
 
                   <div>
-                    <p className="font-medium text-sm">{order.customer.name}</p>
-                    <p className="text-xs text-muted-foreground">{order.customer.phone || 'Sin teléfono'}</p>
+                    <p className="font-medium text-sm">{order.customerName}</p>
+                    <p className="text-xs text-muted-foreground">{order.customerPhone || 'Sin teléfono'}</p>
                   </div>
 
                   <div>
@@ -295,11 +308,15 @@ export default function AsesorOrdersPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
-                    <Eye className="w-4 h-4" />
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/dashboard/asesor/orders/${order.id}`}>
+                      <Eye className="w-4 h-4" />
+                    </Link>
                   </Button>
-                  <Button variant="outline" size="sm">
-                    <Edit className="w-4 h-4" />
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/dashboard/asesor/orders/${order.id}?edit=true`}>
+                      <Edit className="w-4 h-4" />
+                    </Link>
                   </Button>
                 </div>
               </div>

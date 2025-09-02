@@ -35,8 +35,8 @@ export default function UpdateOrderPage() {
       const orders = await mockApi.getOrders();
       const foundOrder = orders.find(o => 
         o.id.toLowerCase().includes(orderId.toLowerCase()) ||
-        o.customer.name.toLowerCase().includes(orderId.toLowerCase()) ||
-        (o.customer.phone && o.customer.phone.includes(orderId))
+        o.customerName.toLowerCase().includes(orderId.toLowerCase()) ||
+        (o.customerPhone && o.customerPhone.includes(orderId))
       );
       
       if (foundOrder) {
@@ -148,19 +148,22 @@ export default function UpdateOrderPage() {
                 <div className="space-y-2">
                   <div>
                     <p className="text-sm text-muted-foreground">Cliente</p>
-                    <p className="font-medium">{order.customer.name}</p>
+                    <p className="font-medium">{order.customerName}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Teléfono</p>
-                    <Button
-                      variant="link"
-                      className="p-0 h-auto font-medium"
-                      onClick={() => order.customer.phone && window.open(`tel:${order.customer.phone}`)}
-                      disabled={!order.customer.phone}
-                    >
-                      <Phone className="w-3 h-3 mr-1" />
-                      {order.customer.phone || 'Sin teléfono'}
-                    </Button>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => order.customerPhone && window.open(`tel:${order.customerPhone}`)}
+                        disabled={!order.customerPhone}
+                        className="h-7 px-2 text-xs"
+                      >
+                        <Phone className="w-3 h-3 mr-1" />
+                        {order.customerPhone || 'Sin teléfono'}
+                      </Button>
+                    </div>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Total</p>
@@ -188,7 +191,7 @@ export default function UpdateOrderPage() {
                       <div>
                         <p className="text-sm">{order.deliveryAddress || 'Sin dirección'}</p>
                         <p className="text-xs text-muted-foreground">
-                          {order.customer.district}, {order.customer.canton}
+                          {order.customerDistrict}, {order.customerCanton}
                         </p>
                       </div>
                     </div>

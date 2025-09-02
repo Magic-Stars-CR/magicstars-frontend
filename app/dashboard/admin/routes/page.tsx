@@ -95,8 +95,8 @@ export default function AdminRoutesPage() {
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 
       order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (order.customer.phone && order.customer.phone.includes(searchTerm));
+      order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.customerPhone && order.customerPhone.includes(searchTerm));
     
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     const matchesMessenger = messengerFilter === 'all' || order.assignedMessenger?.id === messengerFilter;
@@ -271,8 +271,8 @@ export default function AdminRoutesPage() {
                   </div>
 
                   <div>
-                    <p className="font-medium text-sm">{order.customer.name}</p>
-                    <p className="text-xs text-muted-foreground">{order.customer.phone || 'Sin teléfono'}</p>
+                    <p className="font-medium text-sm">{order.customerName}</p>
+                    <p className="text-xs text-muted-foreground">{order.customerPhone || 'Sin teléfono'}</p>
                   </div>
 
                   <div>
@@ -340,8 +340,8 @@ export default function AdminRoutesPage() {
                   </div>
 
                   <div>
-                    <p className="font-medium text-sm">{order.customer.name}</p>
-                    <p className="text-xs text-muted-foreground">{order.customer.phone || 'Sin teléfono'}</p>
+                    <p className="font-medium text-sm">{order.customerName}</p>
+                    <p className="text-xs text-muted-foreground">{order.customerPhone || 'Sin teléfono'}</p>
                   </div>
 
                   <div>

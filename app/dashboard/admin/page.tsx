@@ -23,6 +23,8 @@ import {
   Download,
   UserCheck,
   Clock,
+  Building2,
+  Warehouse,
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -87,13 +89,24 @@ export default function AdminDashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid md:grid-cols-4 gap-4">
+      <div className="grid md:grid-cols-6 gap-4">
         <Card className="border-2 border-dashed border-blue-200 hover:border-blue-400 transition-colors">
           <CardContent className="flex items-center justify-center p-6">
             <Button asChild className="w-full">
               <Link href="/dashboard/admin/orders">
                 <Package className="w-4 h-4 mr-2" />
                 Gestionar Pedidos
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-2 border-dashed border-emerald-200 hover:border-emerald-400 transition-colors">
+          <CardContent className="flex items-center justify-center p-6">
+            <Button asChild variant="outline" className="w-full">
+              <Link href="/dashboard/admin/inventory">
+                <Warehouse className="w-4 h-4 mr-2" />
+                Gestionar Inventario
               </Link>
             </Button>
           </CardContent>
@@ -116,6 +129,17 @@ export default function AdminDashboard() {
               <Link href="/dashboard/admin/users">
                 <Users className="w-4 h-4 mr-2" />
                 Gestionar Usuarios
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 transition-colors">
+          <CardContent className="flex items-center justify-center p-6">
+            <Button asChild variant="outline" className="w-full">
+              <Link href="/dashboard/admin/companies">
+                <Building2 className="w-4 h-4 mr-2" />
+                Gestionar Empresas
               </Link>
             </Button>
           </CardContent>
@@ -221,8 +245,8 @@ export default function AdminDashboard() {
                       <h3 className="font-semibold text-sm">{order.id}</h3>
                       <OrderStatusBadge status={order.status} />
                     </div>
-                    <p className="text-xs text-muted-foreground mb-1">
-                      {order.customer.name}
+                    <p className="text-sm text-muted-foreground">
+                      {order.customerName}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {order.assignedMessenger?.name || 'Sin asignar'}

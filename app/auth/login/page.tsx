@@ -37,8 +37,12 @@ export default function LoginPage() {
 
   const demoUsers = [
     { email: 'admin@magicstars.com', role: 'Administrador' },
-    { email: 'maria.asesor@magicstars.com', role: 'Asesor' },
+    { email: 'maria.asesor@paramachoscr.com', role: 'Asesor - Para Machos CR' },
+    { email: 'pedro.asesor@beautyfan.cr', role: 'Asesor - BeautyFan' },
+    { email: 'carlos.asesor@allstars.cr', role: 'Asesor - AllStars' },
     { email: 'juan.mensajero@magicstars.com', role: 'Mensajero' },
+    { email: 'luis.mensajero@magicstars.com', role: 'Mensajero' },
+    { email: 'ana.mensajero@magicstars.com', role: 'Mensajero' },
   ];
 
   return (
@@ -50,10 +54,10 @@ export default function LoginPage() {
             <Star className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Magic Stars
+            Sistema de Delivery
           </h1>
           <p className="text-muted-foreground mt-2">
-            Sistema de Gestión de Pedidos
+            Gestión Multi-Empresa de Pedidos
           </p>
         </div>
 

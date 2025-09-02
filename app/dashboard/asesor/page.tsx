@@ -1,41 +1,46 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { mockApi } from '@/lib/mock-api';
-import { Order, Stats } from '@/lib/types';
-import { StatsCard } from '@/components/dashboard/stats-card';
-import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import {
-  Package,
-  CheckCircle,
-  RotateCcw,
-  Truck,
-  DollarSign,
-  TrendingUp,
+import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
+import { mockApi } from '@/lib/mock-api';
+import { Order, Stats } from '@/lib/types';
+import { useAuth } from '@/contexts/auth-context';
+import { 
   Plus,
   Upload,
   Download,
+  Loader2,
+  Package,
+  CheckCircle,
+  TrendingUp,
+  RotateCcw,
+  Truck
 } from 'lucide-react';
-import { Loader2 } from 'lucide-react';
-import Link from 'next/link';
+import { StatsCard } from '@/components/dashboard/stats-card';
 
 export default function AsesorDashboard() {
+  const { user } = useAuth();
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user) {
+      loadData();
+    }
+  }, [user]);
 
   const loadData = async () => {
+    if (!user?.companyId) return;
+    
     try {
       setLoading(true);
       const [ordersRes, statsRes] = await Promise.all([
-        mockApi.getOrders(),
-        mockApi.getStats(),
+        mockApi.getOrders({ userCompanyId: user.companyId }),
+        mockApi.getStats({ userCompanyId: user.companyId }),
       ]);
       
       // Get last 10 orders
@@ -100,9 +105,11 @@ export default function AsesorDashboard() {
 
         <Card className="border-2 border-dashed border-purple-200 hover:border-purple-400 transition-colors">
           <CardContent className="flex items-center justify-center p-6">
-            <Button variant="outline" className="w-full">
-              <Download className="w-4 h-4 mr-2" />
-              Plantilla CSV
+            <Button asChild variant="outline" className="w-full">
+              <Link href="/dashboard/asesor/orders/upload">
+                <Download className="w-4 h-4 mr-2" />
+                Descargar Plantilla
+              </Link>
             </Button>
           </CardContent>
         </Card>
@@ -110,7 +117,7 @@ export default function AsesorDashboard() {
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <StatsCard
             title="Total Pedidos"
             value={stats.totalOrders}
@@ -132,19 +139,12 @@ export default function AsesorDashboard() {
             trend={{ value: 3, isPositive: true }}
             className="bg-purple-50 border-purple-200"
           />
-          <StatsCard
-            title="Total Efectivo"
-            value={formatCurrency(stats.totalCash)}
-            icon={DollarSign}
-            trend={{ value: 15, isPositive: true }}
-            className="bg-orange-50 border-orange-200"
-          />
         </div>
       )}
 
       {/* Additional Stats */}
       {stats && (
-        <div className="grid md:grid-cols-4 gap-4">
+        <div className="grid md:grid-cols-3 gap-4">
           <StatsCard
             title="Devoluciones"
             value={stats.returnedOrders}
@@ -162,12 +162,6 @@ export default function AsesorDashboard() {
             value={stats.pendingOrders}
             icon={Truck}
             className="bg-indigo-50 border-indigo-200"
-          />
-          <StatsCard
-            title="Total SINPE"
-            value={formatCurrency(stats.totalSinpe)}
-            icon={DollarSign}
-            className="bg-green-50 border-green-200"
           />
         </div>
       )}
@@ -190,10 +184,10 @@ export default function AsesorDashboard() {
                     <OrderStatusBadge status={order.status} />
                   </div>
                   <p className="text-sm text-muted-foreground mb-1">
-                    {order.customer.name} • {order.customer.phone || 'Sin teléfono'}
+                    {order.customerName} • {order.customerPhone || 'Sin teléfono'}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {order.customer.district}, {order.customer.canton}
+                    {order.customerDistrict}, {order.customerCanton}
                   </p>
                 </div>
                 <div className="text-right">
@@ -204,6 +198,13 @@ export default function AsesorDashboard() {
                   <p className="text-xs text-muted-foreground">
                     {new Date(order.createdAt).toLocaleDateString('es-CR')}
                   </p>
+                  <div className="mt-2">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/dashboard/asesor/orders/${order.id}`}>
+                        Ver Detalles
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}

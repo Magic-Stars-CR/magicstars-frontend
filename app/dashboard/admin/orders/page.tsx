@@ -79,8 +79,8 @@ export default function AdminOrdersPage() {
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 
       order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (order.customer.phone && order.customer.phone.includes(searchTerm));
+      order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.customerPhone && order.customerPhone.includes(searchTerm));
     
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     const matchesMessenger = messengerFilter === 'all' || order.assignedMessenger?.id === messengerFilter;
@@ -193,8 +193,8 @@ export default function AdminOrdersPage() {
                   </div>
 
                   <div>
-                    <p className="font-medium text-sm">{order.customer.name}</p>
-                    <p className="text-xs text-muted-foreground">{order.customer.phone || 'Sin teléfono'}</p>
+                    <p className="font-medium text-sm">{order.customerName}</p>
+                    <p className="text-xs text-muted-foreground">{order.customerPhone || 'Sin teléfono'}</p>
                   </div>
 
                   <div>
@@ -220,14 +220,15 @@ export default function AdminOrdersPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
-                    <Eye className="w-4 h-4" />
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/dashboard/admin/orders/${order.id}`}>
+                      <Eye className="w-4 h-4" />
+                    </Link>
                   </Button>
-                  <Button variant="outline" size="sm">
-                    <Edit className="w-4 h-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
-                    <Trash2 className="w-4 h-4" />
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/dashboard/admin/inventory`}>
+                      <Package className="w-4 h-4" />
+                    </Link>
                   </Button>
                 </div>
               </div>
