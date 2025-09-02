@@ -123,6 +123,14 @@ export default function OrderDetailPage() {
       };
     }
 
+    if (!order) {
+      return {
+        message: 'Información del pedido no disponible',
+        type: 'error',
+        icon: <XCircle className="w-4 h-4" />
+      };
+    }
+
     const stockStatus = getStockStatus(inventoryItem);
     const requestedQuantity = orderItem.quantity;
     const availableStock = inventoryItem.availableStock;

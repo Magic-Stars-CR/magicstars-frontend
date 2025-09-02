@@ -44,13 +44,17 @@ export default function InventoryItemDetail() {
   const loadData = async (itemId: string) => {
     try {
       setLoading(true);
-      const [itemRes, transactionsRes, alertsRes] = await Promise.all([
-        mockApi.getInventoryItem(itemId),
+      
+      // Primero obtener el item de inventario
+      const itemRes = await mockApi.getInventoryItem(itemId);
+      setInventoryItem(itemRes);
+      
+      // Luego obtener las transacciones y alertas usando el productId
+      const [transactionsRes, alertsRes] = await Promise.all([
         mockApi.getInventoryTransactions({ productId: itemRes.productId }),
         mockApi.getInventoryAlerts(),
       ]);
       
-      setInventoryItem(itemRes);
       setTransactions(transactionsRes);
       setAlerts(alertsRes.filter(alert => alert.inventoryItemId === itemId));
     } catch (error) {
