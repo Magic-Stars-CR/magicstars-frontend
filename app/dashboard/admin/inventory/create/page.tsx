@@ -88,6 +88,13 @@ export default function CreateProduct() {
         location: formData.location,
       });
 
+      // Obtener el usuario admin del mock
+      const adminUser = await mockApi.getUsers().then(users => users.find(u => u.role === 'admin'));
+      
+      if (!adminUser) {
+        throw new Error('Usuario administrador no encontrado');
+      }
+
       // Crear transacción inicial si hay stock
       if (parseInt(formData.initialStock) > 0) {
         await mockApi.createInventoryTransaction({
@@ -95,8 +102,8 @@ export default function CreateProduct() {
           actionType: 'inicial',
           quantity: parseInt(formData.initialStock),
           reason: 'Stock inicial del producto',
-          userId: '1', // Admin user
-          user: { id: '1', name: 'Admin', email: 'admin@magicstars.com', role: 'admin' as any },
+          userId: adminUser.id,
+          user: adminUser,
           notes: 'Creación de producto con stock inicial',
         });
       }

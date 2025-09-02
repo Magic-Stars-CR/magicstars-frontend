@@ -66,14 +66,21 @@ export default function AdjustInventoryItem() {
         throw new Error('No se puede tener stock negativo');
       }
 
+      // Obtener el usuario admin del mock
+      const adminUser = await mockApi.getUsers().then(users => users.find(u => u.role === 'admin'));
+      
+      if (!adminUser) {
+        throw new Error('Usuario administrador no encontrado');
+      }
+
       // Crear el ajuste
       await mockApi.createInventoryAdjustment({
         inventoryItemId: inventoryItem!.id,
         adjustmentType: formData.adjustmentType as any,
         quantityDifference: quantityDiff,
         reason: formData.reason,
-        userId: '1', // Admin user
-        user: { id: '1', name: 'Admin', email: 'admin@magicstars.com', role: 'admin' as any },
+        userId: adminUser.id,
+        user: adminUser,
         notes: formData.notes,
       });
 
