@@ -36,19 +36,29 @@ export default function AsesorOrders() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
+  const [deliveryMethodFilter, setDeliveryMethodFilter] = useState('all');
 
   useEffect(() => {
     if (user) {
       loadData();
     }
-  }, [user]);
+  }, [user, statusFilter, deliveryMethodFilter]);
 
   const loadData = async () => {
     if (!user?.companyId) return;
     
     try {
       setLoading(true);
-      const ordersRes = await mockApi.getOrders({ userCompanyId: user.companyId });
+      const filters: any = { userCompanyId: user.companyId };
+      
+      if (statusFilter !== 'all') {
+        filters.status = statusFilter;
+      }
+      if (deliveryMethodFilter !== 'all') {
+        filters.deliveryMethod = deliveryMethodFilter;
+      }
+      
+      const ordersRes = await mockApi.getOrders(filters);
       setOrders(ordersRes);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -77,6 +87,24 @@ export default function AsesorOrders() {
 
   const getStatusCount = (status: string) => {
     return orders.filter(order => order.status === status).length;
+  };
+
+  const getDeliveryMethodName = (method?: string) => {
+    switch (method) {
+      case 'mensajeria_propia': return 'Mensajería Propia';
+      case 'red_logistic': return 'Red Logística';
+      case 'correos_costa_rica': return 'Correos de Costa Rica';
+      default: return 'No especificado';
+    }
+  };
+
+  const getDeliveryMethodIcon = (method?: string) => {
+    switch (method) {
+      case 'mensajeria_propia': return '🚚';
+      case 'red_logistic': return '🌐';
+      case 'correos_costa_rica': return '📮';
+      default: return '❓';
+    }
   };
 
   const filteredOrders = orders.filter(order => {
@@ -240,10 +268,17 @@ export default function AsesorOrders() {
               </SelectContent>
             </Select>
 
-            <Button variant="outline" className="w-full">
-              <Filter className="w-4 h-4 mr-2" />
-              Más Filtros
-            </Button>
+            <Select value={deliveryMethodFilter} onValueChange={setDeliveryMethodFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filtrar por mensajería" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las mensajerías</SelectItem>
+                <SelectItem value="mensajeria_propia">Mensajería Propia</SelectItem>
+                <SelectItem value="red_logistic">Red Logística</SelectItem>
+                <SelectItem value="correos_costa_rica">Correos de Costa Rica</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -269,7 +304,7 @@ export default function AsesorOrders() {
           <div className="space-y-4">
             {filteredOrders.map((order) => (
               <div key={order.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-6 gap-4 items-center">
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-7 gap-4 items-center">
                   <div className="flex items-center gap-3">
                     <Package className="w-5 h-5 text-blue-600" />
                     <div>
@@ -300,6 +335,11 @@ export default function AsesorOrders() {
                     <span className="text-sm">
                       {order.assignedMessenger?.name || 'Sin asignar'}
                     </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{getDeliveryMethodIcon(order.deliveryMethod)}</span>
+                    <span className="text-sm">{getDeliveryMethodName(order.deliveryMethod)}</span>
                   </div>
 
                   <div className="flex items-center gap-2">

@@ -20,6 +20,9 @@ import {
   User,
   Building2,
   Warehouse,
+  Network,
+  DollarSign,
+  Route,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -28,7 +31,10 @@ const menuItems = {
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/admin' },
     { icon: Package, label: 'Pedidos', href: '/dashboard/admin/orders' },
     { icon: Warehouse, label: 'Inventario', href: '/dashboard/admin/inventory' },
+    { icon: Network, label: 'Logística Externa', href: '/dashboard/admin/red-logistic' },
     { icon: Truck, label: 'Rutas', href: '/dashboard/admin/routes' },
+    { icon: Route, label: 'Gestión de Rutas', href: '/dashboard/admin/route-management' },
+    { icon: DollarSign, label: 'Liquidación', href: '/dashboard/admin/liquidation' },
     { icon: Users, label: 'Usuarios', href: '/dashboard/admin/users' },
     { icon: Building2, label: 'Empresas', href: '/dashboard/admin/companies' },
     { icon: BarChart3, label: 'Estadísticas', href: '/dashboard/admin/stats' },
@@ -37,10 +43,12 @@ const menuItems = {
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/asesor' },
     { icon: Package, label: 'Pedidos', href: '/dashboard/asesor/orders' },
     { icon: Warehouse, label: 'Inventario', href: '/dashboard/asesor/inventory' },
+                    { icon: Network, label: 'Logística Externa', href: '/dashboard/asesor/red-logistic' },
     { icon: BarChart3, label: 'Estadísticas', href: '/dashboard/asesor/stats' },
   ],
   mensajero: [
     { icon: LayoutDashboard, label: 'Mis Pedidos', href: '/dashboard/mensajero' },
+    { icon: Truck, label: 'Historial de Rutas', href: '/dashboard/mensajero/route-history' },
     { icon: User, label: 'Mi Perfil', href: '/dashboard/mensajero/profile' },
   ],
 };

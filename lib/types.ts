@@ -12,6 +12,16 @@ export type PaymentMethod = 'efectivo' | 'sinpe';
 
 export type OrderOrigin = 'shopify' | 'manual' | 'csv';
 
+export type DeliveryMethod = 'mensajeria_propia' | 'red_logistic' | 'correos_costa_rica';
+
+export type RedLogisticStatus = 
+  | 'pendiente_envio'
+  | 'enviado'
+  | 'en_transito'
+  | 'entregado'
+  | 'devuelto'
+  | 'cancelado';
+
 export interface Company {
   id: string;
   name: string;
@@ -86,6 +96,7 @@ export interface Order {
   status: OrderStatus;
   paymentMethod: PaymentMethod;
   origin: OrderOrigin;
+  deliveryMethod?: DeliveryMethod;
   createdAt: string;
   updatedAt: string;
   scheduledDate?: string;
@@ -150,6 +161,7 @@ export interface DashboardFilters {
   status?: OrderStatus;
   origin?: OrderOrigin;
   paymentMethod?: PaymentMethod;
+  deliveryMethod?: DeliveryMethod;
   province?: string;
   canton?: string;
   district?: string;
@@ -189,6 +201,9 @@ export type InventoryActionType =
   | 'pedido_montado'    // Descuento automático por pedido montado a ruta
   | 'pedido_devuelto'   // Devolución automática por pedido no entregado
   | 'pedido_entregado'  // Confirmación de entrega
+  | 'red_logistic_enviado'    // Descuento automático por envío Red Logística
+  | 'red_logistic_entregado'  // Confirmación de entrega Red Logística
+  | 'red_logistic_devuelto'   // Devolución automática Red Logística
   | 'inicial'           // Inventario inicial
   | 'perdida'           // Pérdida o daño
   | 'transferencia';    // Transferencia entre ubicaciones
@@ -220,7 +235,7 @@ export interface InventoryTransaction {
   newStock: number;               // Stock después del movimiento
   reason?: string;                // Motivo del movimiento
   referenceId?: string;           // ID de referencia (pedido, ajuste, etc.)
-  referenceType?: 'order' | 'adjustment' | 'transfer' | 'initial';
+  referenceType?: 'order' | 'adjustment' | 'transfer' | 'initial' | 'red_logistic';
   userId: string;                 // Usuario que realizó la acción
   user: User;
   createdAt: string;
@@ -284,4 +299,311 @@ export interface InventoryFilters {
   dateFrom?: string;
   dateTo?: string;
   actionType?: InventoryActionType;
+}
+
+// Red Logística Interfaces
+export interface RedLogisticOrder {
+  id: string;
+  orderId: string;
+  order: Order;
+  trackingNumber: string;
+  status: RedLogisticStatus;
+  deliveryMethod: DeliveryMethod;
+  pickupAddress: string;
+  deliveryAddress: string;
+  estimatedDelivery: string;
+  actualDelivery?: string;
+  weight: number;
+  dimensions: {
+    length: number;
+    width: number;
+    height: number;
+  };
+  declaredValue: number;
+  shippingCost: number;
+  insuranceCost?: number;
+  totalCost: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  createdByUser: User;
+  companyId: string;
+  company: Company;
+}
+
+export interface RedLogisticTracking {
+  id: string;
+  redLogisticOrderId: string;
+  redLogisticOrder: RedLogisticOrder;
+  status: RedLogisticStatus;
+  location: string;
+  description: string;
+  timestamp: string;
+  notes?: string;
+}
+
+export interface RedLogisticStats {
+  totalOrders: number;
+  pendingOrders: number;
+  inTransitOrders: number;
+  deliveredOrders: number;
+  returnedOrders: number;
+  totalRevenue: number;
+  averageDeliveryTime: number;
+  successRate: number;
+}
+
+export interface RedLogisticFilters {
+  status?: RedLogisticStatus;
+  deliveryMethod?: DeliveryMethod;
+  companyId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  trackingNumber?: string;
+}
+
+// Tipos para liquidación de rutas
+export type RouteLiquidationStatus = 'pendiente' | 'finalizada' | 'liquidada';
+
+export interface RouteLiquidation {
+  id: string;
+  messengerId: string;
+  messenger: User;
+  routeDate: string; // Fecha de la ruta
+  status: RouteLiquidationStatus;
+  
+  // Resúmenes financieros
+  totalCollected: number; // Total recaudado en efectivo
+  totalSpent: number; // Total gastado
+  totalToDeliver: number; // Total a entregar en efectivo en bodega
+  
+  // Gestión de pedidos
+  totalOrders: number; // Total de pedidos asignados
+  deliveredOrders: number; // Pedidos entregados
+  returnedOrders: number; // Pedidos a devolver
+  pendingOrders: number; // Pedidos pendientes
+  
+  // Detalles de la liquidación
+  orders: Order[]; // Pedidos de la ruta
+  cashOrders: Order[]; // Pedidos pagados en efectivo
+  sinpeOrders: Order[]; // Pedidos pagados con SINPE
+  
+  // Metadatos
+  createdAt: string;
+  updatedAt: string;
+  finalizedAt?: string; // Cuando el mensajero finaliza la ruta
+  liquidatedAt?: string; // Cuando el admin liquida la ruta
+  liquidatedBy?: string; // ID del admin que liquidó
+  liquidatedByUser?: User; // Usuario que liquidó
+  
+  // Notas y observaciones
+  notes?: string;
+  adminNotes?: string;
+  
+  // Relación con empresa
+  companyId: string;
+  company: Company;
+}
+
+export interface RouteLiquidationStats {
+  totalRoutes: number;
+  pendingLiquidation: number; // Rutas pendientes por liquidar
+  finalizedToday: number; // Rutas finalizadas hoy
+  liquidatedToday: number; // Rutas liquidadas hoy
+  
+  // Resúmenes financieros
+  totalCollectedToday: number;
+  totalSpentToday: number;
+  totalToDeliverToday: number;
+  
+  // Por mensajero
+  byMessenger: {
+    messengerId: string;
+    messenger: User;
+    routesCount: number;
+    totalCollected: number;
+    totalSpent: number;
+  }[];
+}
+
+export interface RouteLiquidationFilters {
+  messengerId?: string;
+  status?: RouteLiquidationStatus;
+  dateFrom?: string;
+  dateTo?: string;
+  companyId?: string;
+}
+
+// Tipos para historial de rutas y gastos
+export interface RouteExpense {
+  id: string;
+  routeId: string;
+  messengerId: string;
+  messenger: User;
+  amount: number;
+  description: string;
+  category: 'combustible' | 'alimentacion' | 'peaje' | 'mantenimiento' | 'otro';
+  date: string;
+  images: string[]; // URLs de las imágenes
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DailyRoute {
+  id: string;
+  messengerId: string;
+  messenger: User;
+  routeDate: string;
+  
+  // Resumen de pedidos
+  totalOrders: number;
+  deliveredOrders: number;
+  returnedOrders: number;
+  pendingOrders: number;
+  
+  // Resumen financiero
+  totalCollected: number; // Total recaudado en efectivo
+  totalExpenses: number; // Total de gastos
+  netAmount: number; // Cantidad neta (recaudado - gastos)
+  
+  // Detalles
+  orders: Order[];
+  expenses: RouteExpense[];
+  
+  // Metadatos
+  createdAt: string;
+  updatedAt: string;
+  notes?: string;
+  
+  // Relación con empresa
+  companyId: string;
+  company: Company;
+}
+
+export interface RouteHistoryStats {
+  totalRoutes: number;
+  totalDelivered: number;
+  totalCollected: number;
+  totalExpenses: number;
+  netAmount: number;
+  
+  // Por período
+  thisWeek: {
+    routes: number;
+    delivered: number;
+    collected: number;
+    expenses: number;
+  };
+  
+  thisMonth: {
+    routes: number;
+    delivered: number;
+    collected: number;
+    expenses: number;
+  };
+  
+  // Por categoría de gastos
+  expensesByCategory: {
+    category: string;
+    amount: number;
+    count: number;
+  }[];
+}
+
+export interface RouteHistoryFilters {
+  dateFrom?: string;
+  dateTo?: string;
+  messengerId?: string;
+  companyId?: string;
+}
+
+// Tipos para gestión de rutas y asignación de pedidos
+export interface RouteAssignment {
+  id: string;
+  routeDate: string;
+  messengerId: string;
+  messenger: User;
+  orders: Order[];
+  totalOrders: number;
+  assignedOrders: number;
+  unassignedOrders: number;
+  status: 'pending' | 'assigned' | 'in_progress' | 'completed';
+  createdAt: string;
+  updatedAt: string;
+  companyId: string;
+  company: Company;
+}
+
+export interface ZoneGroup {
+  zone: string;
+  orders: Order[];
+  assignedMessengerId?: string;
+  assignedMessenger?: User;
+  totalAmount: number;
+  totalOrders: number;
+}
+
+export interface UnassignedOrder {
+  order: Order;
+  reason: 'no_messenger_available' | 'zone_not_covered' | 'messenger_overloaded' | 'manual_exclusion';
+  suggestedMessengerId?: string;
+  suggestedMessenger?: User;
+}
+
+export interface RouteMessengerStats {
+  messengerId: string;
+  messenger: User;
+  assignedOrders: number;
+  deliveredOrders: number;
+  returnedOrders: number;
+  rescheduledOrders: number;
+  rescheduledTonightOrders: number;
+  changesCount: number;
+  
+  // Métodos de pago
+  cashCollected: number;
+  sinpeCollected: number;
+  cardCollected: number;
+  totalCollected: number;
+  
+  // Cálculos
+  ordersToReturn: number; // Asignados - Entregados + Devueltos
+  effectiveness: number; // (Entregados / Asignados) * 100
+  
+  // Fechas
+  dateFrom: string;
+  dateTo: string;
+}
+
+export interface RouteManagementFilters {
+  dateFrom?: string;
+  dateTo?: string;
+  messengerId?: string;
+  companyId?: string;
+  zone?: string;
+  status?: string;
+}
+
+export interface RouteCreationData {
+  routeDate: string;
+  messengerId: string;
+  orderIds: string[];
+  notes?: string;
+}
+
+export interface RouteInfo {
+  route: string;
+  zones: string[];
+  payment: number;
+  messengers: User[];
+}
+
+export interface RouteStats {
+  route: string;
+  totalOrders: number;
+  totalAmount: number;
+  assignedMessengers: number;
+  averageOrderValue: number;
+  paymentPerMessenger: number;
 }

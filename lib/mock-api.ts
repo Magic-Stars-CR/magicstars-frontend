@@ -2,7 +2,11 @@ import {
   User, Order, Customer, Product, OrderItem, OrderStatus, PaymentMethod, OrderOrigin, 
   Stats, MessengerStats, Company, CompanyStats, MonthlyStats,
   InventoryItem, InventoryTransaction, InventoryAdjustment, InventoryAlert, 
-  InventoryStats, InventoryActionType, InventoryFilters, ProductWithInventory
+  InventoryStats, InventoryActionType, InventoryFilters, ProductWithInventory,
+  RedLogisticOrder, RedLogisticTracking, RedLogisticStats, RedLogisticFilters,
+  RedLogisticStatus, DeliveryMethod, RouteLiquidation, RouteLiquidationStats, RouteLiquidationFilters,
+  DailyRoute, RouteExpense, RouteHistoryStats, RouteHistoryFilters, RouteAssignment, ZoneGroup,
+  UnassignedOrder, RouteMessengerStats, RouteManagementFilters, RouteCreationData, RouteInfo, RouteStats
 } from './types';
 
 // Mock Companies
@@ -126,6 +130,117 @@ export const mockUsers: User[] = [
     createdAt: '2024-01-15T10:00:00Z',
     isActive: true,
     companyId: '3', // Solo asesor de AllStars
+    company: mockCompanies[2],
+  },
+  // Administradores adicionales
+  {
+    id: '8',
+    email: 'admin2@magicstars.com',
+    name: 'Roberto Silva',
+    role: 'admin',
+    phone: '+506 8888-8888',
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+    createdAt: '2023-08-15T08:00:00Z',
+    isActive: true,
+    companyId: undefined,
+    company: undefined,
+  },
+  {
+    id: '9',
+    email: 'admin3@magicstars.com',
+    name: 'Patricia López',
+    role: 'admin',
+    phone: '+506 8888-9999',
+    avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b9e1?w=150',
+    createdAt: '2023-09-01T08:00:00Z',
+    isActive: true,
+    companyId: undefined,
+    company: undefined,
+  },
+  // Mensajeros adicionales
+  {
+    id: '10',
+    email: 'carlos.mensajero@magicstars.com',
+    name: 'Carlos Rodríguez',
+    role: 'mensajero',
+    phone: '+506 8888-0000',
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+    createdAt: '2023-11-01T10:00:00Z',
+    isActive: true,
+    companyId: undefined,
+    company: undefined,
+  },
+  {
+    id: '11',
+    email: 'sofia.mensajero@magicstars.com',
+    name: 'Sofía Herrera',
+    role: 'mensajero',
+    phone: '+506 8888-1111',
+    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
+    createdAt: '2023-11-15T10:00:00Z',
+    isActive: true,
+    companyId: undefined,
+    company: undefined,
+  },
+  {
+    id: '12',
+    email: 'miguel.mensajero@magicstars.com',
+    name: 'Miguel Torres',
+    role: 'mensajero',
+    phone: '+506 8888-2222',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+    createdAt: '2023-12-01T10:00:00Z',
+    isActive: true,
+    companyId: undefined,
+    company: undefined,
+  },
+  {
+    id: '13',
+    email: 'laura.mensajero@magicstars.com',
+    name: 'Laura Vargas',
+    role: 'mensajero',
+    phone: '+506 8888-3333',
+    avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b9e1?w=150',
+    createdAt: '2023-12-10T10:00:00Z',
+    isActive: true,
+    companyId: undefined,
+    company: undefined,
+  },
+  // Asesores adicionales
+  {
+    id: '14',
+    email: 'pedro.asesor@paramachoscr.com',
+    name: 'Pedro Jiménez',
+    role: 'asesor',
+    phone: '+506 8888-4444',
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+    createdAt: '2023-08-01T10:00:00Z',
+    isActive: true,
+    companyId: '1',
+    company: mockCompanies[0],
+  },
+  {
+    id: '15',
+    email: 'carmen.asesor@beautyfan.com',
+    name: 'Carmen Ruiz',
+    role: 'asesor',
+    phone: '+506 8888-5555',
+    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
+    createdAt: '2023-09-15T10:00:00Z',
+    isActive: true,
+    companyId: '2',
+    company: mockCompanies[1],
+  },
+  {
+    id: '16',
+    email: 'diego.asesor@allstars.com',
+    name: 'Diego Morales',
+    role: 'asesor',
+    phone: '+506 8888-6666',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+    createdAt: '2023-10-15T10:00:00Z',
+    isActive: true,
+    companyId: '3',
     company: mockCompanies[2],
   },
 ];
@@ -317,6 +432,7 @@ const generateTodayOrders = (): Order[] => {
       status: 'en_ruta', // Cambiado a en_ruta para que sea visible
       paymentMethod: 'efectivo',
       origin: 'csv',
+      deliveryMethod: 'mensajeria_propia',
       createdAt: `${todayString}T08:30:00Z`,
       updatedAt: `${todayString}T08:30:00Z`,
       
@@ -347,6 +463,7 @@ const generateTodayOrders = (): Order[] => {
       status: 'en_ruta',
       paymentMethod: 'sinpe',
       origin: 'csv',
+      deliveryMethod: 'red_logistic',
       createdAt: `${todayString}T09:15:00Z`,
       updatedAt: `${todayString}T11:00:00Z`,
       
@@ -377,6 +494,7 @@ const generateTodayOrders = (): Order[] => {
       status: 'en_ruta',
       paymentMethod: 'efectivo',
       origin: 'csv',
+      deliveryMethod: 'correos_costa_rica',
       createdAt: `${todayString}T09:45:00Z`,
       updatedAt: `${todayString}T11:30:00Z`,
       
@@ -407,6 +525,7 @@ const generateTodayOrders = (): Order[] => {
       status: 'en_ruta', // Cambiado a en_ruta
       paymentMethod: 'sinpe',
       origin: 'csv',
+      deliveryMethod: 'red_logistic',
       createdAt: `${todayString}T10:00:00Z`,
       updatedAt: `${todayString}T10:00:00Z`,
       
@@ -437,6 +556,7 @@ const generateTodayOrders = (): Order[] => {
       status: 'en_ruta', // Cambiado a en_ruta
       paymentMethod: 'efectivo',
       origin: 'csv',
+      deliveryMethod: 'red_logistic',
       createdAt: `${todayString}T10:30:00Z`,
       updatedAt: `${todayString}T10:30:00Z`,
       
@@ -467,6 +587,7 @@ const generateTodayOrders = (): Order[] => {
       status: 'en_ruta',
       paymentMethod: 'efectivo',
       origin: 'csv',
+      deliveryMethod: 'red_logistic',
       createdAt: `${todayString}T11:00:00Z`,
       updatedAt: `${todayString}T12:00:00Z`,
       
@@ -497,6 +618,7 @@ const generateTodayOrders = (): Order[] => {
       status: 'en_ruta', // Cambiado a en_ruta
       paymentMethod: 'sinpe',
       origin: 'csv',
+      deliveryMethod: 'red_logistic',
       createdAt: `${todayString}T11:30:00Z`,
       updatedAt: `${todayString}T11:30:00Z`,
       
@@ -561,6 +683,7 @@ const generateTodayOrders = (): Order[] => {
       status: 'en_ruta',
       paymentMethod: 'efectivo',
       origin: 'csv',
+      deliveryMethod: 'red_logistic',
       createdAt: `${todayString}T08:00:00Z`,
       updatedAt: `${todayString}T10:00:00Z`,
       
@@ -591,6 +714,7 @@ const generateTodayOrders = (): Order[] => {
       status: 'en_ruta', // Cambiado a en_ruta
       paymentMethod: 'sinpe',
       origin: 'csv',
+      deliveryMethod: 'red_logistic',
       createdAt: `${todayString}T09:00:00Z`,
       updatedAt: `${todayString}T09:00:00Z`,
       
@@ -651,6 +775,7 @@ const generateTodayOrders = (): Order[] => {
       status: 'en_ruta',
       paymentMethod: 'sinpe',
       origin: 'csv',
+      deliveryMethod: 'red_logistic',
       createdAt: `${todayString}T11:00:00Z`,
       updatedAt: `${todayString}T12:00:00Z`,
       
@@ -1062,6 +1187,7 @@ const generateMockOrders = (): Order[] => {
       status: 'entregado',
       paymentMethod: 'efectivo',
       origin: 'csv',
+      deliveryMethod: 'red_logistic',
       createdAt: '2024-12-01T08:30:00Z',
       updatedAt: '2024-12-01T10:45:00Z',
       
@@ -1094,6 +1220,7 @@ const generateMockOrders = (): Order[] => {
       status: 'en_ruta',
       paymentMethod: 'sinpe',
       origin: 'csv',
+      deliveryMethod: 'correos_costa_rica',
       createdAt: '2024-12-01T09:15:00Z',
       updatedAt: '2024-12-01T11:00:00Z',
       
@@ -1124,6 +1251,7 @@ const generateMockOrders = (): Order[] => {
       status: 'confirmado',
       paymentMethod: 'efectivo',
       origin: 'csv',
+      deliveryMethod: 'correos_costa_rica',
       createdAt: '2024-12-01T10:00:00Z',
       updatedAt: '2024-12-01T10:00:00Z',
       
@@ -1216,6 +1344,7 @@ const generateMockOrders = (): Order[] => {
       status: 'devolucion',
       paymentMethod: 'sinpe',
       origin: 'csv',
+      deliveryMethod: 'red_logistic',
       createdAt: '2024-12-01T07:00:00Z',
       updatedAt: '2024-12-01T12:00:00Z',
       
@@ -1322,6 +1451,167 @@ const generateMockOrders = (): Order[] => {
       
       companyId: '3',
       company: mockCompanies[2],
+      routeSchedule: 'DIA',
+    },
+    // Pedidos adicionales para nuevos mensajeros
+    {
+      id: 'PMC-NEW-001',
+      customerName: 'Fernando Castro',
+      customerPhone: '50688887777',
+      customerAddress: 'Residencial Los Robles, Casa 15',
+      customerProvince: 'San José',
+      customerCanton: 'SANTA ANA',
+      customerDistrict: 'SANTA ANA',
+      customerLocationLink: 'https://maps.app.goo.gl/example_new1',
+      
+      items: generateOrderItems(2),
+      totalAmount: 32000,
+      status: 'entregado',
+      paymentMethod: 'efectivo',
+      origin: 'csv',
+      createdAt: '2024-12-12T08:00:00Z',
+      updatedAt: '2024-12-12T14:30:00Z',
+      
+      assignedMessengerId: '10', // Carlos Rodríguez
+      assignedMessenger: mockUsers[9],
+      advisorId: advisors.find(a => a.companyId === '1')?.id,
+      advisor: advisors.find(a => a.companyId === '1'),
+      
+      notes: 'Cliente muy amable, entrega exitosa',
+      deliveryNotes: 'Entregado exitosamente',
+      deliveryAddress: 'Residencial Los Robles, Casa 15',
+      deliveryDate: '2024-12-12T14:30:00Z',
+      
+      companyId: '1',
+      company: mockCompanies[0],
+      routeSchedule: 'DIA',
+    },
+    {
+      id: 'PMC-NEW-002',
+      customerName: 'Isabel Morales',
+      customerPhone: '50688886666',
+      customerAddress: 'Condominio Las Palmas, Apto 8B',
+      customerProvince: 'Alajuela',
+      customerCanton: 'ALAJUELA',
+      customerDistrict: 'ALAJUELA',
+      customerLocationLink: 'https://maps.app.goo.gl/example_new2',
+      
+      items: generateOrderItems(3),
+      totalAmount: 45000,
+      status: 'entregado',
+      paymentMethod: 'sinpe',
+      origin: 'csv',
+      createdAt: '2024-12-12T09:00:00Z',
+      updatedAt: '2024-12-12T16:00:00Z',
+      
+      assignedMessengerId: '10', // Carlos Rodríguez
+      assignedMessenger: mockUsers[9],
+      advisorId: advisors.find(a => a.companyId === '1')?.id,
+      advisor: advisors.find(a => a.companyId === '1'),
+      
+      notes: 'Cliente confirmó pago por SINPE',
+      deliveryNotes: 'Entregado exitosamente',
+      deliveryAddress: 'Condominio Las Palmas, Apto 8B',
+      deliveryDate: '2024-12-12T16:00:00Z',
+      
+      companyId: '1',
+      company: mockCompanies[0],
+      routeSchedule: 'DIA',
+    },
+    {
+      id: 'BF-NEW-001',
+      customerName: 'Patricia Herrera',
+      customerPhone: '50688885555',
+      customerAddress: 'Urbanización El Prado, Casa 22',
+      customerProvince: 'Cartago',
+      customerCanton: 'CARTAGO',
+      customerDistrict: 'ORIENTAL',
+      customerLocationLink: 'https://maps.app.goo.gl/example_new3',
+      
+      items: generateOrderItems(2),
+      totalAmount: 28000,
+      status: 'entregado',
+      paymentMethod: 'efectivo',
+      origin: 'csv',
+      createdAt: '2024-12-12T10:00:00Z',
+      updatedAt: '2024-12-12T17:30:00Z',
+      
+      assignedMessengerId: '11', // Sofía Herrera
+      assignedMessenger: mockUsers[10],
+      advisorId: advisors.find(a => a.companyId === '2')?.id,
+      advisor: advisors.find(a => a.companyId === '2'),
+      
+      notes: 'Cliente solicitó entrega en la tarde',
+      deliveryNotes: 'Entregado exitosamente',
+      deliveryAddress: 'Urbanización El Prado, Casa 22',
+      deliveryDate: '2024-12-12T17:30:00Z',
+      
+      companyId: '2',
+      company: mockCompanies[1],
+      routeSchedule: 'DIA',
+    },
+    {
+      id: 'AS-NEW-001',
+      customerName: 'Roberto Silva',
+      customerPhone: '50688884444',
+      customerAddress: 'Residencial Vista Hermosa, Casa 45',
+      customerProvince: 'Heredia',
+      customerCanton: 'HEREDIA',
+      customerDistrict: 'HEREDIA',
+      customerLocationLink: 'https://maps.app.goo.gl/example_new4',
+      
+      items: generateOrderItems(4),
+      totalAmount: 52000,
+      status: 'entregado',
+      paymentMethod: 'efectivo',
+      origin: 'csv',
+      createdAt: '2024-12-11T08:30:00Z',
+      updatedAt: '2024-12-11T15:45:00Z',
+      
+      assignedMessengerId: '12', // Miguel Torres
+      assignedMessenger: mockUsers[11],
+      advisorId: advisors.find(a => a.companyId === '3')?.id,
+      advisor: advisors.find(a => a.companyId === '3'),
+      
+      notes: 'Cliente muy satisfecho con el servicio',
+      deliveryNotes: 'Entregado exitosamente',
+      deliveryAddress: 'Residencial Vista Hermosa, Casa 45',
+      deliveryDate: '2024-12-11T15:45:00Z',
+      
+      companyId: '3',
+      company: mockCompanies[2],
+      routeSchedule: 'DIA',
+    },
+    {
+      id: 'PMC-NEW-003',
+      customerName: 'Carmen López',
+      customerPhone: '50688883333',
+      customerAddress: 'Condominio Los Laureles, Apto 12C',
+      customerProvince: 'San José',
+      customerCanton: 'CURRIDABAT',
+      customerDistrict: 'CURRIDABAT',
+      customerLocationLink: 'https://maps.app.goo.gl/example_new5',
+      
+      items: generateOrderItems(1),
+      totalAmount: 15000,
+      status: 'entregado',
+      paymentMethod: 'sinpe',
+      origin: 'csv',
+      createdAt: '2024-12-10T09:00:00Z',
+      updatedAt: '2024-12-10T16:20:00Z',
+      
+      assignedMessengerId: '13', // Laura Vargas
+      assignedMessenger: mockUsers[12],
+      advisorId: advisors.find(a => a.companyId === '1')?.id,
+      advisor: advisors.find(a => a.companyId === '1'),
+      
+      notes: 'Pedido pequeño pero importante',
+      deliveryNotes: 'Entregado exitosamente',
+      deliveryAddress: 'Condominio Los Laureles, Apto 12C',
+      deliveryDate: '2024-12-10T16:20:00Z',
+      
+      companyId: '1',
+      company: mockCompanies[0],
       routeSchedule: 'DIA',
     },
   ];
@@ -1778,6 +2068,9 @@ export const mockApi = {
     if (filters?.advisorId) {
       filteredOrders = filteredOrders.filter(o => o.advisorId === filters.advisorId);
     }
+    if (filters?.deliveryMethod) {
+      filteredOrders = filteredOrders.filter(o => o.deliveryMethod === filters.deliveryMethod);
+    }
     
     // Special filter for today's orders
     if (filters?.today) {
@@ -2011,8 +2304,8 @@ export const mockApi = {
           items: [], // Will be populated based on products
           totalAmount: parseFloat(valor) || 0,
           status: 'pendiente',
-          paymentMethod: 'efectivo', // Default to cash
-          origin: 'csv',
+          paymentMethod: 'efectivo' as PaymentMethod, // Default to cash
+          origin: 'csv' as OrderOrigin,
           createdAt: orderDate.toISOString(),
           updatedAt: orderDate.toISOString(),
           notes: notaAsesor || undefined,
@@ -2359,7 +2652,1831 @@ export const mockApi = {
       }
     }
   },
+
+  // Red Logística API
+  getRedLogisticOrders: async (filters: RedLogisticFilters = {}): Promise<RedLogisticOrder[]> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    let filtered = [...mockRedLogisticOrders];
+    
+    if (filters.status) {
+      filtered = filtered.filter(order => order.status === filters.status);
+    }
+    
+    if (filters.deliveryMethod) {
+      filtered = filtered.filter(order => order.deliveryMethod === filters.deliveryMethod);
+    }
+    
+    if (filters.companyId) {
+      filtered = filtered.filter(order => order.companyId === filters.companyId);
+    }
+    
+    if (filters.trackingNumber) {
+      filtered = filtered.filter(order => 
+        order.trackingNumber.toLowerCase().includes(filters.trackingNumber!.toLowerCase())
+      );
+    }
+    
+    if (filters.dateFrom) {
+      filtered = filtered.filter(order => order.createdAt >= filters.dateFrom!);
+    }
+    
+    if (filters.dateTo) {
+      filtered = filtered.filter(order => order.createdAt <= filters.dateTo!);
+    }
+    
+    return filtered;
+  },
+
+  getRedLogisticOrder: async (id: string): Promise<RedLogisticOrder> => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    const order = mockRedLogisticOrders.find(o => o.id === id);
+    if (!order) {
+      throw new Error('Pedido de Red Logística no encontrado');
+    }
+    
+    return order;
+  },
+
+  createRedLogisticOrder: async (orderData: Partial<RedLogisticOrder>): Promise<RedLogisticOrder> => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    const newOrder: RedLogisticOrder = {
+      id: `rl-${Date.now()}`,
+      orderId: orderData.orderId!,
+      order: orderData.order!,
+      trackingNumber: orderData.trackingNumber!,
+      status: orderData.status || 'pendiente_envio',
+      deliveryMethod: orderData.deliveryMethod || 'red_logistic',
+      pickupAddress: orderData.pickupAddress!,
+      deliveryAddress: orderData.deliveryAddress!,
+      estimatedDelivery: orderData.estimatedDelivery!,
+      actualDelivery: orderData.actualDelivery,
+      weight: orderData.weight!,
+      dimensions: orderData.dimensions!,
+      declaredValue: orderData.declaredValue!,
+      shippingCost: orderData.shippingCost!,
+      insuranceCost: orderData.insuranceCost,
+      totalCost: orderData.totalCost!,
+      notes: orderData.notes,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: orderData.createdBy!,
+      createdByUser: orderData.createdByUser!,
+      companyId: orderData.companyId!,
+      company: orderData.company!,
+    };
+    
+    mockRedLogisticOrders.push(newOrder);
+    return newOrder;
+  },
+
+  updateRedLogisticOrderStatus: async (id: string, status: RedLogisticStatus): Promise<RedLogisticOrder> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    const orderIndex = mockRedLogisticOrders.findIndex(o => o.id === id);
+    if (orderIndex === -1) {
+      throw new Error('Pedido de Red Logística no encontrado');
+    }
+    
+    const order = mockRedLogisticOrders[orderIndex];
+    order.status = status;
+    order.updatedAt = new Date().toISOString();
+    
+    if (status === 'entregado') {
+      order.actualDelivery = new Date().toISOString();
+    }
+    
+    // Crear tracking entry
+    const trackingEntry: RedLogisticTracking = {
+      id: `track-${Date.now()}`,
+      redLogisticOrderId: id,
+      redLogisticOrder: order,
+      status,
+      location: status === 'entregado' ? order.deliveryAddress : 'Centro de Distribución',
+      description: getStatusDescription(status),
+      timestamp: new Date().toISOString(),
+    };
+    
+    mockRedLogisticTracking.push(trackingEntry);
+    
+    return order;
+  },
+
+  getRedLogisticTracking: async (redLogisticOrderId: string): Promise<RedLogisticTracking[]> => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    return mockRedLogisticTracking
+      .filter(tracking => tracking.redLogisticOrderId === redLogisticOrderId)
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  },
+
+  getRedLogisticStats: async (companyId?: string): Promise<RedLogisticStats> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    let orders = mockRedLogisticOrders;
+    if (companyId) {
+      orders = orders.filter(order => order.companyId === companyId);
+    }
+    
+    const totalOrders = orders.length;
+    const pendingOrders = orders.filter(o => o.status === 'pendiente_envio').length;
+    const inTransitOrders = orders.filter(o => o.status === 'en_transito').length;
+    const deliveredOrders = orders.filter(o => o.status === 'entregado').length;
+    const returnedOrders = orders.filter(o => o.status === 'devuelto').length;
+    
+    const totalRevenue = orders.reduce((sum, order) => sum + order.totalCost, 0);
+    
+    const deliveredOrdersWithTime = orders.filter(o => o.status === 'entregado' && o.actualDelivery);
+    const averageDeliveryTime = deliveredOrdersWithTime.length > 0 
+      ? deliveredOrdersWithTime.reduce((sum, order) => {
+          const created = new Date(order.createdAt).getTime();
+          const delivered = new Date(order.actualDelivery!).getTime();
+          return sum + (delivered - created) / (1000 * 60 * 60 * 24); // days
+        }, 0) / deliveredOrdersWithTime.length
+      : 0;
+    
+    const successRate = totalOrders > 0 ? (deliveredOrders / totalOrders) * 100 : 0;
+    
+    return {
+      totalOrders,
+      pendingOrders,
+      inTransitOrders,
+      deliveredOrders,
+      returnedOrders,
+      totalRevenue,
+      averageDeliveryTime: Math.round(averageDeliveryTime * 10) / 10,
+      successRate: Math.round(successRate * 10) / 10,
+    };
+  },
+
+  // Integración con inventario para Red Logística
+  processRedLogisticInventory: async (redLogisticOrderId: string, action: 'ship' | 'deliver' | 'return'): Promise<void> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    const redLogisticOrder = mockRedLogisticOrders.find(o => o.id === redLogisticOrderId);
+    if (!redLogisticOrder) {
+      throw new Error('Pedido de Red Logística no encontrado');
+    }
+
+    const order = redLogisticOrder.order;
+
+    for (const orderItem of order.items) {
+      const inventoryItem = mockInventoryItems.find(item =>
+        item.productId === orderItem.product.id && item.companyId === order.companyId
+      );
+
+      if (!inventoryItem) continue;
+
+      let actionType: InventoryActionType;
+      let quantity: number;
+      let reason: string;
+
+      switch (action) {
+        case 'ship':
+          actionType = 'red_logistic_enviado';
+          quantity = -orderItem.quantity;
+          reason = `Pedido ${order.id} enviado por Red Logística`;
+          break;
+        case 'deliver':
+          actionType = 'red_logistic_entregado';
+          quantity = 0; // No cambia stock, solo registra
+          reason = `Pedido ${order.id} entregado por Red Logística`;
+          break;
+        case 'return':
+          actionType = 'red_logistic_devuelto';
+          quantity = orderItem.quantity;
+          reason = `Pedido ${order.id} devuelto por Red Logística`;
+          break;
+        default:
+          continue;
+      }
+
+      if (action !== 'deliver') {
+        await mockApi.createInventoryTransaction({
+          inventoryItemId: inventoryItem.id,
+          actionType,
+          quantity,
+          reason,
+          referenceId: redLogisticOrderId,
+          referenceType: 'red_logistic',
+          userId: redLogisticOrder.createdBy,
+          user: redLogisticOrder.createdByUser,
+          notes: `Procesamiento automático Red Logística por ${action}`,
+        });
+      }
+    }
+  },
+
+  // Mock data for route history and expenses
+  mockDailyRoutes: [
+    {
+      id: 'dr-001',
+      messengerId: '1',
+      messenger: mockUsers[0], // Juan Pérez
+      routeDate: '2024-12-12',
+      
+      totalOrders: 8,
+      deliveredOrders: 6,
+      returnedOrders: 1,
+      pendingOrders: 1,
+      
+      totalCollected: 125000,
+      totalExpenses: 15000,
+      netAmount: 110000,
+      
+      orders: mockOrders.filter(o => o.assignedMessengerId === '1' && o.createdAt.startsWith('2024-12-12')),
+      expenses: [
+        {
+          id: 'exp-001',
+          routeId: 'dr-001',
+          messengerId: '1',
+          messenger: mockUsers[0],
+          amount: 8000,
+          description: 'Combustible para la ruta',
+          category: 'combustible' as const,
+          date: '2024-12-12',
+          images: ['https://images.unsplash.com/photo-1594736797933-d0401ba2fe65?w=300'],
+          createdAt: '2024-12-12T08:30:00Z',
+          updatedAt: '2024-12-12T08:30:00Z',
+        },
+        {
+          id: 'exp-002',
+          routeId: 'dr-001',
+          messengerId: '1',
+          messenger: mockUsers[0],
+          amount: 3000,
+          description: 'Almuerzo',
+          category: 'alimentacion' as const,
+          date: '2024-12-12',
+          images: ['https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=300'],
+          createdAt: '2024-12-12T12:00:00Z',
+          updatedAt: '2024-12-12T12:00:00Z',
+        },
+        {
+          id: 'exp-003',
+          routeId: 'dr-001',
+          messengerId: '1',
+          messenger: mockUsers[0],
+          amount: 4000,
+          description: 'Peaje autopista',
+          category: 'peaje' as const,
+          date: '2024-12-12',
+          images: ['https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=300'],
+          createdAt: '2024-12-12T14:15:00Z',
+          updatedAt: '2024-12-12T14:15:00Z',
+        },
+      ] as RouteExpense[],
+      
+      createdAt: '2024-12-12T08:00:00Z',
+      updatedAt: '2024-12-12T18:30:00Z',
+      notes: 'Ruta exitosa, un pedido devuelto por cliente no disponible',
+      
+      companyId: '1',
+      company: mockCompanies[0],
+    },
+    {
+      id: 'dr-002',
+      messengerId: '1',
+      messenger: mockUsers[0], // Juan Pérez
+      routeDate: '2024-12-11',
+      
+      totalOrders: 6,
+      deliveredOrders: 6,
+      returnedOrders: 0,
+      pendingOrders: 0,
+      
+      totalCollected: 98000,
+      totalExpenses: 12000,
+      netAmount: 86000,
+      
+      orders: mockOrders.filter(o => o.assignedMessengerId === '1' && o.createdAt.startsWith('2024-12-11')),
+      expenses: [
+        {
+          id: 'exp-004',
+          routeId: 'dr-002',
+          messengerId: '1',
+          messenger: mockUsers[0],
+          amount: 7000,
+          description: 'Combustible',
+          category: 'combustible' as const,
+          date: '2024-12-11',
+          images: ['https://images.unsplash.com/photo-1594736797933-d0401ba2fe65?w=300'],
+          createdAt: '2024-12-11T08:00:00Z',
+          updatedAt: '2024-12-11T08:00:00Z',
+        },
+        {
+          id: 'exp-005',
+          routeId: 'dr-002',
+          messengerId: '1',
+          messenger: mockUsers[0],
+          amount: 5000,
+          description: 'Mantenimiento menor del vehículo',
+          category: 'mantenimiento' as const,
+          date: '2024-12-11',
+          images: ['https://images.unsplash.com/photo-1486262715619-67b85e0b08c3?w=300'],
+          createdAt: '2024-12-11T16:00:00Z',
+          updatedAt: '2024-12-11T16:00:00Z',
+        },
+      ] as RouteExpense[],
+      
+      createdAt: '2024-12-11T08:00:00Z',
+      updatedAt: '2024-12-11T18:00:00Z',
+      notes: 'Ruta perfecta, todos los pedidos entregados',
+      
+      companyId: '1',
+      company: mockCompanies[0],
+    },
+    {
+      id: 'dr-003',
+      messengerId: '2',
+      messenger: mockUsers[1], // Luis González
+      routeDate: '2024-12-12',
+      
+      totalOrders: 5,
+      deliveredOrders: 4,
+      returnedOrders: 0,
+      pendingOrders: 1,
+      
+      totalCollected: 89000,
+      totalExpenses: 10000,
+      netAmount: 79000,
+      
+      orders: mockOrders.filter(o => o.assignedMessengerId === '2' && o.createdAt.startsWith('2024-12-12')),
+      expenses: [
+        {
+          id: 'exp-006',
+          routeId: 'dr-003',
+          messengerId: '2',
+          messenger: mockUsers[1],
+          amount: 6000,
+          description: 'Combustible',
+          category: 'combustible' as const,
+          date: '2024-12-12',
+          images: ['https://images.unsplash.com/photo-1594736797933-d0401ba2fe65?w=300'],
+          createdAt: '2024-12-12T09:00:00Z',
+          updatedAt: '2024-12-12T09:00:00Z',
+        },
+        {
+          id: 'exp-007',
+          routeId: 'dr-003',
+          messengerId: '2',
+          messenger: mockUsers[1],
+          amount: 4000,
+          description: 'Desayuno y almuerzo',
+          category: 'alimentacion' as const,
+          date: '2024-12-12',
+          images: ['https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=300'],
+          createdAt: '2024-12-12T11:30:00Z',
+          updatedAt: '2024-12-12T11:30:00Z',
+        },
+      ] as RouteExpense[],
+      
+      createdAt: '2024-12-12T08:30:00Z',
+      updatedAt: '2024-12-12T17:45:00Z',
+      notes: 'Ruta en proceso, un pedido pendiente por reagendar',
+      
+      companyId: '1',
+      company: mockCompanies[0],
+    },
+    // Rutas adicionales para nuevos mensajeros
+    {
+      id: 'dr-004',
+      messengerId: '10',
+      messenger: mockUsers[9], // Carlos Rodríguez
+      routeDate: '2024-12-12',
+      
+      totalOrders: 7,
+      deliveredOrders: 6,
+      returnedOrders: 1,
+      pendingOrders: 0,
+      
+      totalCollected: 145000,
+      totalExpenses: 18000,
+      netAmount: 127000,
+      
+      orders: mockOrders.filter(o => o.assignedMessengerId === '10' && o.createdAt.startsWith('2024-12-12')),
+      expenses: [
+        {
+          id: 'exp-008',
+          routeId: 'dr-004',
+          messengerId: '10',
+          messenger: mockUsers[9],
+          amount: 10000,
+          description: 'Combustible para ruta larga',
+          category: 'combustible' as const,
+          date: '2024-12-12',
+          images: ['https://images.unsplash.com/photo-1594736797933-d0401ba2fe65?w=300'],
+          createdAt: '2024-12-12T07:30:00Z',
+          updatedAt: '2024-12-12T07:30:00Z',
+        },
+        {
+          id: 'exp-009',
+          routeId: 'dr-004',
+          messengerId: '10',
+          messenger: mockUsers[9],
+          amount: 5000,
+          description: 'Almuerzo y refrigerio',
+          category: 'alimentacion' as const,
+          date: '2024-12-12',
+          images: ['https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=300'],
+          createdAt: '2024-12-12T12:00:00Z',
+          updatedAt: '2024-12-12T12:00:00Z',
+        },
+        {
+          id: 'exp-010',
+          routeId: 'dr-004',
+          messengerId: '10',
+          messenger: mockUsers[9],
+          amount: 3000,
+          description: 'Peaje y parqueo',
+          category: 'peaje' as const,
+          date: '2024-12-12',
+          images: ['https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?w=300'],
+          createdAt: '2024-12-12T15:30:00Z',
+          updatedAt: '2024-12-12T15:30:00Z',
+        },
+      ] as RouteExpense[],
+      
+      createdAt: '2024-12-12T07:00:00Z',
+      updatedAt: '2024-12-12T19:00:00Z',
+      notes: 'Ruta exitosa con un pedido devuelto por dirección incorrecta',
+      
+      companyId: '1',
+      company: mockCompanies[0],
+    },
+    {
+      id: 'dr-005',
+      messengerId: '11',
+      messenger: mockUsers[10], // Sofía Herrera
+      routeDate: '2024-12-12',
+      
+      totalOrders: 5,
+      deliveredOrders: 5,
+      returnedOrders: 0,
+      pendingOrders: 0,
+      
+      totalCollected: 95000,
+      totalExpenses: 12000,
+      netAmount: 83000,
+      
+      orders: mockOrders.filter(o => o.assignedMessengerId === '11' && o.createdAt.startsWith('2024-12-12')),
+      expenses: [
+        {
+          id: 'exp-011',
+          routeId: 'dr-005',
+          messengerId: '11',
+          messenger: mockUsers[10],
+          amount: 8000,
+          description: 'Combustible',
+          category: 'combustible' as const,
+          date: '2024-12-12',
+          images: ['https://images.unsplash.com/photo-1594736797933-d0401ba2fe65?w=300'],
+          createdAt: '2024-12-12T08:00:00Z',
+          updatedAt: '2024-12-12T08:00:00Z',
+        },
+        {
+          id: 'exp-012',
+          routeId: 'dr-005',
+          messengerId: '11',
+          messenger: mockUsers[10],
+          amount: 4000,
+          description: 'Desayuno y almuerzo',
+          category: 'alimentacion' as const,
+          date: '2024-12-12',
+          images: ['https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=300'],
+          createdAt: '2024-12-12T11:00:00Z',
+          updatedAt: '2024-12-12T11:00:00Z',
+        },
+      ] as RouteExpense[],
+      
+      createdAt: '2024-12-12T08:00:00Z',
+      updatedAt: '2024-12-12T18:00:00Z',
+      notes: 'Ruta perfecta, todos los pedidos entregados exitosamente',
+      
+      companyId: '2',
+      company: mockCompanies[1],
+    },
+    {
+      id: 'dr-006',
+      messengerId: '12',
+      messenger: mockUsers[11], // Miguel Torres
+      routeDate: '2024-12-11',
+      
+      totalOrders: 6,
+      deliveredOrders: 5,
+      returnedOrders: 0,
+      pendingOrders: 1,
+      
+      totalCollected: 110000,
+      totalExpenses: 15000,
+      netAmount: 95000,
+      
+      orders: mockOrders.filter(o => o.assignedMessengerId === '12' && o.createdAt.startsWith('2024-12-11')),
+      expenses: [
+        {
+          id: 'exp-013',
+          routeId: 'dr-006',
+          messengerId: '12',
+          messenger: mockUsers[11],
+          amount: 9000,
+          description: 'Combustible',
+          category: 'combustible' as const,
+          date: '2024-12-11',
+          images: ['https://images.unsplash.com/photo-1594736797933-d0401ba2fe65?w=300'],
+          createdAt: '2024-12-11T08:30:00Z',
+          updatedAt: '2024-12-11T08:30:00Z',
+        },
+        {
+          id: 'exp-014',
+          routeId: 'dr-006',
+          messengerId: '12',
+          messenger: mockUsers[11],
+          amount: 6000,
+          description: 'Mantenimiento de frenos',
+          category: 'mantenimiento' as const,
+          date: '2024-12-11',
+          images: ['https://images.unsplash.com/photo-1486262715619-67b85e0b08c3?w=300'],
+          createdAt: '2024-12-11T16:00:00Z',
+          updatedAt: '2024-12-11T16:00:00Z',
+        },
+      ] as RouteExpense[],
+      
+      createdAt: '2024-12-11T08:30:00Z',
+      updatedAt: '2024-12-11T18:30:00Z',
+      notes: 'Ruta con un pedido pendiente por reagendar',
+      
+      companyId: '3',
+      company: mockCompanies[2],
+    },
+    {
+      id: 'dr-007',
+      messengerId: '13',
+      messenger: mockUsers[12], // Laura Vargas
+      routeDate: '2024-12-10',
+      
+      totalOrders: 4,
+      deliveredOrders: 4,
+      returnedOrders: 0,
+      pendingOrders: 0,
+      
+      totalCollected: 78000,
+      totalExpenses: 9000,
+      netAmount: 69000,
+      
+      orders: mockOrders.filter(o => o.assignedMessengerId === '13' && o.createdAt.startsWith('2024-12-10')),
+      expenses: [
+        {
+          id: 'exp-015',
+          routeId: 'dr-007',
+          messengerId: '13',
+          messenger: mockUsers[12],
+          amount: 6000,
+          description: 'Combustible',
+          category: 'combustible' as const,
+          date: '2024-12-10',
+          images: ['https://images.unsplash.com/photo-1594736797933-d0401ba2fe65?w=300'],
+          createdAt: '2024-12-10T09:00:00Z',
+          updatedAt: '2024-12-10T09:00:00Z',
+        },
+        {
+          id: 'exp-016',
+          routeId: 'dr-007',
+          messengerId: '13',
+          messenger: mockUsers[12],
+          amount: 3000,
+          description: 'Almuerzo',
+          category: 'alimentacion' as const,
+          date: '2024-12-10',
+          images: ['https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=300'],
+          createdAt: '2024-12-10T12:30:00Z',
+          updatedAt: '2024-12-10T12:30:00Z',
+        },
+      ] as RouteExpense[],
+      
+      createdAt: '2024-12-10T09:00:00Z',
+      updatedAt: '2024-12-10T17:00:00Z',
+      notes: 'Ruta corta pero eficiente, todos los pedidos entregados',
+      
+      companyId: '1',
+      company: mockCompanies[0],
+    },
+  ],
+
+  // Route Liquidation API functions
+  getRouteLiquidations: async (filters?: RouteLiquidationFilters): Promise<RouteLiquidation[]> => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    let filteredLiquidations = [...mockRouteLiquidations];
+
+    if (filters?.messengerId) {
+      filteredLiquidations = filteredLiquidations.filter(l => l.messengerId === filters.messengerId);
+    }
+    if (filters?.status) {
+      filteredLiquidations = filteredLiquidations.filter(l => l.status === filters.status);
+    }
+    if (filters?.companyId) {
+      filteredLiquidations = filteredLiquidations.filter(l => l.companyId === filters.companyId);
+    }
+    if (filters?.dateFrom) {
+      filteredLiquidations = filteredLiquidations.filter(l => l.routeDate >= filters.dateFrom!);
+    }
+    if (filters?.dateTo) {
+      filteredLiquidations = filteredLiquidations.filter(l => l.routeDate <= filters.dateTo!);
+    }
+
+    return filteredLiquidations;
+  },
+
+  getRouteLiquidation: async (id: string): Promise<RouteLiquidation> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const liquidation = mockRouteLiquidations.find(l => l.id === id);
+    if (!liquidation) {
+      throw new Error('Liquidación de ruta no encontrada');
+    }
+    return liquidation;
+  },
+
+  createRouteLiquidation: async (data: Partial<RouteLiquidation>): Promise<RouteLiquidation> => {
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
+    const newLiquidation: RouteLiquidation = {
+      id: `rl-${Date.now()}`,
+      messengerId: data.messengerId!,
+      messenger: data.messenger!,
+      routeDate: data.routeDate!,
+      status: 'pendiente',
+      
+      totalCollected: data.totalCollected || 0,
+      totalSpent: data.totalSpent || 0,
+      totalToDeliver: data.totalToDeliver || 0,
+      
+      totalOrders: data.totalOrders || 0,
+      deliveredOrders: data.deliveredOrders || 0,
+      returnedOrders: data.returnedOrders || 0,
+      pendingOrders: data.pendingOrders || 0,
+      
+      orders: data.orders || [],
+      cashOrders: data.cashOrders || [],
+      sinpeOrders: data.sinpeOrders || [],
+      
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      
+      notes: data.notes,
+      
+      companyId: data.companyId!,
+      company: data.company!,
+    };
+
+    mockRouteLiquidations.push(newLiquidation);
+    return newLiquidation;
+  },
+
+  finalizeRoute: async (liquidationId: string, notes?: string): Promise<RouteLiquidation> => {
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
+    const liquidation = mockRouteLiquidations.find(l => l.id === liquidationId);
+    if (!liquidation) {
+      throw new Error('Liquidación de ruta no encontrada');
+    }
+
+    // Verificar que todos los pedidos tengan un estado final
+    const pendingOrders = liquidation.orders.filter((o: Order) => 
+      !['entregado', 'devolucion', 'reagendado'].includes(o.status)
+    );
+
+    if (pendingOrders.length > 0) {
+      throw new Error('No se puede finalizar la ruta. Hay pedidos sin estado final.');
+    }
+
+    liquidation.status = 'finalizada';
+    liquidation.finalizedAt = new Date().toISOString();
+    liquidation.updatedAt = new Date().toISOString();
+    if (notes) liquidation.notes = notes;
+
+    return liquidation;
+  },
+
+  liquidateRoute: async (liquidationId: string, adminNotes?: string): Promise<RouteLiquidation> => {
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
+    const liquidation = mockRouteLiquidations.find(l => l.id === liquidationId);
+    if (!liquidation) {
+      throw new Error('Liquidación de ruta no encontrada');
+    }
+
+    if (liquidation.status !== 'finalizada') {
+      throw new Error('Solo se pueden liquidar rutas finalizadas');
+    }
+
+    liquidation.status = 'liquidada';
+    liquidation.liquidatedAt = new Date().toISOString();
+    liquidation.liquidatedBy = '1'; // Admin user
+    liquidation.liquidatedByUser = mockUsers[0];
+    liquidation.updatedAt = new Date().toISOString();
+    if (adminNotes) liquidation.adminNotes = adminNotes;
+
+    return liquidation;
+  },
+
+  getRouteLiquidationStats: async (): Promise<RouteLiquidationStats> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    const today = new Date().toISOString().split('T')[0];
+    const todayLiquidations = mockRouteLiquidations.filter(l => l.routeDate === today);
+    
+    const totalRoutes = mockRouteLiquidations.length;
+    const pendingLiquidation = mockRouteLiquidations.filter(l => l.status === 'finalizada').length;
+    const finalizedToday = todayLiquidations.filter(l => l.status === 'finalizada').length;
+    const liquidatedToday = todayLiquidations.filter(l => l.status === 'liquidada').length;
+    
+    const totalCollectedToday = todayLiquidations.reduce((sum, l) => sum + l.totalCollected, 0);
+    const totalSpentToday = todayLiquidations.reduce((sum, l) => sum + l.totalSpent, 0);
+    const totalToDeliverToday = todayLiquidations.reduce((sum, l) => sum + l.totalToDeliver, 0);
+    
+    // Agrupar por mensajero
+    const byMessenger = mockRouteLiquidations.reduce((acc: any[], liquidation) => {
+      const existing = acc.find(item => item.messengerId === liquidation.messengerId);
+      if (existing) {
+        existing.routesCount++;
+        existing.totalCollected += liquidation.totalCollected;
+        existing.totalSpent += liquidation.totalSpent;
+      } else {
+        acc.push({
+          messengerId: liquidation.messengerId,
+          messenger: liquidation.messenger,
+          routesCount: 1,
+          totalCollected: liquidation.totalCollected,
+          totalSpent: liquidation.totalSpent,
+        });
+      }
+      return acc;
+    }, []);
+
+    return {
+      totalRoutes,
+      pendingLiquidation,
+      finalizedToday,
+      liquidatedToday,
+      totalCollectedToday,
+      totalSpentToday,
+      totalToDeliverToday,
+      byMessenger,
+    };
+  },
+
+  // Route History API functions
+  getDailyRoutes: async (filters?: RouteHistoryFilters): Promise<DailyRoute[]> => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    let filteredRoutes = [...mockApi.mockDailyRoutes];
+
+    if (filters?.messengerId) {
+      filteredRoutes = filteredRoutes.filter(r => r.messengerId === filters.messengerId);
+    }
+    if (filters?.companyId) {
+      filteredRoutes = filteredRoutes.filter(r => r.companyId === filters.companyId);
+    }
+    if (filters?.dateFrom) {
+      filteredRoutes = filteredRoutes.filter(r => r.routeDate >= filters.dateFrom!);
+    }
+    if (filters?.dateTo) {
+      filteredRoutes = filteredRoutes.filter(r => r.routeDate <= filters.dateTo!);
+    }
+
+    return filteredRoutes;
+  },
+
+  getDailyRoute: async (id: string): Promise<DailyRoute> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const route = mockApi.mockDailyRoutes.find(r => r.id === id);
+    if (!route) {
+      throw new Error('Ruta no encontrada');
+    }
+    return route;
+  },
+
+  createRouteExpense: async (data: Partial<RouteExpense>): Promise<RouteExpense> => {
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
+    const newExpense: RouteExpense = {
+      id: `exp-${Date.now()}`,
+      routeId: data.routeId!,
+      messengerId: data.messengerId!,
+      messenger: data.messenger!,
+      amount: data.amount!,
+      description: data.description!,
+      category: data.category!,
+      date: data.date!,
+      images: data.images || [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Añadir el gasto a la ruta correspondiente
+    const route = mockApi.mockDailyRoutes.find(r => r.id === data.routeId);
+    if (route) {
+      route.expenses.push(newExpense as RouteExpense);
+      route.totalExpenses += newExpense.amount;
+      route.netAmount = route.totalCollected - route.totalExpenses;
+      route.updatedAt = new Date().toISOString();
+    }
+
+    return newExpense as RouteExpense;
+  },
+
+  updateRouteExpense: async (id: string, data: Partial<RouteExpense>): Promise<RouteExpense> => {
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
+    const route = mockApi.mockDailyRoutes.find(r => r.expenses.some(e => e.id === id));
+    if (!route) {
+      throw new Error('Gasto no encontrado');
+    }
+
+    const expense = route.expenses.find(e => e.id === id);
+    if (!expense) {
+      throw new Error('Gasto no encontrado');
+    }
+
+    const oldAmount = expense.amount;
+    
+    // Actualizar el gasto
+    Object.assign(expense, data, {
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Actualizar totales de la ruta
+    route.totalExpenses = route.totalExpenses - oldAmount + expense.amount;
+    route.netAmount = route.totalCollected - route.totalExpenses;
+    route.updatedAt = new Date().toISOString();
+
+    return expense;
+  },
+
+  deleteRouteExpense: async (id: string): Promise<void> => {
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
+    const route = mockApi.mockDailyRoutes.find(r => r.expenses.some(e => e.id === id));
+    if (!route) {
+      throw new Error('Gasto no encontrado');
+    }
+
+    const expense = route.expenses.find(e => e.id === id);
+    if (!expense) {
+      throw new Error('Gasto no encontrado');
+    }
+
+    // Remover el gasto
+    route.expenses = route.expenses.filter(e => e.id !== id);
+    route.totalExpenses -= expense.amount;
+    route.netAmount = route.totalCollected - route.totalExpenses;
+    route.updatedAt = new Date().toISOString();
+  },
+
+  getRouteHistoryStats: async (messengerId?: string): Promise<RouteHistoryStats> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    let routes = mockApi.mockDailyRoutes;
+    if (messengerId) {
+      routes = routes.filter(r => r.messengerId === messengerId);
+    }
+
+    const today = new Date();
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+
+    const thisWeekRoutes = routes.filter(r => new Date(r.routeDate) >= weekAgo);
+    const thisMonthRoutes = routes.filter(r => new Date(r.routeDate) >= monthAgo);
+
+    const totalRoutes = routes.length;
+    const totalDelivered = routes.reduce((sum, r) => sum + r.deliveredOrders, 0);
+    const totalCollected = routes.reduce((sum, r) => sum + r.totalCollected, 0);
+    const totalExpenses = routes.reduce((sum, r) => sum + r.totalExpenses, 0);
+    const netAmount = totalCollected - totalExpenses;
+
+    // Agrupar gastos por categoría
+    const expensesByCategory = routes.reduce((acc: any[], route) => {
+      route.expenses.forEach(expense => {
+        const existing = acc.find(item => item.category === expense.category);
+        if (existing) {
+          existing.amount += expense.amount;
+          existing.count++;
+        } else {
+          acc.push({
+            category: expense.category,
+            amount: expense.amount,
+            count: 1,
+          });
+        }
+      });
+      return acc;
+    }, []);
+
+    return {
+      totalRoutes,
+      totalDelivered,
+      totalCollected,
+      totalExpenses,
+      netAmount,
+      thisWeek: {
+        routes: thisWeekRoutes.length,
+        delivered: thisWeekRoutes.reduce((sum, r) => sum + r.deliveredOrders, 0),
+        collected: thisWeekRoutes.reduce((sum, r) => sum + r.totalCollected, 0),
+        expenses: thisWeekRoutes.reduce((sum, r) => sum + r.totalExpenses, 0),
+      },
+      thisMonth: {
+        routes: thisMonthRoutes.length,
+        delivered: thisMonthRoutes.reduce((sum, r) => sum + r.deliveredOrders, 0),
+        collected: thisMonthRoutes.reduce((sum, r) => sum + r.totalCollected, 0),
+        expenses: thisMonthRoutes.reduce((sum, r) => sum + r.totalExpenses, 0),
+      },
+      expensesByCategory,
+    };
+  },
+
+  // Route Management API functions
+  getOrdersForRouteCreation: async (routeDate: string, companyId?: string): Promise<Order[]> => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Crear pedidos del día de hoy si no existen
+    const today = new Date().toISOString().split('T')[0];
+    if (routeDate === today) {
+      // Añadir pedidos del día de hoy
+      const todayOrders = [
+        {
+          id: 'TODAY-001',
+          customerName: 'María González',
+          customerPhone: '50688881111',
+          customerAddress: 'Residencial Los Laureles, Casa 15',
+          customerProvince: 'San José',
+          customerCanton: 'SANTA ANA',
+          customerDistrict: 'SANTA ANA',
+          customerLocationLink: 'https://maps.app.goo.gl/example_today1',
+          
+          items: generateOrderItems(2),
+          totalAmount: 35000,
+          status: 'confirmado' as OrderStatus,
+          paymentMethod: 'efectivo' as PaymentMethod,
+          origin: 'csv' as OrderOrigin,
+          createdAt: today + 'T08:00:00Z',
+          updatedAt: today + 'T08:00:00Z',
+          
+          advisorId: '2',
+          advisor: mockUsers[1],
+          
+          notes: 'Cliente solicita entrega en la mañana',
+          deliveryAddress: 'Residencial Los Laureles, Casa 15',
+          
+          companyId: '1',
+          company: mockCompanies[0],
+          routeSchedule: 'DIA',
+        },
+        {
+          id: 'TODAY-002',
+          customerName: 'Carlos Rodríguez',
+          customerPhone: '50688882222',
+          customerAddress: 'Condominio Vista Hermosa, Apto 8B',
+          customerProvince: 'Alajuela',
+          customerCanton: 'ALAJUELA',
+          customerDistrict: 'ALAJUELA',
+          customerLocationLink: 'https://maps.app.goo.gl/example_today2',
+          
+          items: generateOrderItems(3),
+          totalAmount: 42000,
+          status: 'confirmado' as OrderStatus,
+          paymentMethod: 'sinpe' as PaymentMethod,
+          origin: 'csv' as OrderOrigin,
+          createdAt: today + 'T09:30:00Z',
+          updatedAt: today + 'T09:30:00Z',
+          
+          advisorId: '2',
+          advisor: mockUsers[1],
+          
+          notes: 'Cliente confirmó pago por SINPE',
+          deliveryAddress: 'Condominio Vista Hermosa, Apto 8B',
+          
+          companyId: '1',
+          company: mockCompanies[0],
+          routeSchedule: 'DIA',
+        },
+        {
+          id: 'TODAY-003',
+          customerName: 'Ana Martínez',
+          customerPhone: '50688883333',
+          customerAddress: 'Urbanización El Prado, Casa 22',
+          customerProvince: 'Cartago',
+          customerCanton: 'CARTAGO',
+          customerDistrict: 'ORIENTAL',
+          customerLocationLink: 'https://maps.app.goo.gl/example_today3',
+          
+          items: generateOrderItems(1),
+          totalAmount: 18000,
+          status: 'confirmado' as OrderStatus,
+          paymentMethod: 'efectivo' as PaymentMethod,
+          origin: 'csv' as OrderOrigin,
+          createdAt: today + 'T10:15:00Z',
+          updatedAt: today + 'T10:15:00Z',
+          
+          advisorId: '15',
+          advisor: mockUsers[14],
+          
+          notes: 'Pedido urgente para esta tarde',
+          deliveryAddress: 'Urbanización El Prado, Casa 22',
+          
+          companyId: '2',
+          company: mockCompanies[1],
+          routeSchedule: 'DIA',
+        },
+        {
+          id: 'TODAY-004',
+          customerName: 'Roberto Silva',
+          customerPhone: '50688884444',
+          customerAddress: 'Residencial Los Robles, Casa 45',
+          customerProvince: 'Heredia',
+          customerCanton: 'HEREDIA',
+          customerDistrict: 'HEREDIA',
+          customerLocationLink: 'https://maps.app.goo.gl/example_today4',
+          
+          items: generateOrderItems(4),
+          totalAmount: 55000,
+          status: 'confirmado' as OrderStatus,
+          paymentMethod: 'efectivo' as PaymentMethod,
+          origin: 'csv' as OrderOrigin,
+          createdAt: today + 'T11:00:00Z',
+          updatedAt: today + 'T11:00:00Z',
+          
+          advisorId: '16',
+          advisor: mockUsers[15],
+          
+          notes: 'Cliente prefiere entrega en la tarde',
+          deliveryAddress: 'Residencial Los Robles, Casa 45',
+          
+          companyId: '3',
+          company: mockCompanies[2],
+          routeSchedule: 'DIA',
+        },
+        {
+          id: 'TODAY-005',
+          customerName: 'Laura Herrera',
+          customerPhone: '50688885555',
+          customerAddress: 'Condominio Las Palmas, Apto 12C',
+          customerProvince: 'San José',
+          customerCanton: 'CURRIDABAT',
+          customerDistrict: 'CURRIDABAT',
+          customerLocationLink: 'https://maps.app.goo.gl/example_today5',
+          
+          items: generateOrderItems(2),
+          totalAmount: 28000,
+          status: 'confirmado' as OrderStatus,
+          paymentMethod: 'sinpe' as PaymentMethod,
+          origin: 'csv' as OrderOrigin,
+          createdAt: today + 'T12:30:00Z',
+          updatedAt: today + 'T12:30:00Z',
+          
+          advisorId: '2',
+          advisor: mockUsers[1],
+          
+          notes: 'Entregar en la recepción del condominio',
+          deliveryAddress: 'Condominio Las Palmas, Apto 12C',
+          
+          companyId: '1',
+          company: mockCompanies[0],
+          routeSchedule: 'DIA',
+        },
+        {
+          id: 'TODAY-006',
+          customerName: 'Miguel Torres',
+          customerPhone: '50688886666',
+          customerAddress: 'Residencial El Bosque, Casa 78',
+          customerProvince: 'San José',
+          customerCanton: 'ESCAZU',
+          customerDistrict: 'ESCAZU',
+          customerLocationLink: 'https://maps.app.goo.gl/example_today6',
+          
+          items: generateOrderItems(3),
+          totalAmount: 45000,
+          status: 'confirmado' as OrderStatus,
+          paymentMethod: 'efectivo' as PaymentMethod,
+          origin: 'csv' as OrderOrigin,
+          createdAt: today + 'T13:45:00Z',
+          updatedAt: today + 'T13:45:00Z',
+          
+          advisorId: '15',
+          advisor: mockUsers[14],
+          
+          notes: 'Cliente no disponible hasta las 3 PM',
+          deliveryAddress: 'Residencial El Bosque, Casa 78',
+          
+          companyId: '2',
+          company: mockCompanies[1],
+          routeSchedule: 'DIA',
+        },
+        {
+          id: 'TODAY-007',
+          customerName: 'Patricia López',
+          customerPhone: '50688887777',
+          customerAddress: 'Urbanización Los Pinos, Casa 23',
+          customerProvince: 'Alajuela',
+          customerCanton: 'ALAJUELA',
+          customerDistrict: 'ALAJUELA',
+          customerLocationLink: 'https://maps.app.goo.gl/example_today7',
+          
+          items: generateOrderItems(1),
+          totalAmount: 15000,
+          status: 'reagendado' as OrderStatus,
+          paymentMethod: 'efectivo' as PaymentMethod,
+          origin: 'csv' as OrderOrigin,
+          createdAt: today + 'T14:20:00Z',
+          updatedAt: today + 'T14:20:00Z',
+          
+          advisorId: '16',
+          advisor: mockUsers[15],
+          
+          notes: 'Cliente solicitó reagendar para mañana',
+          deliveryAddress: 'Urbanización Los Pinos, Casa 23',
+          scheduledDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          
+          companyId: '3',
+          company: mockCompanies[2],
+          routeSchedule: 'DIA',
+        },
+        {
+          id: 'TODAY-008',
+          customerName: 'Diego Vargas',
+          customerPhone: '50688888888',
+          customerAddress: 'Condominio Vista Verde, Apto 5B',
+          customerProvince: 'San José',
+          customerCanton: 'TIBAS',
+          customerDistrict: 'TIBAS',
+          customerLocationLink: 'https://maps.app.goo.gl/example_today8',
+          
+          items: generateOrderItems(2),
+          totalAmount: 32000,
+          status: 'confirmado' as OrderStatus,
+          paymentMethod: 'sinpe' as PaymentMethod,
+          origin: 'csv' as OrderOrigin,
+          createdAt: today + 'T15:10:00Z',
+          updatedAt: today + 'T15:10:00Z',
+          
+          advisorId: '2',
+          advisor: mockUsers[1],
+          
+          notes: 'Pedido de último minuto',
+          deliveryAddress: 'Condominio Vista Verde, Apto 5B',
+          
+          companyId: '1',
+          company: mockCompanies[0],
+          routeSchedule: 'DIA',
+        }
+      ];
+      
+      // Añadir estos pedidos al array de pedidos mock
+      mockOrders.unshift(...todayOrders);
+    }
+    
+    // Obtener pedidos con fecha igual a la fecha de ruta
+    const filteredOrders = mockOrders.filter(order => {
+      const orderDate = order.createdAt.split('T')[0];
+      const isToday = orderDate === routeDate;
+      const isRescheduled = order.status === 'reagendado' && order.scheduledDate && 
+        order.scheduledDate.split('T')[0] === routeDate;
+      
+      return (isToday || isRescheduled) && (!companyId || order.companyId === companyId);
+    });
+
+    return filteredOrders;
+  },
+
+  groupOrdersByZone: async (orders: Order[]): Promise<ZoneGroup[]> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Obtener todos los mensajeros disponibles
+    const allMessengers = mockUsers.filter(user => user.role === 'mensajero' && user.isActive);
+    
+    // Calcular cuántos grupos de 30 pedidos necesitamos
+    const totalOrders = orders.length;
+    const ordersPerMessenger = 30;
+    const totalGroups = Math.ceil(totalOrders / ordersPerMessenger);
+    
+    // Crear grupos de 30 pedidos cada uno
+    const zoneGroups: ZoneGroup[] = [];
+    
+    for (let i = 0; i < totalGroups; i++) {
+      const startIndex = i * ordersPerMessenger;
+      const endIndex = Math.min(startIndex + ordersPerMessenger, totalOrders);
+      const groupOrders = orders.slice(startIndex, endIndex);
+      
+      if (groupOrders.length === 0) break;
+      
+      // Asignar mensajero de forma rotativa
+      const messenger = allMessengers[i % allMessengers.length];
+      
+      // Determinar la ruta principal del grupo basada en los pedidos
+      const routeCounts: { [key: string]: number } = {};
+      groupOrders.forEach(order => {
+        const canton = order.customerCanton || 'SIN ZONA';
+        const routeInfo = getRouteForCanton(canton);
+        const routeKey = routeInfo ? routeInfo.route : 'SIN RUTA';
+        routeCounts[routeKey] = (routeCounts[routeKey] || 0) + 1;
+      });
+      
+      // La ruta principal es la que tiene más pedidos en este grupo
+      const mainRoute = Object.keys(routeCounts).reduce((a, b) => 
+        routeCounts[a] > routeCounts[b] ? a : b
+      );
+      
+      const totalAmount = groupOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+      
+      zoneGroups.push({
+        zone: `Grupo ${i + 1} - Ruta ${mainRoute}`,
+        orders: groupOrders,
+        totalAmount,
+        totalOrders: groupOrders.length,
+        assignedMessengerId: messenger.id,
+        assignedMessenger: messenger,
+      });
+    }
+
+    return zoneGroups.sort((a, b) => b.totalOrders - a.totalOrders);
+  },
+
+  assignOrdersToMessengers: async (routeDate: string, companyId?: string): Promise<{
+    assignments: RouteAssignment[];
+    unassignedOrders: UnassignedOrder[];
+  }> => {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    const orders = await mockApi.getOrdersForRouteCreation(routeDate, companyId);
+    const zoneGroups = await mockApi.groupOrdersByZone(orders);
+    
+    const assignments: RouteAssignment[] = [];
+    const unassignedOrders: UnassignedOrder[] = [];
+    
+    // Verificar que cada grupo tenga exactamente 30 pedidos (excepto el último)
+    zoneGroups.forEach((group, index) => {
+      if (group.assignedMessenger) {
+        // Asignar todos los pedidos del grupo al mensajero asignado
+        group.orders.forEach(order => {
+          order.assignedMessengerId = group.assignedMessenger!.id;
+          order.assignedMessenger = group.assignedMessenger!;
+        });
+        
+        assignments.push({
+          id: `route-${routeDate}-${group.assignedMessenger.id}-${index + 1}`,
+          routeDate,
+          messengerId: group.assignedMessenger.id,
+          messenger: group.assignedMessenger,
+          orders: group.orders,
+          totalOrders: group.orders.length,
+          assignedOrders: group.orders.length,
+          unassignedOrders: 0,
+          status: 'assigned',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          companyId: group.orders[0]?.companyId || '1',
+          company: group.orders[0]?.company || mockCompanies[0],
+        });
+      } else {
+        // No hay mensajeros disponibles para esta ruta
+        group.orders.forEach(order => {
+          unassignedOrders.push({
+            order,
+            reason: 'no_messenger_available',
+          });
+        });
+      }
+    });
+    
+    return { assignments, unassignedOrders };
+  },
+
+  changeOrderAssignment: async (orderId: string, newMessengerId: string): Promise<Order> => {
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
+    const order = mockOrders.find(o => o.id === orderId);
+    if (!order) {
+      throw new Error('Pedido no encontrado');
+    }
+    
+    const newMessenger = mockUsers.find(u => u.id === newMessengerId);
+    if (!newMessenger) {
+      throw new Error('Mensajero no encontrado');
+    }
+    
+    order.assignedMessengerId = newMessengerId;
+    order.assignedMessenger = newMessenger;
+    order.updatedAt = new Date().toISOString();
+    
+    return order;
+  },
+
+  getRouteMessengerStats: async (filters: RouteManagementFilters): Promise<RouteMessengerStats[]> => {
+    await new Promise(resolve => setTimeout(resolve, 600));
+    
+    const messengers = mockUsers.filter(user => user.role === 'mensajero' && user.isActive);
+    const stats: RouteMessengerStats[] = [];
+    
+    // Crear datos de ejemplo para el día de hoy si no hay filtros de fecha
+    const today = new Date().toISOString().split('T')[0];
+    const isToday = !filters.dateFrom && !filters.dateTo;
+    
+    messengers.forEach((messenger, index) => {
+      // Filtrar pedidos por mensajero y fechas
+      let messengerOrders = mockOrders.filter(order => 
+        order.assignedMessengerId === messenger.id
+      );
+      
+      if (filters.dateFrom) {
+        messengerOrders = messengerOrders.filter(order => 
+          order.createdAt >= filters.dateFrom!
+        );
+      }
+      
+      if (filters.dateTo) {
+        messengerOrders = messengerOrders.filter(order => 
+          order.createdAt <= filters.dateTo!
+        );
+      }
+      
+      if (filters.companyId) {
+        messengerOrders = messengerOrders.filter(order => 
+          order.companyId === filters.companyId
+        );
+      }
+      
+      // Si es el día de hoy y no hay pedidos, crear datos de ejemplo
+      if (isToday && messengerOrders.length === 0) {
+        // Simular exactamente 30 pedidos asignados para el día de hoy
+        const mockTodayOrders = [];
+        for (let i = 1; i <= 30; i++) {
+          mockTodayOrders.push({
+            id: `TODAY-${messenger.id}-${i.toString().padStart(3, '0')}`,
+            totalAmount: 20000 + (index * 1000) + (i * 500),
+            status: i <= 25 ? 'entregado' : (i <= 28 ? 'confirmado' : 'reagendado'),
+            paymentMethod: i % 3 === 0 ? 'sinpe' : 'efectivo',
+            createdAt: today + `T${(8 + Math.floor(i / 4)).toString().padStart(2, '0')}:${(i % 4 * 15).toString().padStart(2, '0')}:00Z`,
+          });
+        }
+        
+        messengerOrders = mockTodayOrders as any[];
+      }
+      
+      // Calcular estadísticas
+      const assignedOrders = messengerOrders.length;
+      const deliveredOrders = messengerOrders.filter(o => o.status === 'entregado').length;
+      const returnedOrders = messengerOrders.filter(o => o.status === 'devolucion').length;
+      const rescheduledOrders = messengerOrders.filter(o => o.status === 'reagendado').length;
+      const rescheduledTonightOrders = messengerOrders.filter(o => 
+        o.status === 'reagendado' && o.scheduledDate && 
+        new Date(o.scheduledDate).toDateString() === new Date().toDateString()
+      ).length;
+      
+      // Métodos de pago
+      const cashCollected = messengerOrders
+        .filter(o => o.status === 'entregado' && o.paymentMethod === 'efectivo')
+        .reduce((sum, o) => sum + o.totalAmount, 0);
+      
+      const sinpeCollected = messengerOrders
+        .filter(o => o.status === 'entregado' && o.paymentMethod === 'sinpe')
+        .reduce((sum, o) => sum + o.totalAmount, 0);
+      
+      const cardCollected = 0; // No hay pagos con tarjeta en los datos mock
+      
+      const totalCollected = cashCollected + sinpeCollected + cardCollected;
+      
+      // Cálculos
+      const ordersToReturn = Math.max(0, assignedOrders - deliveredOrders + returnedOrders);
+      const effectiveness = assignedOrders > 0 ? (deliveredOrders / assignedOrders) * 100 : 0;
+      
+      stats.push({
+        messengerId: messenger.id,
+        messenger,
+        assignedOrders,
+        deliveredOrders,
+        returnedOrders,
+        rescheduledOrders,
+        rescheduledTonightOrders,
+        changesCount: Math.floor(Math.random() * 3), // Simular cambios aleatorios
+        cashCollected,
+        sinpeCollected,
+        cardCollected,
+        totalCollected,
+        ordersToReturn,
+        effectiveness: Math.round(effectiveness * 100) / 100,
+        dateFrom: filters.dateFrom || today,
+        dateTo: filters.dateTo || today,
+      });
+    });
+    
+    return stats.sort((a, b) => b.effectiveness - a.effectiveness);
+  },
+
+  createRoute: async (data: RouteCreationData): Promise<RouteAssignment> => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    const messenger = mockUsers.find(u => u.id === data.messengerId);
+    if (!messenger) {
+      throw new Error('Mensajero no encontrado');
+    }
+    
+    const orders = mockOrders.filter(order => data.orderIds.includes(order.id));
+    
+    // Asignar pedidos al mensajero
+    orders.forEach(order => {
+      order.assignedMessengerId = data.messengerId;
+      order.assignedMessenger = messenger;
+      order.updatedAt = new Date().toISOString();
+    });
+    
+    const assignment: RouteAssignment = {
+      id: `route-${data.routeDate}-${data.messengerId}-${Date.now()}`,
+      routeDate: data.routeDate,
+      messengerId: data.messengerId,
+      messenger,
+      orders,
+      totalOrders: orders.length,
+      assignedOrders: orders.length,
+      unassignedOrders: 0,
+      status: 'assigned',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      companyId: orders[0]?.companyId || '1',
+      company: orders[0]?.company || mockCompanies[0],
+    };
+    
+    return assignment;
+  },
+
+  getRouteAssignments: async (filters: RouteManagementFilters): Promise<RouteAssignment[]> => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Simular asignaciones existentes basadas en pedidos asignados
+    const assignments: RouteAssignment[] = [];
+    const messengers = mockUsers.filter(user => user.role === 'mensajero' && user.isActive);
+    const today = new Date().toISOString().split('T')[0];
+    
+    messengers.forEach((messenger, index) => {
+      let messengerOrders = mockOrders.filter(order => 
+        order.assignedMessengerId === messenger.id
+      );
+      
+      if (filters.dateFrom) {
+        messengerOrders = messengerOrders.filter(order => 
+          order.createdAt >= filters.dateFrom!
+        );
+      }
+      
+      if (filters.dateTo) {
+        messengerOrders = messengerOrders.filter(order => 
+          order.createdAt <= filters.dateTo!
+        );
+      }
+      
+      if (filters.companyId) {
+        messengerOrders = messengerOrders.filter(order => 
+          order.companyId === filters.companyId
+        );
+      }
+      
+      // Si es el día de hoy y no hay pedidos, crear datos de ejemplo
+      if (!filters.dateFrom && !filters.dateTo && messengerOrders.length === 0) {
+        // Crear exactamente 30 pedidos de ejemplo para el día de hoy
+        const mockOrders = [];
+        for (let i = 1; i <= 30; i++) {
+          mockOrders.push({
+            id: `TODAY-${messenger.id}-${i.toString().padStart(3, '0')}`,
+            customerName: `Cliente ${index * 30 + i}`,
+            customerPhone: `5068888${(index * 30 + i).toString().padStart(4, '0')}`,
+            customerAddress: `Dirección ${index * 30 + i}`,
+            customerCanton: ['SAN JOSE', 'ALAJUELA', 'CARTAGO', 'HEREDIA'][index % 4],
+            totalAmount: 20000 + (index * 1000) + (i * 500),
+            status: i <= 25 ? 'entregado' : (i <= 28 ? 'confirmado' : 'reagendado'),
+            paymentMethod: i % 3 === 0 ? 'sinpe' : 'efectivo',
+            origin: 'csv' as OrderOrigin,
+            createdAt: today + `T${(8 + Math.floor(i / 4)).toString().padStart(2, '0')}:${(i % 4 * 15).toString().padStart(2, '0')}:00Z`,
+            companyId: '1',
+            company: mockCompanies[0],
+            assignedMessengerId: messenger.id,
+            assignedMessenger: messenger,
+          });
+        }
+        
+        messengerOrders = mockOrders as any[];
+      }
+      
+      if (messengerOrders.length > 0) {
+        // Agrupar por fecha
+        const ordersByDate = messengerOrders.reduce((groups: { [key: string]: Order[] }, order) => {
+          const date = order.createdAt.split('T')[0];
+          if (!groups[date]) groups[date] = [];
+          groups[date].push(order);
+          return groups;
+        }, {});
+        
+        Object.entries(ordersByDate).forEach(([date, orders]) => {
+          assignments.push({
+            id: `route-${date}-${messenger.id}`,
+            routeDate: date,
+            messengerId: messenger.id,
+            messenger,
+            orders,
+            totalOrders: orders.length,
+            assignedOrders: orders.length,
+            unassignedOrders: 0,
+            status: 'assigned',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            companyId: orders[0]?.companyId || '1',
+            company: orders[0]?.company || mockCompanies[0],
+          });
+        });
+      }
+    });
+    
+    return assignments;
+  },
+
+  // Route Information API functions
+  getRouteInfo: async (canton: string): Promise<RouteInfo | null> => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    const routeInfo = getRouteForCanton(canton);
+    if (!routeInfo) return null;
+    
+    const messengers = getMessengersForRoute(routeInfo.route);
+    
+    return {
+      route: routeInfo.route,
+      zones: routeInfo.zones,
+      payment: routeInfo.payment,
+      messengers,
+    };
+  },
+
+  getAllRoutes: async (): Promise<RouteInfo[]> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    const routes = getAllRoutes();
+    const routeInfos: RouteInfo[] = [];
+    
+    routes.forEach(route => {
+      const messengers = getMessengersForRoute(route);
+      const routeData = Object.values(routeMapping).find(r => r.route === route);
+      
+      if (routeData) {
+        routeInfos.push({
+          route,
+          zones: routeData.zones,
+          payment: routeData.payment,
+          messengers,
+        });
+      }
+    });
+    
+    return routeInfos;
+  },
+
+  getRouteStats: async (filters: RouteManagementFilters): Promise<RouteStats[]> => {
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
+    const routes = getAllRoutes();
+    const stats: RouteStats[] = [];
+    
+    routes.forEach(route => {
+      // Obtener pedidos para esta ruta
+      let routeOrders = mockOrders.filter(order => {
+        const canton = order.customerCanton || '';
+        const routeInfo = getRouteForCanton(canton);
+        return routeInfo && routeInfo.route === route;
+      });
+      
+      if (filters.dateFrom) {
+        routeOrders = routeOrders.filter(order => 
+          order.createdAt >= filters.dateFrom!
+        );
+      }
+      
+      if (filters.dateTo) {
+        routeOrders = routeOrders.filter(order => 
+          order.createdAt <= filters.dateTo!
+        );
+      }
+      
+      if (filters.companyId) {
+        routeOrders = routeOrders.filter(order => 
+          order.companyId === filters.companyId
+        );
+      }
+      
+      const messengers = getMessengersForRoute(route);
+      const routeData = Object.values(routeMapping).find(r => r.route === route);
+      
+      stats.push({
+        route,
+        totalOrders: routeOrders.length,
+        totalAmount: routeOrders.reduce((sum, order) => sum + order.totalAmount, 0),
+        assignedMessengers: messengers.length,
+        averageOrderValue: routeOrders.length > 0 ? 
+          routeOrders.reduce((sum, order) => sum + order.totalAmount, 0) / routeOrders.length : 0,
+        paymentPerMessenger: routeData?.payment || 0,
+      });
+    });
+    
+    return stats.sort((a, b) => b.totalOrders - a.totalOrders);
+  },
+
+  getCantonsByRoute: async (route: string): Promise<string[]> => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    const cantons: string[] = [];
+    Object.entries(routeMapping).forEach(([canton, routeInfo]) => {
+      if (routeInfo.route === route) {
+        cantons.push(canton);
+      }
+    });
+    
+    return cantons.sort();
+  },
 };
+
+// Route mapping data from CSV
+const routeMapping: { [key: string]: { route: string; zones: string[]; payment: number } } = {
+  'ALAJUELA': { route: 'AL1', zones: ['HE1', 'SJ5', 'SJ4'], payment: 2500 },
+  'CARTAGO': { route: 'CT1', zones: ['SJ2', 'SJ1', 'SJ4'], payment: 2500 },
+  'HEREDIA': { route: 'H1', zones: ['AL1', 'SJ4'], payment: 2500 },
+  'ALAJUELITA': { route: 'SJ3', zones: ['SJ1', 'SJ2', 'CT1'], payment: 2000 },
+  'ASERRI': { route: 'SJ3', zones: ['SJ1', 'SJ2', 'CT1'], payment: 2000 },
+  'CURRIDABAT': { route: 'SJ2', zones: ['CT1', 'SJ1', 'SJ4'], payment: 2000 },
+  'DESAMPARADOS': { route: 'SJ3', zones: ['SJ1', 'SJ2', 'CT1'], payment: 2000 },
+  'ESCAZU': { route: 'SJ5', zones: ['SJ1', 'AL1', 'HE1'], payment: 2000 },
+  'GOICOECHEA': { route: 'SJ2', zones: ['CT1', 'SJ1', 'SJ4'], payment: 2000 },
+  'MONTES DE OCA': { route: 'SJ2', zones: ['CT1', 'SJ1', 'SJ4'], payment: 2000 },
+  'MORA': { route: 'SJ5', zones: ['SJ1', 'AL1', 'HE1'], payment: 2000 },
+  'MORAVIA': { route: 'SJ2', zones: ['CT1', 'SJ1', 'SJ4'], payment: 2000 },
+  'SAN JOSE': { route: 'SJ1', zones: ['SJ2', 'HE1'], payment: 2000 },
+  'SANTA ANA': { route: 'SJ5', zones: ['SJ1', 'AL1', 'HE1'], payment: 2000 },
+  'TIBAS': { route: 'SJ4', zones: ['HE1', 'SJ2'], payment: 2000 },
+  'VAZQUEZ DE CORONADO': { route: 'SJ2', zones: ['CT1', 'SJ1', 'SJ4'], payment: 2000 },
+};
+
+// Function to get route information for a canton
+function getRouteForCanton(canton: string): { route: string; zones: string[]; payment: number } | null {
+  const normalizedCanton = canton.toUpperCase().trim();
+  return routeMapping[normalizedCanton] || null;
+}
+
+// Function to get all available routes
+function getAllRoutes(): string[] {
+  const routes = new Set<string>();
+  Object.values(routeMapping).forEach(routeInfo => {
+    routes.add(routeInfo.route);
+  });
+  return Array.from(routes);
+}
+
+// Function to get messengers assigned to routes
+function getMessengersForRoute(route: string): User[] {
+  const messengers = mockUsers.filter(user => user.role === 'mensajero' && user.isActive);
+  
+  // Assign messengers to routes in a round-robin fashion
+  const routeMessengers: { [key: string]: User[] } = {
+    'AL1': [messengers[0], messengers[1]], // Juan Pérez, Luis González
+    'CT1': [messengers[2], messengers[3]], // Carlos Rodríguez, Sofía Herrera
+    'H1': [messengers[4]], // Miguel Torres
+    'SJ1': [messengers[0], messengers[5]], // Juan Pérez, Laura Vargas
+    'SJ2': [messengers[1], messengers[2]], // Luis González, Carlos Rodríguez
+    'SJ3': [messengers[3], messengers[4]], // Sofía Herrera, Miguel Torres
+    'SJ4': [messengers[5]], // Laura Vargas
+    'SJ5': [messengers[0], messengers[1]], // Juan Pérez, Luis González
+  };
+  
+  return routeMessengers[route] || [];
+}
+
+// Helper function for status descriptions
+function getStatusDescription(status: RedLogisticStatus): string {
+  const descriptions: Record<RedLogisticStatus, string> = {
+    'pendiente_envio': 'Pedido pendiente de envío',
+    'enviado': 'Pedido enviado desde centro de distribución',
+    'en_transito': 'Pedido en tránsito hacia destino',
+    'entregado': 'Pedido entregado exitosamente',
+    'devuelto': 'Pedido devuelto al remitente',
+    'cancelado': 'Pedido cancelado',
+  };
+  return descriptions[status];
+}
+
+// Mock Red Logística Data
+export const mockRedLogisticOrders: RedLogisticOrder[] = [
+  {
+    id: 'rl-001',
+    orderId: 'PMC-001',
+    order: mockOrders[0],
+    trackingNumber: 'RL-CR-2024-001',
+    status: 'en_transito',
+    deliveryMethod: 'red_logistic',
+    pickupAddress: 'Avenida Central, Calle 5, San José Centro, Costa Rica',
+    deliveryAddress: 'De la iglesia agonia 1km al este y 50 norte, ALAJUELA, ALAJUELA',
+    estimatedDelivery: '2024-12-15T14:00:00Z',
+    actualDelivery: undefined,
+    weight: 2.5,
+    dimensions: { length: 30, width: 20, height: 15 },
+    declaredValue: 18905,
+    shippingCost: 2500,
+    insuranceCost: 500,
+    totalCost: 3000,
+    notes: 'Paquete frágil - manejar con cuidado',
+    createdAt: '2024-12-10T08:00:00Z',
+    updatedAt: '2024-12-12T10:30:00Z',
+    createdBy: '1',
+    createdByUser: mockUsers[0],
+    companyId: '1',
+    company: mockCompanies[0],
+  },
+  {
+    id: 'rl-002',
+    orderId: 'PMC-002',
+    order: mockOrders[1],
+    trackingNumber: 'RL-CR-2024-002',
+    status: 'entregado',
+    deliveryMethod: 'red_logistic',
+    pickupAddress: 'Avenida Central, Calle 5, San José Centro, Costa Rica',
+    deliveryAddress: 'DULCE NOMBRE, CARTAGO',
+    estimatedDelivery: '2024-12-12T16:00:00Z',
+    actualDelivery: '2024-12-12T15:30:00Z',
+    weight: 1.8,
+    dimensions: { length: 25, width: 18, height: 12 },
+    declaredValue: 21900,
+    shippingCost: 2200,
+    insuranceCost: 400,
+    totalCost: 2600,
+    notes: 'Entrega exitosa',
+    createdAt: '2024-12-08T09:00:00Z',
+    updatedAt: '2024-12-12T15:30:00Z',
+    createdBy: '1',
+    createdByUser: mockUsers[0],
+    companyId: '1',
+    company: mockCompanies[0],
+  },
+  {
+    id: 'rl-003',
+    orderId: 'BF-001',
+    order: mockOrders[2],
+    trackingNumber: 'RL-CR-2024-003',
+    status: 'pendiente_envio',
+    deliveryMethod: 'red_logistic',
+    pickupAddress: 'Plaza Mayor, Escazú, San José, Costa Rica',
+    deliveryAddress: 'SANTA LUCIA, BARVA',
+    estimatedDelivery: '2024-12-16T12:00:00Z',
+    actualDelivery: undefined,
+    weight: 3.2,
+    dimensions: { length: 35, width: 25, height: 20 },
+    declaredValue: 19900,
+    shippingCost: 2800,
+    insuranceCost: 600,
+    totalCost: 3400,
+    notes: 'Listo para envío',
+    createdAt: '2024-12-13T11:00:00Z',
+    updatedAt: '2024-12-13T11:00:00Z',
+    createdBy: '2',
+    createdByUser: mockUsers[1],
+    companyId: '2',
+    company: mockCompanies[1],
+  },
+];
+
+export const mockRedLogisticTracking: RedLogisticTracking[] = [
+  {
+    id: 'track-001',
+    redLogisticOrderId: 'rl-001',
+    redLogisticOrder: mockRedLogisticOrders[0],
+    status: 'enviado',
+    location: 'Centro de Distribución San José',
+    description: 'Paquete enviado desde centro de distribución',
+    timestamp: '2024-12-10T08:30:00Z',
+    notes: 'Salida programada',
+  },
+  {
+    id: 'track-002',
+    redLogisticOrderId: 'rl-001',
+    redLogisticOrder: mockRedLogisticOrders[0],
+    status: 'en_transito',
+    location: 'En ruta hacia Alajuela',
+    description: 'Paquete en tránsito hacia destino final',
+    timestamp: '2024-12-12T10:30:00Z',
+    notes: 'Estimado de entrega: 2-3 días hábiles',
+  },
+  {
+    id: 'track-003',
+    redLogisticOrderId: 'rl-002',
+    redLogisticOrder: mockRedLogisticOrders[1],
+    status: 'entregado',
+    location: 'DULCE NOMBRE, CARTAGO',
+    description: 'Paquete entregado exitosamente',
+    timestamp: '2024-12-12T15:30:00Z',
+    notes: 'Firmado por: María González',
+  },
+];
 
 // Helper function to determine stock status
 function getStockStatus(item: InventoryItem): 'in_stock' | 'low_stock' | 'out_of_stock' | 'overstock' {
@@ -2368,3 +4485,97 @@ function getStockStatus(item: InventoryItem): 'in_stock' | 'low_stock' | 'out_of
   if (item.currentStock > item.maximumStock) return 'overstock';
   return 'in_stock';
 }
+
+// Mock data for route liquidations
+const mockRouteLiquidations: RouteLiquidation[] = [
+  {
+    id: 'rl-001',
+    messengerId: '1',
+    messenger: mockUsers[0], // Juan Pérez
+    routeDate: '2024-12-12',
+    status: 'finalizada',
+    
+    totalCollected: 125000,
+    totalSpent: 15000,
+    totalToDeliver: 110000,
+    
+    totalOrders: 8,
+    deliveredOrders: 6,
+    returnedOrders: 1,
+    pendingOrders: 1,
+    
+    orders: mockOrders.filter(o => o.assignedMessengerId === '1' && o.createdAt.startsWith('2024-12-12')),
+    cashOrders: mockOrders.filter(o => o.assignedMessengerId === '1' && o.paymentMethod === 'efectivo' && o.createdAt.startsWith('2024-12-12')),
+    sinpeOrders: mockOrders.filter(o => o.assignedMessengerId === '1' && o.paymentMethod === 'sinpe' && o.createdAt.startsWith('2024-12-12')),
+    
+    createdAt: '2024-12-12T08:00:00Z',
+    updatedAt: '2024-12-12T18:30:00Z',
+    finalizedAt: '2024-12-12T18:30:00Z',
+    
+    notes: 'Ruta completada con éxito. Un pedido devuelto por cliente no disponible.',
+    
+    companyId: '1',
+    company: mockCompanies[0],
+  },
+  {
+    id: 'rl-002',
+    messengerId: '2',
+    messenger: mockUsers[1], // Luis González
+    routeDate: '2024-12-12',
+    status: 'pendiente',
+    
+    totalCollected: 89000,
+    totalSpent: 12000,
+    totalToDeliver: 77000,
+    
+    totalOrders: 5,
+    deliveredOrders: 4,
+    returnedOrders: 0,
+    pendingOrders: 1,
+    
+    orders: mockOrders.filter(o => o.assignedMessengerId === '2' && o.createdAt.startsWith('2024-12-12')),
+    cashOrders: mockOrders.filter(o => o.assignedMessengerId === '2' && o.paymentMethod === 'efectivo' && o.createdAt.startsWith('2024-12-12')),
+    sinpeOrders: mockOrders.filter(o => o.assignedMessengerId === '2' && o.paymentMethod === 'sinpe' && o.createdAt.startsWith('2024-12-12')),
+    
+    createdAt: '2024-12-12T08:30:00Z',
+    updatedAt: '2024-12-12T17:45:00Z',
+    
+    notes: 'Ruta en proceso. Un pedido pendiente por reagendar.',
+    
+    companyId: '1',
+    company: mockCompanies[0],
+  },
+  {
+    id: 'rl-003',
+    messengerId: '3',
+    messenger: mockUsers[2], // Ana Martínez
+    routeDate: '2024-12-11',
+    status: 'liquidada',
+    
+    totalCollected: 156000,
+    totalSpent: 18000,
+    totalToDeliver: 138000,
+    
+    totalOrders: 7,
+    deliveredOrders: 7,
+    returnedOrders: 0,
+    pendingOrders: 0,
+    
+    orders: mockOrders.filter(o => o.assignedMessengerId === '3' && o.createdAt.startsWith('2024-12-11')),
+    cashOrders: mockOrders.filter(o => o.assignedMessengerId === '3' && o.paymentMethod === 'efectivo' && o.createdAt.startsWith('2024-12-11')),
+    sinpeOrders: mockOrders.filter(o => o.assignedMessengerId === '3' && o.paymentMethod === 'sinpe' && o.createdAt.startsWith('2024-12-11')),
+    
+    createdAt: '2024-12-11T08:00:00Z',
+    updatedAt: '2024-12-11T19:00:00Z',
+    finalizedAt: '2024-12-11T19:00:00Z',
+    liquidatedAt: '2024-12-11T20:15:00Z',
+    liquidatedBy: '1',
+    liquidatedByUser: mockUsers[0], // Admin
+    
+    notes: 'Ruta completada exitosamente. Todos los pedidos entregados.',
+    adminNotes: 'Liquidación aprobada. Efectivo recibido correctamente.',
+    
+    companyId: '2',
+    company: mockCompanies[1],
+  },
+];

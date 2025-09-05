@@ -3,15 +3,33 @@
 import { useState, useRef } from 'react';
 import { Button } from './button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './card';
-import { Upload, Download, FileText, CheckCircle, XCircle, Eye, Loader2, AlertCircle } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
+import { Badge } from './badge';
+import { Alert, AlertDescription } from './alert';
+import { Upload, Download, FileText, CheckCircle, XCircle, Eye, Loader2, AlertCircle, Link, Search, Package } from 'lucide-react';
 import { mockApi } from '@/lib/mock-api';
 import { useAuth } from '@/contexts/auth-context';
-import { Order } from '@/lib/types';
+import { Order, Product } from '@/lib/types';
 import { mockProducts } from '@/lib/mock-api';
 
 interface CSVUploadResult {
   success: number;
   errors: string[];
+}
+
+interface UnmappedProduct {
+  id: string;
+  name: string;
+  quantity: number;
+  orderIndex: number;
+  itemIndex: number;
+  mappedProductId?: string;
+  mappedProduct?: Product;
+}
+
+interface ProductMapping {
+  [key: string]: string; // unmappedProductId -> mappedProductId
 }
 
 export function CSVUpload() {
@@ -21,6 +39,9 @@ export function CSVUpload() {
   const [result, setResult] = useState<CSVUploadResult | null>(null);
   const [previewOrders, setPreviewOrders] = useState<Order[]>([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [unmappedProducts, setUnmappedProducts] = useState<UnmappedProduct[]>([]);
+  const [productMappings, setProductMappings] = useState<ProductMapping>({});
+  const [showProductMapping, setShowProductMapping] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -75,6 +96,7 @@ export function CSVUpload() {
       
       // Parse CSV and create preview orders
       const preview: Order[] = [];
+      const unmappedProductsList: UnmappedProduct[] = [];
       const companies = await mockApi.getCompanies();
       const company = companies.find(c => c.id === user.companyId) || companies[0];
       const companyPrefix = user.companyId === '1' ? 'PMC' : user.companyId === '2' ? 'BF' : 'AS';
@@ -137,6 +159,16 @@ export function CSVUpload() {
                     orderItems.push(newItem);
                     console.log(`Producto encontrado y agregado:`, foundProduct.name, `cantidad:`, quantity, `item:`, newItem);
                   } else {
+                    // Add to unmapped products list
+                    const unmappedProduct: UnmappedProduct = {
+                      id: `unmapped-${i}-${j}`,
+                      name: productName,
+                      quantity: quantity,
+                      orderIndex: i,
+                      itemIndex: j
+                    };
+                    unmappedProductsList.push(unmappedProduct);
+                    
                     // Create a simple product item without price
                     const simpleProduct = {
                       id: `simple-${i}-${j}`,
@@ -178,6 +210,16 @@ export function CSVUpload() {
                     orderItems.push(newItem);
                     console.log(`Producto fallback encontrado y agregado:`, foundProduct.name, `item:`, newItem);
                   } else {
+                    // Add to unmapped products list
+                    const unmappedProduct: UnmappedProduct = {
+                      id: `unmapped-${i}-${j}`,
+                      name: productName,
+                      quantity: 1,
+                      orderIndex: i,
+                      itemIndex: j
+                    };
+                    unmappedProductsList.push(unmappedProduct);
+                    
                     const simpleProduct = {
                       id: `simple-${i}-${j}`,
                       sku: `SIMPLE-${i}-${j}`,
@@ -241,9 +283,12 @@ export function CSVUpload() {
       
       console.log('Pedidos de vista previa generados:', preview.length);
       console.log('Primer pedido:', preview[0]);
+      console.log('Productos no encontrados:', unmappedProductsList.length);
       
       setPreviewOrders(preview);
+      setUnmappedProducts(unmappedProductsList);
       setShowPreview(true);
+      setShowProductMapping(unmappedProductsList.length > 0);
     } catch (error) {
       console.error('Error en previewCSV:', error);
       alert('Error al leer el archivo');
@@ -270,11 +315,43 @@ export function CSVUpload() {
     }
   };
 
+  const handleProductMapping = (unmappedProductId: string, mappedProductId: string) => {
+    setProductMappings(prev => ({
+      ...prev,
+      [unmappedProductId]: mappedProductId
+    }));
+  };
+
+  const applyProductMappings = () => {
+    const updatedOrders = previewOrders.map(order => ({
+      ...order,
+      items: order.items.map(item => {
+        const mapping = productMappings[item.id];
+        if (mapping) {
+          const mappedProduct = mockProducts.find(p => p.id === mapping);
+          if (mappedProduct) {
+            return {
+              ...item,
+              product: mappedProduct
+            };
+          }
+        }
+        return item;
+      })
+    }));
+    
+    setPreviewOrders(updatedOrders);
+    setShowProductMapping(false);
+  };
+
   const resetForm = () => {
     setFile(null);
     setResult(null);
     setPreviewOrders([]);
     setShowPreview(false);
+    setUnmappedProducts([]);
+    setProductMappings({});
+    setShowProductMapping(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -483,6 +560,135 @@ export function CSVUpload() {
                 <p className="text-sm text-orange-600 mt-1">
                   Total estimado: ₡{previewOrders.reduce((sum, order) => sum + order.totalAmount, 0).toLocaleString()}
                 </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Product Mapping Section */}
+      {showProductMapping && unmappedProducts.length > 0 && (
+        <Card className="border-0 shadow-lg bg-gradient-to-br from-amber-50 to-orange-50">
+          <CardHeader className="pb-6">
+            <CardTitle className="flex items-center gap-3 text-2xl font-bold text-amber-800">
+              <div className="p-3 bg-amber-100 rounded-xl">
+                <Link className="w-8 h-8 text-amber-600" />
+              </div>
+              Productos No Encontrados ({unmappedProducts.length})
+            </CardTitle>
+            <CardDescription className="text-lg text-amber-700">
+              Enlaza los productos del CSV con productos existentes en tu inventario
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <Alert className="border-amber-200 bg-amber-50">
+                <AlertCircle className="w-4 h-4 text-amber-600" />
+                <AlertDescription className="text-amber-800">
+                  Los siguientes productos no se encontraron en tu inventario. Selecciona un producto existente para cada uno o déjalos sin mapear.
+                </AlertDescription>
+              </Alert>
+              
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-amber-100">
+                      <TableHead className="font-semibold text-amber-900">Producto del CSV</TableHead>
+                      <TableHead className="font-semibold text-amber-900">Cantidad</TableHead>
+                      <TableHead className="font-semibold text-amber-900">Pedido #</TableHead>
+                      <TableHead className="font-semibold text-amber-900">Enlazar con Producto</TableHead>
+                      <TableHead className="font-semibold text-amber-900">Estado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {unmappedProducts.map((unmappedProduct) => {
+                      const mappedProduct = productMappings[unmappedProduct.id] 
+                        ? mockProducts.find(p => p.id === productMappings[unmappedProduct.id])
+                        : null;
+                      
+                      return (
+                        <TableRow key={unmappedProduct.id} className="hover:bg-amber-50">
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <Package className="w-4 h-4 text-amber-600" />
+                              {unmappedProduct.name}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="bg-amber-100 text-amber-800">
+                              {unmappedProduct.quantity}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              #{unmappedProduct.orderIndex + 1}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              value={productMappings[unmappedProduct.id] || ''}
+                              onValueChange={(value) => handleProductMapping(unmappedProduct.id, value)}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Seleccionar producto..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {mockProducts
+                                  .filter(p => p.companyId === user?.companyId)
+                                  .map((product) => (
+                                    <SelectItem key={product.id} value={product.id}>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-medium">{product.name}</span>
+                                        <span className="text-sm text-muted-foreground">
+                                          (SKU: {product.sku})
+                                        </span>
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            {mappedProduct ? (
+                              <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Enlazado
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-amber-600 border-amber-300">
+                                Sin enlazar
+                              </Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              
+              <div className="flex justify-between items-center pt-4 border-t border-amber-200">
+                <div className="text-sm text-amber-700">
+                  <span className="font-medium">
+                    {Object.keys(productMappings).length} de {unmappedProducts.length} productos enlazados
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => setShowProductMapping(false)}
+                    variant="outline"
+                    className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                  >
+                    Omitir por ahora
+                  </Button>
+                  <Button
+                    onClick={applyProductMappings}
+                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                  >
+                    <Link className="w-4 h-4 mr-2" />
+                    Aplicar Enlaces
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
