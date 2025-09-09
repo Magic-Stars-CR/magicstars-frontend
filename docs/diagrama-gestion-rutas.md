@@ -248,7 +248,7 @@ graph TD
 
 ```mermaid
 flowchart TD
-    A[Admin selecciona "Cambiar Asignación"] --> B[Mostrar Modal de Cambio]
+    A[Admin selecciona Cambiar Asignación] --> B[Mostrar Modal de Cambio]
     B --> C[Seleccionar Nuevo Mensajero]
     C --> D[Verificar Disponibilidad]
     

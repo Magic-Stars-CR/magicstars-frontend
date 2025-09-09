@@ -257,35 +257,50 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    A[Usuario selecciona "Subir CSV"] --> B[Seleccionar archivo CSV]
-    B --> C[Validar formato del archivo]
+    A[📤 Usuario selecciona "Subir CSV"] --> B[📁 Seleccionar archivo CSV]
+    B --> C[✅ Validar formato del archivo]
     C --> D{¿Formato válido?}
     
-    D -->|No| E[Mostrar error de formato]
+    D -->|No| E[❌ Mostrar error de formato]
     E --> B
     
-    D -->|Sí| F[Procesar archivo CSV]
-    F --> G[Validar datos de pedidos]
+    D -->|Sí| F[⚙️ Procesar archivo CSV]
+    F --> G[🔍 Validar datos de pedidos]
     G --> H{¿Datos válidos?}
     
-    H -->|No| I[Mostrar errores de validación]
-    I --> J[Permitir corrección]
+    H -->|No| I[⚠️ Mostrar errores de validación]
+    I --> J[✏️ Permitir corrección]
     J --> G
     
-    H -->|Sí| K[Verificar productos en inventario]
+    H -->|Sí| K[📋 Verificar productos en inventario]
     K --> L{¿Todos los productos encontrados?}
     
-    L -->|Sí| M[Crear todos los pedidos]
-    L -->|No| N[Mostrar tabla de mapeo]
+    L -->|Sí| M[✅ Crear todos los pedidos]
+    L -->|No| N[🔗 Mostrar tabla de mapeo]
     
-    N --> O[Usuario mapea productos no encontrados]
-    O --> P[Confirmar mapeo]
+    N --> O[🎯 Usuario mapea productos no encontrados]
+    O --> P[✅ Confirmar mapeo]
     P --> M
     
-    M --> Q[Mostrar resumen de pedidos creados]
-    Q --> R[Confirmar creación]
-    R --> S[Crear pedidos en sistema]
-    S --> T[Mostrar confirmación final]
+    M --> Q[📊 Mostrar resumen de pedidos creados]
+    Q --> R[✅ Confirmar creación]
+    R --> S[💾 Crear pedidos en sistema]
+    S --> T[🎉 Mostrar confirmación final]
+    
+    %% Estilos para mejor visibilidad
+    classDef csvStart fill:#3b82f6,stroke:#1e40af,stroke-width:3px,color:#ffffff,font-weight:bold
+    classDef csvProcess fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef csvDecision fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef csvError fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef csvSuccess fill:#059669,stroke:#047857,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef csvMapping fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff,font-weight:bold
+    
+    class A csvStart
+    class B,C,F,G,K csvProcess
+    class D,H,L csvDecision
+    class E,I,J csvError
+    class M,Q,R,S,T csvSuccess
+    class N,O,P csvMapping
 ```
 
 ## 7. Flujo de Gestión de Rutas
@@ -598,7 +613,129 @@ graph TD
     class X,Y profileResult
 ```
 
-## 16. Resumen de Funcionalidades por Rol - Vista Mejorada
+## 16. Flujo de Picking y Packing - Must Be Done
+
+```mermaid
+flowchart TD
+    A[📦 INICIO: Proceso de Picking y Packing] --> B[🏷️ Generar Rótulos para Impresión]
+    A --> C[📝 Determinar Cantidad de Pedidos a Empacar por Producto]
+    
+    B --> B1[ℹ️ Información del Pedido]
+    B --> B2[📱 QR con Mensaje a WhatsApp del Cliente]
+    B --> B3[📍 QR con Ubicación del Cliente]
+    B --> B4[✍️ Espacio para Firma de Recibido]
+    B --> B5[📏 Medida del Rótulo]
+    
+    C --> C1[🔍 Identificar Productos en Pedidos]
+    C1 --> C2[📊 Ejemplo: 1x Creatina, 1x Uro, 1x Truly]
+    C2 --> C3[🔢 Cantidad: 7 Pedidos]
+    
+    C3 --> D[🔄 Agrupar Productos Similares]
+    D --> D1[💡 Lógica: Basado en Nombres Relacionados]
+    D1 --> D2[🔗 Conectar Variaciones de Nombres]
+    D2 --> D3[📝 Ejemplo: Creatina, Creatin, Creatinaa → Creatina]
+    
+    D3 --> E[✅ Consolidación de Productos]
+    E --> E1[📦 Producto: Creatina]
+    E --> E2[🔢 Cantidad: 1 unidad]
+    E --> E3[📊 Total Pedidos: 7]
+    
+    E3 --> F[📋 Salida del Sistema]
+    F --> F1[📄 Pedido Consolidado: Creatina / 1 unidad]
+    F --> F2[🔢 Cantidad de Pedidos: 7]
+    
+    %% Estilos para mejor visibilidad
+    classDef pickingStart fill:#3b82f6,stroke:#1e40af,stroke-width:3px,color:#ffffff,font-weight:bold
+    classDef labelProcess fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef quantityProcess fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef groupingProcess fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef consolidationProcess fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef outputProcess fill:#059669,stroke:#047857,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef detailNode fill:#e0f2f7,stroke:#3b82f6,stroke-width:1px,color:#1e40af,font-weight:normal
+    
+    class A pickingStart
+    class B labelProcess
+    class C quantityProcess
+    class D groupingProcess
+    class E consolidationProcess
+    class F outputProcess
+    class B1,B2,B3,B4,B5,C1,C2,C3,D1,D2,D3,E1,E2,E3,F1,F2 detailNode
+```
+
+## 16.1. Lógica Detallada de Consolidación de Productos
+
+```mermaid
+flowchart TD
+    A[📦 Proceso de Consolidación de Productos] --> B[🔍 Análisis de Nombres de Productos]
+    
+    B --> C[📝 Ejemplo de Entrada]
+    C --> C1[Pedido 1: 1x Creatina]
+    C --> C2[Pedido 2: 1x Creatin]
+    C --> C3[Pedido 3: 1x Creatinaa]
+    C --> C4[Pedido 4: 1x Uro]
+    C --> C5[Pedido 5: 1x Truly]
+    C --> C6[Pedido 6: 1x Creatina]
+    C --> C7[Pedido 7: 1x Creatina]
+    
+    C1 --> D[🔄 Algoritmo de Agrupación]
+    C2 --> D
+    C3 --> D
+    C4 --> D
+    C5 --> D
+    C6 --> D
+    C7 --> D
+    
+    D --> D1[💡 Detectar Variaciones Similares]
+    D1 --> D2[🔍 Creatina, Creatin, Creatinaa -> Grupo A]
+    D1 --> D3[🔍 Uro -> Grupo B]
+    D1 --> D4[🔍 Truly -> Grupo C]
+    
+    D2 --> E[✅ Normalización de Nombres]
+    D3 --> E
+    D4 --> E
+    
+    E --> E1[📦 Grupo A: Creatina - nombre estándar]
+    E --> E2[📦 Grupo B: Uro - nombre estándar]
+    E --> E3[📦 Grupo C: Truly - nombre estándar]
+    
+    E1 --> F[🔢 Conteo de Cantidades]
+    E2 --> F
+    E3 --> F
+    
+    F --> F1[📊 Creatina: 4 unidades - 1+1+1+1]
+    F --> F2[📊 Uro: 1 unidad]
+    F --> F3[📊 Truly: 1 unidad]
+    
+    F1 --> G[📋 Salida Consolidada]
+    F2 --> G
+    F3 --> G
+    
+    G --> G1[📄 Lista de Picking]
+    G1 --> G2[🎯 Creatina: 4 unidades para 7 pedidos]
+    G1 --> G3[🎯 Uro: 1 unidad para 1 pedido]
+    G1 --> G4[🎯 Truly: 1 unidad para 1 pedido]
+    
+    %% Estilos para mejor visibilidad
+    classDef consolidationStart fill:#3b82f6,stroke:#1e40af,stroke-width:3px,color:#ffffff,font-weight:bold
+    classDef inputData fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef algorithmProcess fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef groupingProcess fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef normalizationProcess fill:#10b981,stroke:#059669,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef countingProcess fill:#f97316,stroke:#ea580c,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef outputProcess fill:#059669,stroke:#047857,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef detailNode fill:#e0f2f7,stroke:#3b82f6,stroke-width:1px,color:#1e40af,font-weight:normal
+    
+    class A consolidationStart
+    class C inputData
+    class D algorithmProcess
+    class D1 groupingProcess
+    class E normalizationProcess
+    class F countingProcess
+    class G outputProcess
+    class C1,C2,C3,C4,C5,C6,C7,D2,D3,D4,E1,E2,E3,F1,F2,F3,G1,G2,G3,G4 detailNode
+```
+
+## 17. Resumen de Funcionalidades por Rol - Vista Mejorada
 
 ```mermaid
 graph LR

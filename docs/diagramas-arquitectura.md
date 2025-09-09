@@ -29,10 +29,10 @@ graph TB
     end
     
     subgraph "Tipos de Datos"
-        R[UserRole] --> S[admin | asesor | mensajero]
-        T[OrderStatus] --> U[pendiente | confirmado | en_ruta | entregado | devolucion | reagendado]
-        V[PaymentMethod] --> W[efectivo | sinpe]
-        X[DeliveryMethod] --> Y[mensajeria_propia | red_logistic | correos_costa_rica]
+        R[UserRole] --> S[admin, asesor, mensajero]
+        T[OrderStatus] --> U[pendiente, confirmado, en_ruta, entregado, devolucion, reagendado]
+        V[PaymentMethod] --> W[efectivo, sinpe]
+        X[DeliveryMethod] --> Y[mensajeria_propia, red_logistic, correos_costa_rica]
     end
     
     H --> K

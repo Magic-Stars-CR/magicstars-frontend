@@ -109,7 +109,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    A[Usuario selecciona "Ajustar Stock"] --> B[Mostrar Modal de Ajuste]
+    A[Usuario selecciona Ajustar Stock] --> B[Mostrar Modal de Ajuste]
     B --> C[Seleccionar Tipo de Ajuste]
     
     C --> D[Ajuste por Entrada]
@@ -178,7 +178,7 @@ graph TD
 
 ```mermaid
 flowchart TD
-    A[Usuario selecciona "Ver Historial"] --> B[Mostrar Filtros de Historial]
+    A[Usuario selecciona Ver Historial] --> B[Mostrar Filtros de Historial]
     B --> C[Seleccionar Producto]
     B --> D[Seleccionar Fecha Inicio]
     B --> E[Seleccionar Fecha Fin]
@@ -338,7 +338,7 @@ graph TD
 
 ```mermaid
 flowchart TD
-    A[Usuario selecciona "Eliminar Producto"] --> B[Verificar Permisos]
+    A[Usuario selecciona Eliminar Producto] --> B[Verificar Permisos]
     B --> C{¿Tiene permisos?}
     
     C -->|No| D[Mostrar Error de Permisos]
