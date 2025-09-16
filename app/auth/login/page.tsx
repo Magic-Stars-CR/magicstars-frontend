@@ -36,13 +36,23 @@ export default function LoginPage() {
   };
 
   const demoUsers = [
-    { email: 'admin@magicstars.com', role: 'Administrador' },
-    { email: 'maria.asesor@paramachoscr.com', role: 'Asesor - Para Machos CR' },
-    { email: 'pedro.asesor@beautyfan.cr', role: 'Asesor - BeautyFan' },
-    { email: 'carlos.asesor@allstars.cr', role: 'Asesor - AllStars' },
-    { email: 'juan.mensajero@magicstars.com', role: 'Mensajero' },
-    { email: 'luis.mensajero@magicstars.com', role: 'Mensajero' },
-    { email: 'ana.mensajero@magicstars.com', role: 'Mensajero' },
+    { email: 'admin@magicstars.com', role: 'Administrador', password: 'Admin1234' },
+    { email: 'alex@magicstars.com', role: 'Mensajero - Alex', password: 'Alex1234' },
+    { email: 'andrey@magicstars.com', role: 'Mensajero - Andrey', password: 'Andrey5678' },
+    { email: 'anibal@magicstars.com', role: 'Mensajero - Anibal', password: 'Anibal9012' },
+    { email: 'anthony@magicstars.com', role: 'Mensajero - Anthony', password: 'Anthony3456' },
+    { email: 'gabriel@magicstars.com', role: 'Mensajero - Gabriel', password: 'Gabriel7890' },
+    { email: 'gerson@magicstars.com', role: 'Mensajero - Gerson', password: 'Gerson2468' },
+    { email: 'irving@magicstars.com', role: 'Mensajero - Irving', password: 'Irving1357' },
+    { email: 'javier@magicstars.com', role: 'Mensajero - Javier', password: 'Javier4680' },
+    { email: 'jose@magicstars.com', role: 'Mensajero - Jose', password: 'Jose8024' },
+    { email: 'josue@magicstars.com', role: 'Mensajero - Josue', password: 'Josue1593' },
+    { email: 'loria@magicstars.com', role: 'Mensajero - Loria', password: 'Loria7531' },
+    { email: 'luisq@magicstars.com', role: 'Mensajero - LuisQ', password: 'LuisQ9642' },
+    { email: 'manuel@magicstars.com', role: 'Mensajero - Manuel', password: 'Manuel8520' },
+    { email: 'michael@magicstars.com', role: 'Mensajero - Michael', password: 'Michael7410' },
+    { email: 'pablo@magicstars.com', role: 'Mensajero - Pablo', password: 'Pablo9630' },
+    { email: 'pablonocturna@magicstars.com', role: 'Mensajero - PabloNocturna', password: 'PabloNocturna2580' },
   ];
 
   return (
@@ -76,7 +86,7 @@ export default function LoginPage() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="tu@email.com"
+                  placeholder="alex@magicstars.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -90,7 +100,7 @@ export default function LoginPage() {
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Tu contraseña"
+                    placeholder="Alex1234"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -142,7 +152,7 @@ export default function LoginPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Usuarios de Demostración</CardTitle>
             <CardDescription className="text-xs">
-              Haz clic para usar las credenciales de demo (contraseña: password123)
+              Haz clic para usar las credenciales de mensajeros
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -153,7 +163,7 @@ export default function LoginPage() {
                 className="w-full justify-start text-xs h-auto py-2"
                 onClick={() => {
                   setEmail(user.email);
-                  setPassword('password123');
+                  setPassword(user.password);
                 }}
                 disabled={loading}
               >

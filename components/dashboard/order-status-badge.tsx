@@ -35,7 +35,10 @@ const statusConfig = {
 };
 
 export function OrderStatusBadge({ status, className }: OrderStatusBadgeProps) {
-  const config = statusConfig[status];
+  const config = statusConfig[status] || {
+    label: 'Desconocido',
+    className: 'bg-gray-100 text-gray-800 border-gray-200',
+  };
   
   return (
     <Badge

@@ -12,8 +12,11 @@ export default function Home() {
   useEffect(() => {
     if (!loading) {
       if (user) {
+        console.log('Usuario logueado:', user);
+        console.log('Redirigiendo a:', `/dashboard/${user.role}`);
         router.push(`/dashboard/${user.role}`);
       } else {
+        console.log('No hay usuario, redirigiendo a login');
         router.push('/auth/login');
       }
     }

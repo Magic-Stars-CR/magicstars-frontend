@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -22,7 +23,7 @@ import {
   Smartphone,
   Navigation,
   Phone,
-  MapPin,
+  MapPin as LocationIcon,
   User,
   Edit3,
   MessageSquare,
@@ -43,7 +44,12 @@ import {
   Image as ImageIcon,
   X,
   Save,
-  CheckCircle2
+  CheckCircle2,
+  Banknote,
+  Search,
+  Filter,
+  MessageCircle,
+  Map
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -54,7 +60,22 @@ interface Expense {
   amount: number;
   description: string;
   receipt?: string;
+  customType?: string;
   createdAt: string;
+}
+
+interface StatusChange {
+  id: string;
+  orderId: string;
+  fromStatus: string;
+  toStatus: string;
+  changedBy: string;
+  changedByName: string;
+  timestamp: string;
+  comment?: string;
+  paymentMethod?: string;
+  receipt?: string;
+  evidence?: string;
 }
 
 interface RouteData {
@@ -76,18 +97,41 @@ export default function MiRutaHoy() {
     completedOrders: 0,
     totalRevenue: 0
   });
+  const [accountingMetrics, setAccountingMetrics] = useState({
+    totalCash: 0,
+    totalSinpe: 0,
+    totalReturns: 0
+  });
+  const [activeFilter, setActiveFilter] = useState<'todos' | 'en_ruta' | 'completados' | 'reagendados' | 'devoluciones'>('todos');
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [newExpense, setNewExpense] = useState({
-    type: 'fuel' as const,
+    type: 'fuel' as 'fuel' | 'food' | 'maintenance' | 'other',
     amount: '',
     description: '',
-    receipt: null as File | null
+    receipt: null as File | null,
+    customType: ''
   });
   const [uploadedReceiptImage, setUploadedReceiptImage] = useState<string | null>(null);
   const [isAddingExpense, setIsAddingExpense] = useState(false);
+  const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
+  const [isUpdateStatusModalOpen, setIsUpdateStatusModalOpen] = useState(false);
+  const [selectedOrderForUpdate, setSelectedOrderForUpdate] = useState<Order | null>(null);
+  const [newStatus, setNewStatus] = useState<string>('en_ruta');
+  const [statusComment, setStatusComment] = useState('');
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
+  const [selectedOrderForNotes, setSelectedOrderForNotes] = useState<Order | null>(null);
+  const [newNote, setNewNote] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('');
+  const [uploadedReceipt, setUploadedReceipt] = useState<string | null>(null);
+  const [uploadedEvidence, setUploadedEvidence] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isTimelineModalOpen, setIsTimelineModalOpen] = useState(false);
+  const [selectedOrderForTimeline, setSelectedOrderForTimeline] = useState<Order | null>(null);
+  const [statusChanges, setStatusChanges] = useState<StatusChange[]>([]);
 
   useEffect(() => {
     if (user) {
@@ -128,6 +172,17 @@ export default function MiRutaHoy() {
       const totalRevenue = orders.reduce((sum, order) => sum + order.totalAmount, 0);
       const completedOrders = orders.filter(order => order.status === 'entregado').length;
 
+      // Calcular métricas de contabilidad
+      const totalCash = orders
+        .filter(order => order.paymentMethod === 'efectivo' && order.status === 'entregado')
+        .reduce((sum, order) => sum + order.totalAmount, 0);
+      
+      const totalSinpe = orders
+        .filter(order => order.paymentMethod === 'sinpe' && order.status === 'entregado')
+        .reduce((sum, order) => sum + order.totalAmount, 0);
+      
+      const totalReturns = orders.filter(order => order.status === 'devolucion').length;
+
       setRouteData({
         orders,
         expenses: mockExpenses,
@@ -135,6 +190,12 @@ export default function MiRutaHoy() {
         totalOrders: orders.length,
         completedOrders,
         totalRevenue
+      });
+
+      setAccountingMetrics({
+        totalCash,
+        totalSinpe,
+        totalReturns
       });
     } catch (error) {
       console.error('Error loading route data:', error);
@@ -157,6 +218,7 @@ export default function MiRutaHoy() {
 
   const handleAddExpense = async () => {
     if (!newExpense.amount || !newExpense.description || !newExpense.receipt) return;
+    if (newExpense.type === 'other' && !newExpense.customType.trim()) return;
 
     setIsAddingExpense(true);
     try {
@@ -166,6 +228,7 @@ export default function MiRutaHoy() {
         amount: parseFloat(newExpense.amount),
         description: newExpense.description,
         receipt: uploadedReceiptImage || '',
+        customType: newExpense.type === 'other' ? newExpense.customType : undefined,
         createdAt: new Date().toISOString()
       };
 
@@ -179,7 +242,8 @@ export default function MiRutaHoy() {
         type: 'fuel',
         amount: '',
         description: '',
-        receipt: null
+        receipt: null,
+        customType: ''
       });
       setUploadedReceiptImage(null);
       setIsExpenseModalOpen(false);
@@ -192,11 +256,183 @@ export default function MiRutaHoy() {
 
   const updateOrderStatus = async (orderId: string, status: 'en_ruta' | 'entregado' | 'devolucion' | 'reagendado') => {
     try {
+      setUpdatingOrder(orderId);
       await mockApi.updateOrderStatus(orderId, status);
       await loadRouteData();
     } catch (error) {
       console.error('Error updating order:', error);
+    } finally {
+      setUpdatingOrder(null);
     }
+  };
+
+  const handleUpdateStatus = async () => {
+    if (!selectedOrderForUpdate || !newStatus) return;
+    
+    try {
+      setUpdatingOrder(selectedOrderForUpdate.id);
+      
+      // Registrar el cambio en el timeline
+      addStatusChange(
+        selectedOrderForUpdate.id,
+        selectedOrderForUpdate.status,
+        newStatus,
+        statusComment,
+        paymentMethod,
+        uploadedReceipt || undefined,
+        uploadedEvidence || undefined
+      );
+      
+      // Actualizar el estado manteniendo el routeOrder
+      const updatedOrder = {
+        ...selectedOrderForUpdate,
+        status: newStatus as any,
+        notes: statusComment ? `${selectedOrderForUpdate.notes || ''}\n[${new Date().toLocaleString()}] ${statusComment}`.trim() : selectedOrderForUpdate.notes
+      };
+      
+      await mockApi.updateOrderStatus(selectedOrderForUpdate.id, newStatus as any, statusComment);
+      await loadRouteData();
+      setIsUpdateStatusModalOpen(false);
+      setSelectedOrderForUpdate(null);
+      resetModalState();
+    } catch (error) {
+      console.error('Error updating order status:', error);
+    } finally {
+      setUpdatingOrder(null);
+    }
+  };
+
+  const handleOpenNotes = (order: Order) => {
+    setSelectedOrderForNotes(order);
+    setIsNotesModalOpen(true);
+  };
+
+  const handleCloseNotes = () => {
+    setIsNotesModalOpen(false);
+    setSelectedOrderForNotes(null);
+    setNewNote('');
+  };
+
+  const handleAddNote = async () => {
+    if (!selectedOrderForNotes || !newNote.trim()) return;
+    
+    try {
+      const timestamp = new Date().toLocaleString('es-CR');
+      const noteWithTimestamp = `[${timestamp}] ${newNote.trim()}`;
+      
+      // Aquí podrías hacer una llamada a la API para actualizar las notas
+      // Por ahora solo actualizamos el estado local
+      console.log('Agregando nota:', noteWithTimestamp);
+      
+      setNewNote('');
+      handleCloseNotes();
+    } catch (error) {
+      console.error('Error adding note:', error);
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, type: 'receipt' | 'evidence') => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      if (type === 'receipt') {
+        setUploadedReceipt(result);
+      } else {
+        setUploadedEvidence(result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const resetModalState = () => {
+    setNewStatus('en_ruta');
+    setStatusComment('');
+    setPaymentMethod('');
+    setUploadedReceipt(null);
+    setUploadedEvidence(null);
+    setIsUploading(false);
+  };
+
+  const handleOpenTimeline = (order: Order) => {
+    setSelectedOrderForTimeline(order);
+    setIsTimelineModalOpen(true);
+  };
+
+  const handleCloseTimeline = () => {
+    setIsTimelineModalOpen(false);
+    setSelectedOrderForTimeline(null);
+  };
+
+  const addStatusChange = (orderId: string, fromStatus: string, toStatus: string, comment?: string, paymentMethod?: string, receipt?: string, evidence?: string) => {
+    const newChange: StatusChange = {
+      id: `change-${Date.now()}`,
+      orderId,
+      fromStatus,
+      toStatus,
+      changedBy: user?.id || 'unknown',
+      changedByName: user?.name || 'Usuario',
+      timestamp: new Date().toISOString(),
+      comment,
+      paymentMethod,
+      receipt,
+      evidence
+    };
+    
+    setStatusChanges(prev => [newChange, ...prev]);
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'en_ruta': return '🚚';
+      case 'entregado': return '✅';
+      case 'devolucion': return '❌';
+      case 'reagendado': return '📅';
+      default: return '📝';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'en_ruta': return 'text-blue-600 bg-blue-50';
+      case 'entregado': return 'text-green-600 bg-green-50';
+      case 'devolucion': return 'text-red-600 bg-red-50';
+      case 'reagendado': return 'text-orange-600 bg-orange-50';
+      default: return 'text-gray-600 bg-gray-50';
+    }
+  };
+
+  const getStatusBorderColor = (status: string) => {
+    switch (status) {
+      case 'en_ruta': return 'border-l-blue-500';
+      case 'entregado': return 'border-l-green-500';
+      case 'devolucion': return 'border-l-red-500';
+      case 'reagendado': return 'border-l-orange-500';
+      default: return 'border-l-gray-500';
+    }
+  };
+
+  const getStatusIndicatorColor = (status: string) => {
+    switch (status) {
+      case 'en_ruta': return 'bg-blue-500';
+      case 'entregado': return 'bg-green-500';
+      case 'devolucion': return 'bg-red-500';
+      case 'reagendado': return 'bg-orange-500';
+      default: return 'bg-gray-500';
+    }
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleString('es-CR', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const formatCurrency = (amount: number) => {
@@ -215,6 +451,58 @@ export default function MiRutaHoy() {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const getTodayInfo = () => {
+    const today = new Date();
+    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    
+    return {
+      dayName: dayNames[today.getDay()],
+      day: today.getDate(),
+      month: monthNames[today.getMonth()],
+      year: today.getFullYear(),
+      fullDate: today.toLocaleDateString('es-CR')
+    };
+  };
+
+
+  // Filtrar y buscar pedidos
+  const filteredOrders = routeData.orders
+    .filter(order => {
+      // Filtro por estado
+      const statusMatch = activeFilter === 'todos' || 
+        (activeFilter === 'en_ruta' && order.status === 'en_ruta') ||
+        (activeFilter === 'completados' && order.status === 'entregado') ||
+        (activeFilter === 'reagendados' && order.status === 'reagendado') ||
+        (activeFilter === 'devoluciones' && order.status === 'devolucion');
+      
+      // Búsqueda por texto
+      const searchMatch = searchTerm === '' || 
+        order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (order.deliveryAddress && order.deliveryAddress.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      return statusMatch && searchMatch;
+    })
+    .sort((a, b) => {
+      // Ordenar por número de ruta (routeOrder) - menor número primero
+      const routeOrderA = a.routeOrder || 999;
+      const routeOrderB = b.routeOrder || 999;
+      
+      return routeOrderA - routeOrderB;
+    });
+
+  const getFilterCount = (filter: string) => {
+    switch (filter) {
+      case 'en_ruta': return routeData.orders.filter(o => o.status === 'en_ruta').length;
+      case 'completados': return routeData.orders.filter(o => o.status === 'entregado').length;
+      case 'reagendados': return routeData.orders.filter(o => o.status === 'reagendado').length;
+      case 'devoluciones': return routeData.orders.filter(o => o.status === 'devolucion').length;
+      default: return routeData.orders.length;
+    }
   };
 
   const getExpenseIcon = (type: string) => {
@@ -247,18 +535,37 @@ export default function MiRutaHoy() {
     <div className="space-y-4 p-4 max-w-md mx-auto">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-700 text-white p-4 rounded-xl shadow-lg">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Route className="w-6 h-6" />
-            <h1 className="text-xl font-bold">Mi Ruta de Hoy</h1>
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-2 rounded-full shadow-inner">
+              <Route className="w-6 h-6" />
+            </div>
+            <div className="flex-1">
+              <h1 className="text-xl font-bold">Mi Ruta de Hoy</h1>
+              <div className="flex items-center gap-2 text-sm opacity-90">
+                <Calendar className="w-4 h-4" />
+                <span className="font-medium">{getTodayInfo().dayName} {getTodayInfo().day} de {getTodayInfo().month}</span>
+              </div>
+            </div>
+            <Badge variant="secondary" className="bg-white/20 text-white">
+              {getTodayInfo().fullDate}
+            </Badge>
           </div>
-          <Badge variant="secondary" className="bg-white/20 text-white">
-            {new Date().toLocaleDateString('es-CR')}
-          </Badge>
+          <div className="bg-white/10 p-3 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Truck className="w-4 h-4" />
+                <span className="text-sm font-medium">Estado actual</span>
+              </div>
+              <Badge className="bg-green-500 hover:bg-green-600">
+                En Ruta
+              </Badge>
+            </div>
+            <p className="text-xs opacity-75 mt-1">
+              {routeData.totalOrders} pedidos en ruta • {routeData.completedOrders} completados
+            </p>
+          </div>
         </div>
-        <p className="text-sm opacity-90">
-          {routeData.totalOrders} pedidos asignados • {routeData.completedOrders} completados
-        </p>
       </div>
 
       {/* Stats Cards */}
@@ -288,14 +595,96 @@ export default function MiRutaHoy() {
         </Card>
       </div>
 
+      {/* Métricas de Contabilidad */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-purple-600" />
+            Contabilidad del Día
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-3">
+            {/* Total Recaudado en Efectivo */}
+            <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 rounded-full">
+                  <Banknote className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-green-800">Total Efectivo</p>
+                  <p className="text-xs text-green-600">Pedidos entregados en efectivo</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-bold text-green-700">
+                  {formatCurrency(accountingMetrics.totalCash)}
+                </p>
+              </div>
+            </div>
+
+            {/* Total Recaudado en SINPE */}
+            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-full">
+                  <Smartphone className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-blue-800">Total SINPE</p>
+                  <p className="text-xs text-blue-600">Pedidos entregados con SINPE</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-bold text-blue-700">
+                  {formatCurrency(accountingMetrics.totalSinpe)}
+                </p>
+              </div>
+            </div>
+
+            {/* Total Pedidos para Devolver */}
+            <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-full">
+                  <RotateCcw className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-red-800">Para Devolver</p>
+                  <p className="text-xs text-red-600">Pedidos marcados como devolución</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-bold text-red-700">
+                  {accountingMetrics.totalReturns}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Resumen Total */}
+          <div className="border-t pt-3">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-gray-700">Total Recaudado:</span>
+              <span className="font-bold text-xl text-green-700">
+                {formatCurrency(accountingMetrics.totalCash + accountingMetrics.totalSinpe)}
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Gastos del Día */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Receipt className="w-5 h-5 text-orange-600" />
-              Gastos del Día
-            </CardTitle>
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-orange-600" />
+                Gastos del Día
+              </CardTitle>
+              <div className="text-sm text-orange-600 mt-1">
+                <span className="font-medium">{user?.name}</span> • {getTodayInfo().dayName} {getTodayInfo().day} de {getTodayInfo().month}
+              </div>
+            </div>
             <Dialog open={isExpenseModalOpen} onOpenChange={setIsExpenseModalOpen}>
               <DialogTrigger asChild>
                 <Button size="sm" className="bg-orange-600 hover:bg-orange-700">
@@ -313,7 +702,7 @@ export default function MiRutaHoy() {
                     <select
                       id="type"
                       value={newExpense.type}
-                      onChange={(e) => setNewExpense(prev => ({ ...prev, type: e.target.value as any }))}
+                      onChange={(e) => setNewExpense(prev => ({ ...prev, type: e.target.value as 'fuel' | 'food' | 'maintenance' | 'other', customType: '' }))}
                       className="w-full p-2 border rounded-md"
                     >
                       <option value="fuel">Combustible</option>
@@ -322,6 +711,19 @@ export default function MiRutaHoy() {
                       <option value="other">Otro</option>
                     </select>
                   </div>
+                  
+                  {newExpense.type === 'other' && (
+                    <div>
+                      <Label htmlFor="customType">Especificar Tipo de Gasto *</Label>
+                      <Input
+                        id="customType"
+                        placeholder="Ej: Peaje, Estacionamiento, Herramientas..."
+                        value={newExpense.customType}
+                        onChange={(e) => setNewExpense(prev => ({ ...prev, customType: e.target.value }))}
+                        className="w-full"
+                      />
+                    </div>
+                  )}
                   <div>
                     <Label htmlFor="amount">Monto</Label>
                     <Input
@@ -395,12 +797,13 @@ export default function MiRutaHoy() {
                       onClick={() => {
                         setIsExpenseModalOpen(false);
                         setUploadedReceiptImage(null);
-                        setNewExpense({
-                          type: 'fuel',
-                          amount: '',
-                          description: '',
-                          receipt: null
-                        });
+      setNewExpense({
+        type: 'fuel',
+        amount: '',
+        description: '',
+        receipt: null,
+        customType: ''
+      });
                       }}
                       className="flex-1"
                     >
@@ -408,7 +811,13 @@ export default function MiRutaHoy() {
                     </Button>
                     <Button
                       onClick={handleAddExpense}
-                      disabled={!newExpense.amount || !newExpense.description || !newExpense.receipt || isAddingExpense}
+                      disabled={
+                        !newExpense.amount || 
+                        !newExpense.description || 
+                        !newExpense.receipt || 
+                        isAddingExpense ||
+                        (newExpense.type === 'other' && !newExpense.customType.trim())
+                      }
                       className="flex-1 bg-orange-600 hover:bg-orange-700"
                     >
                       {isAddingExpense ? (
@@ -440,7 +849,12 @@ export default function MiRutaHoy() {
                       </div>
                       <div>
                         <p className="font-medium text-sm">{expense.description}</p>
-                        <p className="text-xs text-gray-500">{formatDate(expense.createdAt)}</p>
+                        <p className="text-xs text-gray-500">
+                          {expense.type === 'other' && expense.customType ? expense.customType : 
+                           expense.type === 'fuel' ? 'Combustible' :
+                           expense.type === 'food' ? 'Alimentación' :
+                           expense.type === 'maintenance' ? 'Mantenimiento' : 'Otro'} • {formatDate(expense.createdAt)}
+                        </p>
                       </div>
                     </div>
                     <p className="font-bold text-orange-600">{formatCurrency(expense.amount)}</p>
@@ -469,6 +883,140 @@ export default function MiRutaHoy() {
         </CardContent>
       </Card>
 
+      {/* Filtros y Búsqueda */}
+      <Card className="border-2 border-blue-100">
+        <CardHeader className="pb-3 bg-gradient-to-r from-blue-50 to-purple-50">
+          <CardTitle className="text-lg flex items-center gap-2 text-blue-800">
+            <Filter className="w-5 h-5" />
+            Filtros y Búsqueda
+          </CardTitle>
+          <div className="text-sm text-blue-600 mt-1">
+            <span className="font-medium">{user?.name}</span> • {getTodayInfo().dayName} {getTodayInfo().day} de {getTodayInfo().month}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 p-4">
+          {/* Barra de búsqueda mejorada */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500 w-4 h-4" />
+            <Input
+              placeholder="Buscar por ID, cliente o dirección..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 border-blue-200 focus:border-blue-400 focus:ring-blue-400"
+            />
+          </div>
+          
+          {/* Filtros con mejor diseño */}
+          <div className="space-y-3">
+            {/* Todos - Ocupa las dos columnas */}
+            <Button
+              variant={activeFilter === 'todos' ? 'default' : 'outline'}
+              onClick={() => setActiveFilter('todos')}
+              className={`justify-start gap-2 h-12 w-full ${
+                activeFilter === 'todos' 
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' 
+                  : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
+              }`}
+            >
+              <Package className="w-4 h-4" />
+              <div className="flex flex-col items-start">
+                <span className="font-medium">Todos</span>
+                <span className="text-xs opacity-75">({getFilterCount('todos')})</span>
+              </div>
+            </Button>
+            
+            {/* En Ruta y Completados - Primera fila de dos columnas */}
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant={activeFilter === 'en_ruta' ? 'default' : 'outline'}
+                onClick={() => setActiveFilter('en_ruta')}
+                className={`justify-start gap-2 h-12 ${
+                  activeFilter === 'en_ruta' 
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' 
+                    : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
+                }`}
+              >
+                <Clock className="w-4 h-4" />
+                <div className="flex flex-col items-start">
+                  <span className="font-medium">En Ruta</span>
+                  <span className="text-xs opacity-75">({getFilterCount('en_ruta')})</span>
+                </div>
+              </Button>
+              <Button
+                variant={activeFilter === 'completados' ? 'default' : 'outline'}
+                onClick={() => setActiveFilter('completados')}
+                className={`justify-start gap-2 h-12 ${
+                  activeFilter === 'completados' 
+                    ? 'bg-green-600 hover:bg-green-700 text-white shadow-md' 
+                    : 'border-green-200 hover:border-green-300 hover:bg-green-50'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <div className="flex flex-col items-start">
+                  <span className="font-medium">Completados</span>
+                  <span className="text-xs opacity-75">({getFilterCount('completados')})</span>
+                </div>
+              </Button>
+            </div>
+            
+            {/* Reagendados y Devoluciones - Segunda fila de dos columnas */}
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant={activeFilter === 'reagendados' ? 'default' : 'outline'}
+                onClick={() => setActiveFilter('reagendados')}
+                className={`justify-start gap-2 h-12 ${
+                  activeFilter === 'reagendados' 
+                    ? 'bg-orange-600 hover:bg-orange-700 text-white shadow-md' 
+                    : 'border-orange-200 hover:border-orange-300 hover:bg-orange-50'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <div className="flex flex-col items-start">
+                  <span className="font-medium">Reagendados</span>
+                  <span className="text-xs opacity-75">({getFilterCount('reagendados')})</span>
+                </div>
+              </Button>
+              <Button
+                variant={activeFilter === 'devoluciones' ? 'default' : 'outline'}
+                onClick={() => setActiveFilter('devoluciones')}
+                className={`justify-start gap-2 h-12 ${
+                  activeFilter === 'devoluciones' 
+                    ? 'bg-red-600 hover:bg-red-700 text-white shadow-md' 
+                    : 'border-red-200 hover:border-red-300 hover:bg-red-50'
+                }`}
+              >
+                <AlertTriangle className="w-4 h-4" />
+                <div className="flex flex-col items-start">
+                  <span className="font-medium">Devoluciones</span>
+                  <span className="text-xs opacity-75">({getFilterCount('devoluciones')})</span>
+                </div>
+              </Button>
+            </div>
+          </div>
+          
+          {/* Resumen de resultados */}
+          <div className="bg-gray-50 p-3 rounded-lg border">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">
+                Mostrando <span className="font-semibold text-gray-800">{filteredOrders.length}</span> de <span className="font-semibold text-gray-800">{routeData.orders.length}</span> pedidos
+              </span>
+              {searchTerm && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSearchTerm('')}
+                  className="text-blue-600 hover:text-blue-700 h-6 px-2"
+                >
+                  <X className="w-3 h-3 mr-1" />
+                  Limpiar
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+
       {/* Pedidos del Día */}
       <Card>
         <CardHeader>
@@ -476,115 +1024,174 @@ export default function MiRutaHoy() {
             <Package className="w-5 h-5 text-blue-600" />
             Pedidos del Día
           </CardTitle>
+          <div className="text-sm text-gray-600 mt-1">
+            <span className="font-medium">{user?.name}</span> • {getTodayInfo().dayName} {getTodayInfo().day} de {getTodayInfo().month}
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {routeData.orders.length === 0 ? (
+          {filteredOrders.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No hay pedidos asignados para hoy</p>
+              <p>
+                {searchTerm ? 'No se encontraron pedidos con ese criterio' : 'No hay pedidos en ruta para hoy'}
+              </p>
+              {searchTerm && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSearchTerm('')}
+                  className="mt-2"
+                >
+                  Limpiar búsqueda
+                </Button>
+              )}
             </div>
           ) : (
-            routeData.orders.map((order) => (
-              <div key={order.id} className="border rounded-lg p-4 bg-white shadow-sm">
+            filteredOrders.map((order, index) => (
+              <div key={order.id} className={`border rounded-lg p-4 bg-white shadow-sm border-l-4 ${getStatusBorderColor(order.status)}`}>
                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${
-                      order.status === 'entregado' ? 'bg-green-500' :
-                      order.status === 'en_ruta' ? 'bg-blue-500' :
-                      'bg-orange-500'
-                    }`} />
-                    <h3 className="font-semibold">{order.id}</h3>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-4 h-4 rounded-full ${getStatusIndicatorColor(order.status)}`} />
+                      <span className="text-2xl font-bold text-gray-700">#{order.routeOrder || index + 1}</span>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-lg">{order.id}</h3>
+                      {order.company?.name && (
+                        <Badge variant="secondary" className="text-xs mt-1 bg-blue-100 text-blue-700 hover:bg-blue-200">
+                          {order.company.name}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
-                  <Badge variant={
-                    order.status === 'entregado' ? 'default' :
-                    order.status === 'en_ruta' ? 'secondary' :
-                    'outline'
-                  }>
-                    {order.status}
-                  </Badge>
                 </div>
 
                 <div className="space-y-2 mb-3">
                   <div className="flex items-center gap-2 text-sm">
                     <User className="w-4 h-4 text-gray-500" />
-                    <span>{order.customerName}</span>
+                    <span className="font-medium">{order.customerName}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
-                    <MapPin className="w-4 h-4 text-gray-500" />
+                    <LocationIcon className="w-4 h-4 text-gray-500" />
                     <span className="truncate">{order.deliveryAddress}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <Building2 className="w-3 h-3" />
+                    <span>{order.customerProvince} • {order.customerCanton} • {order.customerDistrict}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <DollarSign className="w-4 h-4 text-gray-500" />
                     <span className="font-semibold">{formatCurrency(order.totalAmount)}</span>
                   </div>
+                  {order.notes && (
+                    <div className="flex items-start gap-2 text-xs text-gray-600 bg-yellow-50 p-2 rounded border-l-2 border-yellow-200">
+                      <FileText className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                      <span className="line-clamp-2">{order.notes}</span>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex gap-2">
+                <div className="grid grid-cols-5 gap-2">
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => order.customerPhone && window.open(`tel:${order.customerPhone}`)}
-                    className="flex-1"
+                    className="h-12 text-xs bg-green-50 border-green-200 hover:bg-green-100 hover:border-green-300 text-green-700 font-medium transition-all duration-200"
                     disabled={!order.customerPhone}
                   >
-                    <Phone className="w-4 h-4 mr-1" />
-                    Llamar
+                    <Phone className="w-4 h-4" />
+                    <span className="hidden sm:inline ml-2">Llamar</span>
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      if (order.deliveryAddress) {
-                        const encodedAddress = encodeURIComponent(order.deliveryAddress);
-                        window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`);
+                      if (order.customerPhone) {
+                        // Crear mensaje personalizado
+                        const messengerName = user?.name || 'Mensajero';
+                        const companyName = order.company?.name || 'Empresa';
+                        const products = order.items.map(item => `${item.quantity}x ${item.product?.name || 'Producto'}`).join(', ');
+                        const orderNumber = order.routeOrder ? `#${order.routeOrder}` : order.id;
+                        
+                        const message = `¡Hola! Soy ${messengerName} de ${companyName}. 
+
+Tengo su pedido ${orderNumber} listo para entregar:
+${products}
+
+Total: ${formatCurrency(order.totalAmount)}
+
+¿En qué momento le conviene recibir su pedido?`;
+
+                        const encodedMessage = encodeURIComponent(message);
+                        const whatsappUrl = `https://wa.me/506${order.customerPhone.replace(/\D/g, '')}?text=${encodedMessage}`;
+                        window.open(whatsappUrl);
                       }
                     }}
-                    className="flex-1"
-                    disabled={!order.deliveryAddress}
+                    className="h-12 text-xs bg-emerald-50 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 text-emerald-700 font-medium transition-all duration-200"
+                    disabled={!order.customerPhone}
                   >
-                    <Navigation className="w-4 h-4 mr-1" />
-                    Ruta
+                    <MessageCircle className="w-4 h-4" />
+                    <span className="hidden sm:inline ml-2">WhatsApp</span>
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      setSelectedOrder(order);
-                      setIsReceiptModalOpen(true);
+                      if (order.customerLocationLink) {
+                        window.open(order.customerLocationLink, '_blank');
+                      }
                     }}
-                    className="flex-1"
+                    className="h-12 text-xs bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-300 text-blue-700 font-medium transition-all duration-200"
+                    disabled={!order.customerLocationLink}
                   >
-                    <Upload className="w-4 h-4 mr-1" />
-                    Comprobante
+                    <LocationIcon className="w-4 h-4" />
+                    <span className="hidden sm:inline ml-2">Ubicación</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleOpenNotes(order)}
+                    className="h-12 text-xs bg-yellow-50 border-yellow-200 hover:bg-yellow-100 hover:border-yellow-300 text-yellow-700 font-medium transition-all duration-200"
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span className="hidden sm:inline ml-2">Notas</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleOpenTimeline(order)}
+                    className="h-12 text-xs bg-purple-50 border-purple-200 hover:bg-purple-100 hover:border-purple-300 text-purple-700 font-medium transition-all duration-200"
+                  >
+                    <Clock className="w-4 h-4" />
+                    <span className="hidden sm:inline ml-2">Timeline</span>
                   </Button>
                 </div>
 
-                {order.status !== 'entregado' && (
-                  <div className="mt-3 pt-3 border-t">
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => updateOrderStatus(order.id, 'entregado')}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        <CheckCircle className="w-4 h-4 mr-1" />
-                        Entregado
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateOrderStatus(order.id, 'devolucion')}
-                        className="border-red-200 text-red-600 hover:bg-red-50"
-                      >
-                        <RotateCcw className="w-4 h-4 mr-1" />
-                        Devolver
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedOrderForUpdate(order);
+                      setNewStatus('en_ruta');
+                      setPaymentMethod(order.paymentMethod || 'efectivo');
+                      setIsUpdateStatusModalOpen(true);
+                    }}
+                    className="w-full h-12 text-sm bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 hover:from-blue-100 hover:to-indigo-100 hover:border-blue-300 text-blue-700 font-semibold transition-all duration-200 shadow-sm hover:shadow-md"
+                    disabled={updatingOrder === order.id}
+                  >
+                    {updatingOrder === order.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <Edit3 className="w-4 h-4 mr-2" />
+                    )}
+                    <span>Actualizar Estado</span>
+                  </Button>
+                </div>
               </div>
             ))
           )}
+          
         </CardContent>
       </Card>
 
@@ -637,6 +1244,480 @@ export default function MiRutaHoy() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Modal para actualizar estado */}
+      <Dialog open={isUpdateStatusModalOpen} onOpenChange={setIsUpdateStatusModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Actualizar Estado del Pedido</DialogTitle>
+          </DialogHeader>
+          {selectedOrderForUpdate && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <p className="text-sm font-medium">Pedido: {selectedOrderForUpdate.id}</p>
+                <p className="text-sm text-gray-600">{selectedOrderForUpdate.customerName}</p>
+                <p className="text-sm text-gray-600">{formatCurrency(selectedOrderForUpdate.totalAmount)}</p>
+              </div>
+              
+              <div className="space-y-3">
+                <Label>Nuevo Estado *</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <Button
+                    variant={newStatus === 'entregado' ? 'default' : 'outline'}
+                    onClick={() => setNewStatus('entregado')}
+                    className={`h-12 text-sm font-medium ${
+                      newStatus === 'entregado' 
+                        ? 'bg-green-600 hover:bg-green-700 text-white' 
+                        : 'border-green-200 hover:border-green-300 hover:bg-green-50 text-green-700'
+                    }`}
+                  >
+                    ✅ Entregado
+                  </Button>
+                  <Button
+                    variant={newStatus === 'devolucion' ? 'default' : 'outline'}
+                    onClick={() => setNewStatus('devolucion')}
+                    className={`h-12 text-sm font-medium ${
+                      newStatus === 'devolucion' 
+                        ? 'bg-red-600 hover:bg-red-700 text-white' 
+                        : 'border-red-200 hover:border-red-300 hover:bg-red-50 text-red-700'
+                    }`}
+                  >
+                    ❌ Devolución
+                  </Button>
+                  <Button
+                    variant={newStatus === 'reagendado' ? 'default' : 'outline'}
+                    onClick={() => setNewStatus('reagendado')}
+                    className={`h-12 text-sm font-medium ${
+                      newStatus === 'reagendado' 
+                        ? 'bg-orange-600 hover:bg-orange-700 text-white' 
+                        : 'border-orange-200 hover:border-orange-300 hover:bg-orange-50 text-orange-700'
+                    }`}
+                  >
+                    📅 Reagendado
+                  </Button>
+                </div>
+              </div>
+
+              {/* Sección de método de pago para entregado */}
+              {newStatus === 'entregado' && (
+                <div className="space-y-3 p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm font-semibold">Confirmar Método de Pago *</Label>
+                    <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
+                      {selectedOrderForUpdate.paymentMethod === 'efectivo' ? '💵 Efectivo' :
+                       selectedOrderForUpdate.paymentMethod === 'sinpe' ? '📱 SINPE' :
+                       selectedOrderForUpdate.paymentMethod === 'tarjeta' ? '💳 Tarjeta' :
+                       '🔄 Cambio'}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-gray-600">
+                    Confirma el método de pago que el cliente está utilizando para esta entrega
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <Button
+                      variant={paymentMethod === 'efectivo' ? 'default' : 'outline'}
+                      onClick={() => setPaymentMethod('efectivo')}
+                      className={`h-10 text-xs font-medium ${
+                        paymentMethod === 'efectivo' 
+                          ? 'bg-green-600 hover:bg-green-700 text-white' 
+                          : 'border-green-200 hover:border-green-300 hover:bg-green-50 text-green-700'
+                      }`}
+                    >
+                      💵 Efectivo
+                    </Button>
+                    <Button
+                      variant={paymentMethod === 'sinpe' ? 'default' : 'outline'}
+                      onClick={() => setPaymentMethod('sinpe')}
+                      className={`h-10 text-xs font-medium ${
+                        paymentMethod === 'sinpe' 
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                          : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50 text-blue-700'
+                      }`}
+                    >
+                      📱 SINPE
+                    </Button>
+                    <Button
+                      variant={paymentMethod === 'tarjeta' ? 'default' : 'outline'}
+                      onClick={() => setPaymentMethod('tarjeta')}
+                      className={`h-10 text-xs font-medium ${
+                        paymentMethod === 'tarjeta' 
+                          ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+                          : 'border-purple-200 hover:border-purple-300 hover:bg-purple-50 text-purple-700'
+                      }`}
+                    >
+                      💳 Tarjeta
+                    </Button>
+                    <Button
+                      variant={paymentMethod === 'cambio' ? 'default' : 'outline'}
+                      onClick={() => setPaymentMethod('cambio')}
+                      className={`h-10 text-xs font-medium ${
+                        paymentMethod === 'cambio' 
+                          ? 'bg-orange-600 hover:bg-orange-700 text-white' 
+                          : 'border-orange-200 hover:border-orange-300 hover:bg-orange-50 text-orange-700'
+                      }`}
+                    >
+                      🔄 Cambio
+                    </Button>
+                  </div>
+                  
+                  {/* Comprobante para SINPE o Tarjeta */}
+                  {(paymentMethod === 'sinpe' || paymentMethod === 'tarjeta') && (
+                    <div className="space-y-2">
+                      <Label>Comprobante de Transacción *</Label>
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                        {uploadedReceipt ? (
+                          <div className="space-y-3">
+                            <img
+                              src={uploadedReceipt}
+                              alt="Comprobante"
+                              className="max-w-full h-32 object-contain mx-auto rounded-lg"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setUploadedReceipt(null)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <X className="w-4 h-4 mr-1" />
+                              Eliminar
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <Camera className="w-8 h-8 mx-auto text-gray-400" />
+                            <p className="text-sm text-gray-600">Toca para seleccionar comprobante</p>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleFileUpload(e, 'receipt')}
+                              className="hidden"
+                              id="receipt-upload"
+                            />
+                            <Button
+                              variant="outline"
+                              onClick={() => document.getElementById('receipt-upload')?.click()}
+                            >
+                              <ImageIcon className="w-4 h-4 mr-2" />
+                              Seleccionar Imagen
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Imagen del producto para cambio */}
+                  {paymentMethod === 'cambio' && (
+                    <div className="space-y-2">
+                      <Label>Imagen del Producto Recogido *</Label>
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                        {uploadedReceipt ? (
+                          <div className="space-y-3">
+                            <img
+                              src={uploadedReceipt}
+                              alt="Producto recogido"
+                              className="max-w-full h-32 object-contain mx-auto rounded-lg"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setUploadedReceipt(null)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <X className="w-4 h-4 mr-1" />
+                              Eliminar
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <Camera className="w-8 h-8 mx-auto text-gray-400" />
+                            <p className="text-sm text-gray-600">Toca para seleccionar imagen del producto</p>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleFileUpload(e, 'receipt')}
+                              className="hidden"
+                              id="product-upload"
+                            />
+                            <Button
+                              variant="outline"
+                              onClick={() => document.getElementById('product-upload')?.click()}
+                            >
+                              <ImageIcon className="w-4 h-4 mr-2" />
+                              Seleccionar Imagen
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Comprobante de evidencia para devolución o reagendado */}
+              {(newStatus === 'devolucion' || newStatus === 'reagendado') && (
+                <div className="space-y-3 p-4 bg-red-50 rounded-lg border border-red-200">
+                  <Label>Comprobante de Comunicación *</Label>
+                  <p className="text-xs text-gray-600">
+                    Adjunta captura de pantalla del chat o llamada con el cliente para evidenciar la comunicación
+                  </p>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                    {uploadedEvidence ? (
+                      <div className="space-y-3">
+                        <img
+                          src={uploadedEvidence}
+                          alt="Comprobante de comunicación"
+                          className="max-w-full h-32 object-contain mx-auto rounded-lg"
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setUploadedEvidence(null)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <X className="w-4 h-4 mr-1" />
+                          Eliminar
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <Camera className="w-8 h-8 mx-auto text-gray-400" />
+                        <p className="text-sm text-gray-600">Toca para seleccionar comprobante</p>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleFileUpload(e, 'evidence')}
+                          className="hidden"
+                          id="evidence-upload"
+                        />
+                        <Button
+                          variant="outline"
+                          onClick={() => document.getElementById('evidence-upload')?.click()}
+                        >
+                          <ImageIcon className="w-4 h-4 mr-2" />
+                          Seleccionar Imagen
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <Label>Comentarios (opcional)</Label>
+                <Textarea
+                  placeholder="Añadir comentarios sobre el cambio de estado..."
+                  value={statusComment}
+                  onChange={(e) => setStatusComment(e.target.value)}
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsUpdateStatusModalOpen(false);
+                    setSelectedOrderForUpdate(null);
+                    resetModalState();
+                  }}
+                  className="flex-1"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleUpdateStatus}
+                  disabled={
+                    !newStatus || 
+                    updatingOrder === selectedOrderForUpdate?.id ||
+                    (newStatus === 'entregado' && !paymentMethod) ||
+                    (newStatus === 'entregado' && (paymentMethod === 'sinpe' || paymentMethod === 'tarjeta') && !uploadedReceipt) ||
+                    (newStatus === 'entregado' && paymentMethod === 'cambio' && !uploadedReceipt) ||
+                    ((newStatus === 'devolucion' || newStatus === 'reagendado') && !uploadedEvidence)
+                  }
+                  className="flex-1"
+                >
+                  {updatingOrder === selectedOrderForUpdate?.id ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    'Actualizar'
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para Notas */}
+      <Dialog open={isNotesModalOpen} onOpenChange={setIsNotesModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-yellow-600" />
+              Notas del Pedido
+            </DialogTitle>
+          </DialogHeader>
+          {selectedOrderForNotes && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <p className="text-sm font-medium">Pedido: {selectedOrderForNotes.id}</p>
+                <p className="text-sm text-gray-600">{selectedOrderForNotes.customerName}</p>
+                <p className="text-sm text-gray-600">{selectedOrderForNotes.customerProvince} • {selectedOrderForNotes.customerCanton} • {selectedOrderForNotes.customerDistrict}</p>
+              </div>
+              
+              {/* Notas existentes */}
+              {selectedOrderForNotes.notes && (
+                <div className="space-y-3">
+                  <Label>Notas del Asesor</Label>
+                  <div className="bg-yellow-50 p-3 rounded-lg border-l-4 border-yellow-200">
+                    <p className="text-sm whitespace-pre-wrap">{selectedOrderForNotes.notes}</p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Agregar nueva nota */}
+              <div className="space-y-3">
+                <Label>Agregar Nota del Mensajero</Label>
+                <Textarea
+                  placeholder="Escribe una nota sobre este pedido..."
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
+              
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleCloseNotes}
+                  className="flex-1"
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  onClick={handleAddNote}
+                  disabled={!newNote.trim()}
+                  className="flex-1 bg-yellow-600 hover:bg-yellow-700"
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Agregar Nota
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal del Timeline */}
+      <Dialog open={isTimelineModalOpen} onOpenChange={setIsTimelineModalOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-purple-600" />
+              Timeline del Pedido
+            </DialogTitle>
+          </DialogHeader>
+          {selectedOrderForTimeline && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <p className="text-sm font-medium">Pedido: {selectedOrderForTimeline.id}</p>
+                <p className="text-sm text-gray-600">{selectedOrderForTimeline.customerName}</p>
+                <p className="text-sm text-gray-600">{formatCurrency(selectedOrderForTimeline.totalAmount)}</p>
+              </div>
+              
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-700">Historial de Cambios de Estado</h4>
+                
+                {statusChanges.filter(change => change.orderId === selectedOrderForTimeline.id).length > 0 ? (
+                  <div className="space-y-3">
+                    {statusChanges.filter(change => change.orderId === selectedOrderForTimeline.id).map((change, index) => (
+                      <div key={change.id} className="relative">
+                        {/* Línea conectora */}
+                        {index < statusChanges.filter(change => change.orderId === selectedOrderForTimeline.id).length - 1 && (
+                          <div className="absolute left-4 top-8 w-0.5 h-8 bg-gray-200"></div>
+                        )}
+                        
+                        <div className="flex items-start gap-3">
+                          {/* Icono del estado */}
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${getStatusColor(change.toStatus)}`}>
+                            {getStatusIcon(change.toStatus)}
+                          </div>
+                          
+                          {/* Contenido del cambio */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium text-gray-900">
+                                {change.fromStatus} → {change.toStatus}
+                              </span>
+                              <Badge variant="outline" className="text-xs">
+                                {change.changedByName}
+                              </Badge>
+                            </div>
+                            
+                            <p className="text-xs text-gray-500 mb-2">
+                              {formatTimestamp(change.timestamp)}
+                            </p>
+                            
+                            {/* Información adicional */}
+                            <div className="space-y-1">
+                              {change.comment && (
+                                <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded">
+                                  <strong>Comentario:</strong> {change.comment}
+                                </p>
+                              )}
+                              
+                              {change.paymentMethod && (
+                                <p className="text-sm text-gray-700">
+                                  <strong>Método de pago:</strong> {change.paymentMethod}
+                                </p>
+                              )}
+                              
+                              {change.receipt && (
+                                <div className="text-sm text-gray-700">
+                                  <strong>Comprobante:</strong> 
+                                  <img src={change.receipt} alt="Comprobante" className="mt-1 max-w-32 h-20 object-contain rounded border" />
+                                </div>
+                              )}
+                              
+                              {change.evidence && (
+                                <div className="text-sm text-gray-700">
+                                  <strong>Evidencia:</strong> 
+                                  <img src={change.evidence} alt="Evidencia" className="mt-1 max-w-32 h-20 object-contain rounded border" />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>No hay cambios de estado registrados para este pedido</p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleCloseTimeline}
+                  className="flex-1"
+                >
+                  Cerrar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

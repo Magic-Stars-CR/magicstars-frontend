@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { mockApi } from '@/lib/mock-api';
-import { Order, Stats, User } from '@/lib/types';
+import { getPedidos } from '@/lib/supabase-pedidos';
+import { Order, Stats, User, PedidoTest } from '@/lib/types';
 import { StatsCard } from '@/components/dashboard/stats-card';
 import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -42,16 +42,149 @@ export default function AdminDashboard() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [ordersRes, statsRes, usersRes] = await Promise.all([
-        mockApi.getOrders(),
-        mockApi.getStats(),
-        mockApi.getUsers(),
-      ]);
+      console.log('Cargando datos reales de Supabase para admin...');
       
-      // Get last 8 orders
-      setRecentOrders(ordersRes.slice(0, 8));
-      setStats(statsRes);
-      setUsers(usersRes);
+      // Cargar pedidos reales de Supabase
+      const pedidosData = await getPedidos();
+      console.log('Pedidos cargados:', pedidosData.length);
+      
+      // Convertir pedidos de Supabase a formato Order
+      const orders: Order[] = pedidosData.map((pedido: PedidoTest) => ({
+        id: pedido.id_pedido,
+        customerName: `Cliente ${pedido.id_pedido}`,
+        customerPhone: '0000-0000',
+        customerAddress: pedido.distrito,
+        customerProvince: 'San José',
+        customerCanton: 'Central',
+        customerDistrict: pedido.distrito,
+        customerLocationLink: pedido.link_ubicacion || undefined,
+        items: [],
+        totalAmount: pedido.valor_total,
+        status: pedido.mensajero_concretado ? 'entregado' : (pedido.mensajero_asignado ? 'en_ruta' : 'pendiente'),
+        paymentMethod: 'efectivo' as const,
+        origin: 'csv' as const,
+        assignedMessenger: pedido.mensajero_asignado ? {
+          id: `msg-${pedido.mensajero_asignado}`,
+          name: pedido.mensajero_asignado,
+          email: `${pedido.mensajero_asignado.toLowerCase()}@magicstars.com`,
+          role: 'mensajero' as const,
+          phone: '+506 0000-0000',
+          company: {
+            id: 'company-1',
+            name: 'Magic Stars',
+            taxId: '123456789',
+            address: 'San José, Costa Rica',
+            phone: '+506 0000-0000',
+            email: 'info@magicstars.com',
+            isActive: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        } : undefined,
+        deliveryNotes: pedido.nota_asesor || undefined,
+        notes: pedido.notas || undefined,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }));
+
+      // Obtener últimos 8 pedidos
+      setRecentOrders(orders.slice(0, 8));
+
+      // Calcular estadísticas reales
+      const totalOrders = pedidosData.length;
+      const deliveredOrders = pedidosData.filter(p => p.mensajero_concretado).length;
+      const pendingOrders = pedidosData.filter(p => !p.mensajero_asignado).length;
+      const returnedOrders = 0; // No hay campo para devoluciones en la tabla actual
+      const rescheduledOrders = 0; // No hay campo para reagendados en la tabla actual
+      const totalCash = pedidosData.reduce((sum, p) => sum + p.valor_total, 0);
+      const totalSinpe = 0; // No hay campo para Sinpe en la tabla actual
+      const deliveryRate = totalOrders > 0 ? Math.round((deliveredOrders / totalOrders) * 100) : 0;
+
+      const realStats: Stats = {
+        totalOrders,
+        deliveredOrders,
+        pendingOrders,
+        returnedOrders,
+        rescheduledOrders,
+        totalCash,
+        totalSinpe,
+        deliveryRate,
+      };
+
+      setStats(realStats);
+
+      // Obtener usuarios únicos de los pedidos (mensajeros)
+      const uniqueMessengers = Array.from(new Set(pedidosData.map(p => p.mensajero_asignado).filter(Boolean))) as string[];
+      const messengerUsers: User[] = uniqueMessengers.map((name, index) => ({
+        id: `msg-${index + 1}`,
+        name: name!,
+        email: `${name!.toLowerCase()}@magicstars.com`,
+        role: 'mensajero' as const,
+        phone: '+506 0000-0000',
+        company: {
+          id: 'company-1',
+          name: 'Magic Stars',
+          taxId: '123456789',
+          address: 'San José, Costa Rica',
+          phone: '+506 0000-0000',
+          email: 'info@magicstars.com',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      }));
+
+      // Agregar algunos asesores simulados (ya que no están en la tabla de pedidos)
+      const advisorUsers: User[] = [
+        {
+          id: 'adv-1',
+          name: 'Asesor 1',
+          email: 'asesor1@magicstars.com',
+          role: 'asesor' as const,
+          phone: '+506 0000-0001',
+          company: {
+            id: 'company-1',
+            name: 'Magic Stars',
+            taxId: '123456789',
+            address: 'San José, Costa Rica',
+            phone: '+506 0000-0000',
+            email: 'info@magicstars.com',
+            isActive: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'adv-2',
+          name: 'Asesor 2',
+          email: 'asesor2@magicstars.com',
+          role: 'asesor' as const,
+          phone: '+506 0000-0002',
+          company: {
+            id: 'company-1',
+            name: 'Magic Stars',
+            taxId: '123456789',
+            address: 'San José, Costa Rica',
+            phone: '+506 0000-0000',
+            email: 'info@magicstars.com',
+            isActive: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+
+      setUsers([...messengerUsers, ...advisorUsers]);
+      
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -93,7 +226,7 @@ export default function AdminDashboard() {
         <Card className="border-2 border-dashed border-blue-200 hover:border-blue-400 transition-colors">
           <CardContent className="flex items-center justify-center p-6">
             <Button asChild className="w-full">
-              <Link href="/dashboard/admin/orders">
+              <Link href="/dashboard/admin/pedidos">
                 <Package className="w-4 h-4 mr-2" />
                 Gestionar Pedidos
               </Link>
@@ -201,16 +334,16 @@ export default function AdminDashboard() {
             className="bg-yellow-50 border-yellow-200"
           />
           <StatsCard
+            title="En Ruta"
+            value={stats.totalOrders - stats.deliveredOrders - stats.pendingOrders}
+            icon={Truck}
+            className="bg-blue-50 border-blue-200"
+          />
+          <StatsCard
             title="Devoluciones"
             value={stats.returnedOrders}
             icon={RotateCcw}
             className="bg-red-50 border-red-200"
-          />
-          <StatsCard
-            title="Reagendados"
-            value={stats.rescheduledOrders}
-            icon={Package}
-            className="bg-orange-50 border-orange-200"
           />
           <StatsCard
             title="Mensajeros"
@@ -233,7 +366,7 @@ export default function AdminDashboard() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Pedidos Recientes</CardTitle>
             <Button asChild variant="outline" size="sm">
-              <Link href="/dashboard/admin/orders">Ver Todos</Link>
+              <Link href="/dashboard/admin/pedidos">Ver Todos</Link>
             </Button>
           </CardHeader>
           <CardContent>

@@ -47,6 +47,7 @@ const menuItems = {
     { icon: BarChart3, label: 'Estadísticas', href: '/dashboard/asesor/stats' },
   ],
   mensajero: [
+    { icon: Route, label: 'Mi Ruta de Hoy', href: '/dashboard/mensajero/mi-ruta-hoy' },
     { icon: LayoutDashboard, label: 'Mis Pedidos', href: '/dashboard/mensajero' },
     { icon: Truck, label: 'Historial de Rutas', href: '/dashboard/mensajero/route-history' },
     { icon: User, label: 'Mi Perfil', href: '/dashboard/mensajero/profile' },
@@ -62,6 +63,28 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
   useEffect(() => {
     onMobileMenuChange?.(isOpen);
   }, [isOpen, onMobileMenuChange]);
+
+  // Cerrar menú con tecla Escape
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      // Prevenir scroll del body cuando el menú está abierto
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
 
   if (!user) return null;
 
@@ -91,8 +114,8 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-2">
-        {userMenuItems.map((item) => {
+      <nav className="flex-1 p-4 space-y-2" role="navigation" aria-label="Navegación principal">
+        {userMenuItems.map((item, index) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
           
@@ -102,14 +125,21 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
               href={item.href}
               onClick={() => setIsOpen(false)}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
+                "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 min-h-[48px]",
                 isActive 
-                  ? "bg-primary text-primary-foreground" 
-                  : "hover:bg-accent hover:text-accent-foreground"
+                  ? "bg-primary text-primary-foreground shadow-md" 
+                  : "hover:bg-accent hover:text-accent-foreground active:bg-accent/80"
               )}
+              role="menuitem"
+              tabIndex={0}
+              aria-current={isActive ? "page" : undefined}
+              aria-label={`${item.label}${isActive ? ' (página actual)' : ''}`}
             >
-              <Icon className="w-5 h-5" />
-              <span className="font-medium">{item.label}</span>
+              <Icon className="w-6 h-6 flex-shrink-0" />
+              <span className="font-medium text-base">{item.label}</span>
+              {isActive && (
+                <div className="ml-auto w-2 h-2 bg-white rounded-full" />
+              )}
             </Link>
           );
         })}
@@ -117,19 +147,23 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
 
       <div className="p-4 border-t">
         <div className="flex items-center gap-3 p-3 rounded-lg bg-accent/50 mb-3">
-          <div className="flex-1">
-            <p className="font-medium text-sm">{user.name}</p>
-            <p className="text-xs text-muted-foreground">{user.email}</p>
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center">
+            <User className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm truncate">{user.name}</p>
+            <p className="text-xs text-muted-foreground truncate">{user.email}</p>
           </div>
         </div>
         
         <Button
           variant="ghost"
-          className="w-full justify-start gap-3 text-muted-foreground hover:text-foreground"
+          className="w-full justify-start gap-3 text-muted-foreground hover:text-foreground min-h-[48px] px-4 py-3"
           onClick={logout}
+          aria-label="Cerrar sesión"
         >
-          <LogOut className="w-4 h-4" />
-          Cerrar Sesión
+          <LogOut className="w-5 h-5" />
+          <span className="font-medium">Cerrar Sesión</span>
         </Button>
       </div>
     </div>
@@ -137,14 +171,17 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
 
   return (
     <>
-      {/* Mobile menu button - solo visible en móvil */}
+      {/* Mobile menu button - mejorado para accesibilidad */}
       <Button
         variant="ghost"
         size="icon"
-        className="lg:hidden fixed top-4 left-4 z-[60] bg-white border shadow-lg hover:bg-gray-50 transition-colors"
+        className="lg:hidden fixed top-6 left-6 z-[60] bg-white border shadow-lg hover:bg-gray-50 transition-colors w-14 h-14 rounded-full"
         onClick={() => setIsOpen(true)}
+        aria-label="Abrir menú de navegación"
+        aria-expanded={isOpen}
+        aria-controls="mobile-sidebar"
       >
-        <Menu className="w-6 h-6" />
+        <Menu className="w-7 h-7" />
       </Button>
 
       {/* Desktop sidebar - siempre visible y empuja el contenido */}
@@ -159,22 +196,36 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
           <div 
             className="lg:hidden fixed inset-0 bg-black/50 z-[70]"
             onClick={() => setIsOpen(false)}
+            aria-hidden="true"
           />
           
           {/* Sidebar móvil con z-index más alto */}
-          <aside className="lg:hidden fixed left-0 top-0 h-full w-64 bg-card border-r z-[80] shadow-2xl transform transition-transform duration-300 ease-in-out">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="font-semibold">Menú</h2>
+          <aside 
+            id="mobile-sidebar"
+            className="lg:hidden fixed left-0 top-0 h-full w-72 bg-card border-r z-[80] shadow-2xl transform transition-transform duration-300 ease-in-out"
+            role="navigation"
+            aria-label="Menú de navegación principal"
+          >
+            <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-600 to-purple-700 text-white">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                  <Star className="w-5 h-5 text-white" />
+                </div>
+                <h2 className="font-semibold text-lg">Menú</h2>
+              </div>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsOpen(false)}
-                className="hover:bg-gray-100"
+                className="hover:bg-white/20 text-white w-10 h-10 rounded-full"
+                aria-label="Cerrar menú de navegación"
               >
                 <X className="w-5 h-5" />
               </Button>
             </div>
-            <SidebarContent />
+            <div className="h-full overflow-y-auto">
+              <SidebarContent />
+            </div>
           </aside>
         </>
       )}

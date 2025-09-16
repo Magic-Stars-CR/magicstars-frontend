@@ -118,6 +118,7 @@ export interface Order {
   companyId?: string;
   company?: Company;
   routeSchedule?: string; // JORNADA DE RUTA del CSV
+  routeOrder?: number; // Número de orden en la ruta del día (1-30)
 }
 
 export interface Stats {
@@ -606,4 +607,17 @@ export interface RouteStats {
   assignedMessengers: number;
   averageOrderValue: number;
   paymentPerMessenger: number;
+}
+
+// Tipos para pedidos de Supabase (tabla pedidos_test)
+export interface PedidoTest {
+  id_pedido: string;
+  distrito: string;
+  valor_total: number;
+  productos: string;
+  link_ubicacion: string | null;
+  nota_asesor: string | null;
+  notas: string | null;
+  mensajero_asignado: string | null;
+  mensajero_concretado: string | null;
 }

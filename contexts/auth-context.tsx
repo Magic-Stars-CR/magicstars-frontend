@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User } from '@/lib/types';
-import { mockApi } from '@/lib/mock-api';
+import { mockLogin, mockLogout, mockGetUserByToken } from '@/lib/mock-messengers';
 
 interface AuthContextType {
   user: User | null;
@@ -18,30 +18,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored auth on mount
-    const storedUser = localStorage.getItem('magicstars_user');
-    const storedToken = localStorage.getItem('magicstars_token');
-    
-    if (storedUser && storedToken) {
-      setUser(JSON.parse(storedUser));
-    }
-    setLoading(false);
+    // Verificar si hay una sesión guardada
+    const checkStoredSession = async () => {
+      console.log('Verificando sesión guardada...');
+      const storedToken = localStorage.getItem('magicstars_token');
+      const storedUser = localStorage.getItem('magicstars_user');
+      
+      console.log('Token guardado:', storedToken ? 'Sí' : 'No');
+      console.log('Usuario guardado:', storedUser ? 'Sí' : 'No');
+      
+      if (storedToken && storedUser) {
+        const userData = JSON.parse(storedUser);
+        const isValidToken = await mockGetUserByToken(storedToken);
+        
+        console.log('Token válido:', isValidToken ? 'Sí' : 'No');
+        
+        if (isValidToken) {
+          console.log('Restaurando usuario:', userData);
+          setUser(userData);
+        } else {
+          console.log('Token inválido, limpiando storage');
+          // Token inválido, limpiar storage
+          localStorage.removeItem('magicstars_token');
+          localStorage.removeItem('magicstars_user');
+        }
+      }
+      
+      console.log('Finalizando verificación de sesión');
+      setLoading(false);
+    };
+
+    checkStoredSession();
   }, []);
 
   const login = async (email: string, password: string) => {
     try {
-      const { user, token } = await mockApi.login(email, password);
-      localStorage.setItem('magicstars_user', JSON.stringify(user));
-      localStorage.setItem('magicstars_token', token);
-      setUser(user);
+      console.log('Intentando login con:', email);
+      const user = await mockLogin(email, password);
+      console.log('Login exitoso, usuario:', user);
+      
+      if (user) {
+        // Guardar en localStorage
+        localStorage.setItem('magicstars_user', JSON.stringify(user));
+        localStorage.setItem('magicstars_token', 'mock_token_' + user.id);
+        
+        setUser(user);
+        console.log('Usuario establecido en contexto');
+      } else {
+        throw new Error('Credenciales inválidas');
+      }
     } catch (error) {
+      console.error('Error en login:', error);
       throw error;
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await mockLogout();
+    
+    // Limpiar localStorage
     localStorage.removeItem('magicstars_user');
     localStorage.removeItem('magicstars_token');
+    
     setUser(null);
   };
 

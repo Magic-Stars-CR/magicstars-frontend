@@ -415,751 +415,115 @@ const generateTodayOrders = (): Order[] => {
   const today = new Date();
   const todayString = today.toISOString().split('T')[0]; // YYYY-MM-DD
 
-  // Para Machos CR - 8 pedidos del día
-  const pmcTodayOrders: Order[] = [
-    {
-      id: 'PMC-TODAY-001',
-      customerName: 'Ana Rodríguez',
-      customerPhone: '50687654321',
-      customerAddress: 'Calle 5, Casa 123, Barrio La Paz',
-      customerProvince: 'San José',
-      customerCanton: 'CENTRAL',
-      customerDistrict: 'CARMEN',
-      customerLocationLink: 'https://maps.app.goo.gl/example1',
+  // Generar 30 pedidos solo para Juan Pérez (ID: '3')
+  const juanPerez = messengers.find(m => m.id === '3');
+  if (juanPerez) {
+    for (let i = 1; i <= 30; i++) {
+      const orderNumber = i.toString().padStart(3, '0');
+      const companyId = juanPerez.companyId || '1';
+      const companyPrefix = companyId === '1' ? 'PMC' : 
+                           companyId === '2' ? 'BF' : 
+                           companyId === '3' ? 'AS' : 'PMC';
       
-      items: generateOrderItems(2),
-      totalAmount: 52600,
-      status: 'en_ruta', // Cambiado a en_ruta para que sea visible
-      paymentMethod: 'efectivo',
-      origin: 'csv',
-      deliveryMethod: 'mensajeria_propia',
-      createdAt: `${todayString}T08:30:00Z`,
-      updatedAt: `${todayString}T08:30:00Z`,
+      const advisor = advisors.find(a => a.companyId === companyId);
+      const company = mockCompanies.find(c => c.id === companyId) || mockCompanies[0];
       
-      assignedMessengerId: messengers[0].id, // Juan Pérez
-      assignedMessenger: messengers[0],
-      advisorId: advisors.find(a => a.companyId === '1')?.id,
-      advisor: advisors.find(a => a.companyId === '1'),
+      // Generar datos aleatorios para el pedido
+      const customerNames = [
+        'Ana Rodríguez', 'Carlos López', 'María González', 'José Martínez', 'Laura Pérez',
+        'Diego Herrera', 'Carmen Jiménez', 'Roberto Morales', 'Sofia Castro', 'Luis Vargas',
+        'Isabel Ruiz', 'Fernando Silva', 'Patricia Díaz', 'Andrés Moreno', 'Elena Rojas',
+        'Miguel Torres', 'Gabriela Flores', 'Ricardo Gutiérrez', 'Valeria Ramírez', 'Sergio Vega',
+        'Natalia Cruz', 'Alejandro Méndez', 'Camila Aguilar', 'Daniel Ortega', 'Paola Reyes',
+        'Sebastián Medina', 'Andrea Castillo', 'Javier Romero', 'Valentina Peña', 'Nicolás Ríos'
+      ];
       
-      notes: 'Cliente solicita entrega antes de las 10 AM',
-      deliveryAddress: 'Calle 5, Casa 123, Barrio La Paz',
+      const addresses = [
+        'Calle 5, Casa 123, Barrio La Paz',
+        'Avenida 10, Edificio Verde, Apto 4B',
+        'Residencial Los Álamos, Casa 45',
+        'Del Banco Nacional 200m este, casa azul',
+        'Condominio Las Flores, Torre A, Apto 12',
+        'Residencial El Bosque, Casa 78',
+        'Urbanización Los Pinos, Casa 23',
+        'Condominio Vista Verde, Apto 5B',
+        'Mercedes norte del bar España 175 metros al norte',
+        'Frente a la escuela San Nicolás de Loyola',
+        'Fresh market piedades',
+        '25 metros norte de la Iglesia de San Miguel',
+        'Condominio Los Pinos, Casa 15',
+        'Residencial San José, Casa 89',
+        'Urbanización El Roble, Casa 34',
+        'Condominio Las Palmas, Apto 7C',
+        'Residencial Los Laureles, Casa 56',
+        'Urbanización Monte Verde, Casa 12',
+        'Condominio Vista Hermosa, Apto 9A',
+        'Residencial Los Cedros, Casa 67',
+        'Urbanización El Paraíso, Casa 23',
+        'Condominio Las Acacias, Apto 3B',
+        'Residencial San Antonio, Casa 45',
+        'Urbanización Los Robles, Casa 78',
+        'Condominio Vista Real, Apto 6D',
+        'Residencial Los Sauces, Casa 34',
+        'Urbanización El Mirador, Casa 56',
+        'Condominio Las Rosas, Apto 8E',
+        'Residencial San Pedro, Casa 89',
+        'Urbanización Los Nogales, Casa 12'
+      ];
       
-      companyId: '1',
-      company: mockCompanies[0],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'PMC-TODAY-002',
-      customerName: 'Roberto Morales',
-      customerPhone: '50687745225',
-      customerAddress: 'Avenida 10, Edificio Verde, Apto 4B',
-      customerProvince: 'San José',
-      customerCanton: 'ESCAZU',
-      customerDistrict: 'ESCAZU',
-      customerLocationLink: 'https://maps.app.goo.gl/example2',
+      const provinces = ['San José', 'Alajuela', 'Cartago', 'Heredia', 'Puntarenas', 'Guanacaste', 'Limón'];
+      const cantons = ['CENTRAL', 'ESCAZU', 'SANTA ANA', 'CURRIDABAT', 'TIBAS', 'ALAJUELA', 'CARTAGO', 'HEREDIA'];
+      const districts = ['CARMEN', 'ESCAZU', 'SANTA ANA', 'CURRIDABAT', 'TIBAS', 'ALAJUELA', 'CARTAGO', 'HEREDIA'];
       
-      items: generateOrderItems(1),
-      totalAmount: 21900,
-      status: 'en_ruta',
-      paymentMethod: 'sinpe',
-      origin: 'csv',
-      deliveryMethod: 'red_logistic',
-      createdAt: `${todayString}T09:15:00Z`,
-      updatedAt: `${todayString}T11:00:00Z`,
+      const paymentMethods = ['efectivo', 'sinpe'];
+      const statuses = ['confirmado', 'en_ruta', 'entregado', 'devolucion', 'reagendado'];
+      const deliveryMethods = ['mensajeria_propia', 'red_logistic', 'correos_costa_rica'];
       
-      assignedMessengerId: messengers[1].id, // Luis González
-      assignedMessenger: messengers[1],
-      advisorId: advisors.find(a => a.companyId === '1')?.id,
-      advisor: advisors.find(a => a.companyId === '1'),
+      // Generar pedido
+      const order: Order = {
+        id: `${companyPrefix}-TODAY-1-${orderNumber}`,
+        customerName: customerNames[(i - 1) % customerNames.length],
+        customerPhone: `506${Math.floor(Math.random() * 90000000) + 10000000}`,
+        customerAddress: addresses[(i - 1) % addresses.length],
+        customerProvince: provinces[Math.floor(Math.random() * provinces.length)],
+        customerCanton: cantons[Math.floor(Math.random() * cantons.length)],
+        customerDistrict: districts[Math.floor(Math.random() * districts.length)],
+        customerLocationLink: `https://maps.app.goo.gl/example${i}`,
+        
+        items: generateOrderItems(Math.floor(Math.random() * 3) + 1),
+        totalAmount: Math.floor(Math.random() * 50000) + 15000, // Entre 15,000 y 65,000
+        status: i <= 25 ? 'en_ruta' : 
+                i === 26 ? 'en_ruta' :
+                i === 27 ? 'entregado' :
+                i === 28 ? 'devolucion' :
+                i === 29 ? 'reagendado' :
+                'en_ruta', // Los primeros 25 son en_ruta, luego 1 de cada estado, el último en_ruta
+        paymentMethod: paymentMethods[Math.floor(Math.random() * paymentMethods.length)] as PaymentMethod,
+        origin: 'csv',
+        deliveryMethod: deliveryMethods[Math.floor(Math.random() * deliveryMethods.length)] as DeliveryMethod,
+        createdAt: `${todayString}T${String(Math.floor(Math.random() * 12) + 8).padStart(2, '0')}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}:00Z`,
+        updatedAt: `${todayString}T${String(Math.floor(Math.random() * 12) + 8).padStart(2, '0')}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}:00Z`,
+        
+        assignedMessengerId: juanPerez.id,
+        assignedMessenger: juanPerez,
+        advisorId: advisor?.id,
+        advisor: advisor,
+        
+        notes: i % 3 === 0 ? 'Cliente solicita entrega antes de las 10 AM' : 
+               i % 3 === 1 ? 'Entregar en recepción del edificio' : 
+               'Cliente no disponible hasta las 2 PM',
+        deliveryAddress: addresses[(i - 1) % addresses.length],
+        
+        companyId: companyId,
+        company: company,
+        routeSchedule: 'DIA',
+        routeOrder: i, // Número de orden en la ruta del día (1-30)
+      };
       
-      notes: 'Entregar en recepción del edificio',
-      deliveryAddress: 'Avenida 10, Edificio Verde, Apto 4B',
-      
-      companyId: '1',
-      company: mockCompanies[0],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'PMC-TODAY-003',
-      customerName: 'Carmen Jiménez',
-      customerPhone: '50663687157',
-      customerAddress: 'Residencial Los Álamos, Casa 45',
-      customerProvince: 'Alajuela',
-      customerCanton: 'ALAJUELA',
-      customerDistrict: 'ALAJUELA',
-      customerLocationLink: 'https://maps.app.goo.gl/example3',
-      
-      items: generateOrderItems(3),
-      totalAmount: 15750,
-      status: 'en_ruta',
-      paymentMethod: 'efectivo',
-      origin: 'csv',
-      deliveryMethod: 'correos_costa_rica',
-      createdAt: `${todayString}T09:45:00Z`,
-      updatedAt: `${todayString}T11:30:00Z`,
-      
-      assignedMessengerId: messengers[2].id, // Ana Martínez
-      assignedMessenger: messengers[2],
-      advisorId: advisors.find(a => a.companyId === '1')?.id,
-      advisor: advisors.find(a => a.companyId === '1'),
-      
-      notes: 'Cliente no disponible hasta las 2 PM',
-      deliveryAddress: 'Residencial Los Álamos, Casa 45',
-      
-      companyId: '1',
-      company: mockCompanies[0],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'PMC-TODAY-004',
-      customerName: 'Diego Vargas',
-      customerPhone: '50687657654',
-      customerAddress: 'Del Banco Nacional 200m este, casa azul',
-      customerProvince: 'Cartago',
-      customerCanton: 'CARTAGO',
-      customerDistrict: 'ORIENTAL',
-      customerLocationLink: 'https://maps.app.goo.gl/example4',
-      
-      items: generateOrderItems(1),
-      totalAmount: 22300,
-      status: 'en_ruta', // Cambiado a en_ruta
-      paymentMethod: 'sinpe',
-      origin: 'csv',
-      deliveryMethod: 'red_logistic',
-      createdAt: `${todayString}T10:00:00Z`,
-      updatedAt: `${todayString}T10:00:00Z`,
-      
-      assignedMessengerId: messengers[0].id, // Juan Pérez
-      assignedMessenger: messengers[0],
-      advisorId: advisors.find(a => a.companyId === '1')?.id,
-      advisor: advisors.find(a => a.companyId === '1'),
-      
-      notes: 'Dirección difícil de encontrar, llamar antes de llegar',
-      deliveryAddress: 'Del Banco Nacional 200m este, casa azul',
-      
-      companyId: '1',
-      company: mockCompanies[0],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'PMC-TODAY-005',
-      customerName: 'Laura Méndez',
-      customerPhone: '50687658765',
-      customerAddress: 'Condominio Las Flores, Torre A, Apto 12',
-      customerProvince: 'Heredia',
-      customerCanton: 'HEREDIA',
-      customerDistrict: 'HEREDIA',
-      customerLocationLink: 'https://maps.app.goo.gl/example5',
-      
-      items: generateOrderItems(2),
-      totalAmount: 28900,
-      status: 'en_ruta', // Cambiado a en_ruta
-      paymentMethod: 'efectivo',
-      origin: 'csv',
-      deliveryMethod: 'red_logistic',
-      createdAt: `${todayString}T10:30:00Z`,
-      updatedAt: `${todayString}T10:30:00Z`,
-      
-      assignedMessengerId: messengers[1].id, // Luis González
-      assignedMessenger: messengers[1],
-      advisorId: advisors.find(a => a.companyId === '1')?.id,
-      advisor: advisors.find(a => a.companyId === '1'),
-      
-      notes: 'Nuevo pedido urgente',
-      deliveryAddress: 'Condominio Las Flores, Torre A, Apto 12',
-      
-      companyId: '1',
-      company: mockCompanies[0],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'PMC-TODAY-006',
-      customerName: 'Carlos Herrera',
-      customerPhone: '50687659876',
-      customerAddress: 'Residencial El Bosque, Casa 78',
-      customerProvince: 'San José',
-      customerCanton: 'CURRIDABAT',
-      customerDistrict: 'CURRIDABAT',
-      customerLocationLink: 'https://maps.app.goo.gl/example6',
-      
-      items: generateOrderItems(1),
-      totalAmount: 15600,
-      status: 'en_ruta',
-      paymentMethod: 'efectivo',
-      origin: 'csv',
-      deliveryMethod: 'red_logistic',
-      createdAt: `${todayString}T11:00:00Z`,
-      updatedAt: `${todayString}T12:00:00Z`,
-      
-      assignedMessengerId: messengers[2].id, // Ana Martínez
-      assignedMessenger: messengers[2],
-      advisorId: advisors.find(a => a.companyId === '1')?.id,
-      advisor: advisors.find(a => a.companyId === '1'),
-      
-      notes: 'Entregar en la puerta principal',
-      deliveryAddress: 'Residencial El Bosque, Casa 78',
-      
-      companyId: '1',
-      company: mockCompanies[0],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'PMC-TODAY-007',
-      customerName: 'María López',
-      customerPhone: '50687651098',
-      customerAddress: 'Urbanización Los Pinos, Casa 23',
-      customerProvince: 'San José',
-      customerCanton: 'SANTA ANA',
-      customerDistrict: 'SANTA ANA',
-      customerLocationLink: 'https://maps.app.goo.gl/example7',
-      
-      items: generateOrderItems(2),
-      totalAmount: 18900,
-      status: 'en_ruta', // Cambiado a en_ruta
-      paymentMethod: 'sinpe',
-      origin: 'csv',
-      deliveryMethod: 'red_logistic',
-      createdAt: `${todayString}T11:30:00Z`,
-      updatedAt: `${todayString}T11:30:00Z`,
-      
-      assignedMessengerId: messengers[0].id, // Juan Pérez
-      assignedMessenger: messengers[0],
-      advisorId: advisors.find(a => a.companyId === '1')?.id,
-      advisor: advisors.find(a => a.companyId === '1'),
-      
-      notes: 'Cliente prefiere entrega en la tarde',
-      deliveryAddress: 'Urbanización Los Pinos, Casa 23',
-      
-      companyId: '1',
-      company: mockCompanies[0],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'PMC-TODAY-008',
-      customerName: 'Jorge Castro',
-      customerPhone: '50687652109',
-      customerAddress: 'Condominio Vista Verde, Apto 5B',
-      customerProvince: 'San José',
-      customerCanton: 'TIBAS',
-      customerDistrict: 'TIBAS',
-      customerLocationLink: 'https://maps.app.goo.gl/example8',
-      
-      items: generateOrderItems(3),
-      totalAmount: 45600,
-      status: 'en_ruta', // Cambiado a en_ruta
-      paymentMethod: 'efectivo',
-      origin: 'csv',
-      createdAt: `${todayString}T12:00:00Z`,
-      updatedAt: `${todayString}T12:00:00Z`,
-      
-      assignedMessengerId: messengers[1].id, // Luis González
-      assignedMessenger: messengers[1],
-      advisorId: advisors.find(a => a.companyId === '1')?.id,
-      advisor: advisors.find(a => a.companyId === '1'),
-      
-      notes: 'Pedido de último minuto',
-      deliveryAddress: 'Condominio Vista Verde, Apto 5B',
-      
-      companyId: '1',
-      company: mockCompanies[0],
-      routeSchedule: 'DIA',
-    },
-  ];
+      todayOrders.push(order);
+    }
+  }
 
-  // BeautyFan - 8 pedidos del día
-  const bfTodayOrders: Order[] = [
-    {
-      id: 'BF-TODAY-001',
-      customerName: 'Mario Montenegro',
-      customerPhone: '50663687157',
-      customerAddress: 'Mercedes norte del bar España 175 metros al norte',
-      customerProvince: 'Heredia',
-      customerCanton: 'BARVA',
-      customerDistrict: 'SANTA LUCIA',
-      customerLocationLink: 'https://maps.app.goo.gl/bf1',
-      
-      items: generateOrderItems(1),
-      totalAmount: 19900,
-      status: 'en_ruta',
-      paymentMethod: 'efectivo',
-      origin: 'csv',
-      deliveryMethod: 'red_logistic',
-      createdAt: `${todayString}T08:00:00Z`,
-      updatedAt: `${todayString}T10:00:00Z`,
-      
-      assignedMessengerId: messengers[1].id, // Luis González
-      assignedMessenger: messengers[1],
-      advisorId: advisors.find(a => a.companyId === '2')?.id,
-      advisor: advisors.find(a => a.companyId === '2'),
-      
-      notes: 'paga en efectivo',
-      deliveryAddress: 'Mercedes norte del bar España 175 metros al norte',
-      
-      companyId: '2',
-      company: mockCompanies[1],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'BF-TODAY-002',
-      customerName: 'Stiff Zuñiga',
-      customerPhone: '50663943885',
-      customerAddress: 'Frente a la escuela San Nicolás de Loyola',
-      customerProvince: 'Cartago',
-      customerCanton: 'CARTAGO',
-      customerDistrict: 'SAN NICOLAS',
-      customerLocationLink: 'https://maps.app.goo.gl/bf2',
-      
-      items: generateOrderItems(3),
-      totalAmount: 31850,
-      status: 'en_ruta', // Cambiado a en_ruta
-      paymentMethod: 'sinpe',
-      origin: 'csv',
-      deliveryMethod: 'red_logistic',
-      createdAt: `${todayString}T09:00:00Z`,
-      updatedAt: `${todayString}T09:00:00Z`,
-      
-      assignedMessengerId: messengers[2].id, // Ana Martínez
-      assignedMessenger: messengers[2],
-      advisorId: advisors.find(a => a.companyId === '2')?.id,
-      advisor: advisors.find(a => a.companyId === '2'),
-      
-      notes: 'Cliente premium',
-      deliveryAddress: 'Frente a la escuela San Nicolás de Loyola',
-      
-      companyId: '2',
-      company: mockCompanies[1],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'BF-TODAY-003',
-      customerName: 'Adriana',
-      customerPhone: '50661408823',
-      customerAddress: 'Fresh market piedades',
-      customerProvince: 'San José',
-      customerCanton: 'SANTA ANA',
-      customerDistrict: 'PIEDADES',
-      customerLocationLink: 'https://maps.app.goo.gl/bf3',
-      
-      items: generateOrderItems(1),
-      totalAmount: 19900,
-      status: 'en_ruta', // Cambiado a en_ruta
-      paymentMethod: 'efectivo',
-      origin: 'csv',
-      createdAt: `${todayString}T10:00:00Z`,
-      updatedAt: `${todayString}T10:00:00Z`,
-      
-      assignedMessengerId: messengers[0].id, // Juan Pérez
-      assignedMessenger: messengers[0],
-      advisorId: advisors.find(a => a.companyId === '2')?.id,
-      advisor: advisors.find(a => a.companyId === '2'),
-      
-      notes: 'Nuevo pedido premium',
-      deliveryAddress: 'Fresh market piedades',
-      
-      companyId: '2',
-      company: mockCompanies[1],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'BF-TODAY-004',
-      customerName: 'Sonia',
-      customerPhone: '50687557316',
-      customerAddress: '25 metros norte de la Iglesia de San Miguel',
-      customerProvince: 'Heredia',
-      customerCanton: 'BARVA',
-      customerDistrict: 'SAN JOSE DE LA MONTANA',
-      customerLocationLink: 'https://maps.app.goo.gl/bf4',
-      
-      items: generateOrderItems(1),
-      totalAmount: 19900,
-      status: 'en_ruta',
-      paymentMethod: 'sinpe',
-      origin: 'csv',
-      deliveryMethod: 'red_logistic',
-      createdAt: `${todayString}T11:00:00Z`,
-      updatedAt: `${todayString}T12:00:00Z`,
-      
-      assignedMessengerId: messengers[2].id, // Ana Martínez
-      assignedMessenger: messengers[2],
-      advisorId: advisors.find(a => a.companyId === '2')?.id,
-      advisor: advisors.find(a => a.companyId === '2'),
-      
-      notes: 'Entregar en la iglesia',
-      deliveryAddress: '25 metros norte de la Iglesia de San Miguel',
-      
-      companyId: '2',
-      company: mockCompanies[1],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'BF-TODAY-005',
-      customerName: 'Roberto Jiménez',
-      customerPhone: '50687654321',
-      customerAddress: 'Condominio Los Pinos, Casa 15',
-      customerProvince: 'San José',
-      customerCanton: 'CURRIDABAT',
-      customerDistrict: 'CURRIDABAT',
-      customerLocationLink: 'https://maps.app.goo.gl/bf5',
-      
-      items: generateOrderItems(2),
-      totalAmount: 28900,
-      status: 'en_ruta', // Cambiado a en_ruta
-      paymentMethod: 'efectivo',
-      origin: 'csv',
-      createdAt: `${todayString}T12:00:00Z`,
-      updatedAt: `${todayString}T12:00:00Z`,
-      
-      assignedMessengerId: messengers[1].id, // Luis González
-      assignedMessenger: messengers[1],
-      advisorId: advisors.find(a => a.companyId === '2')?.id,
-      advisor: advisors.find(a => a.companyId === '2'),
-      
-      notes: 'Cliente solicita entrega en la tarde',
-      deliveryAddress: 'Condominio Los Pinos, Casa 15',
-      
-      companyId: '2',
-      company: mockCompanies[1],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'BF-TODAY-006',
-      customerName: 'Carmen Fernández',
-      customerPhone: '50687654322',
-      customerAddress: 'Residencial El Bosque, Casa 25',
-      customerProvince: 'San José',
-      customerCanton: 'CURRIDABAT',
-      customerDistrict: 'CURRIDABAT',
-      customerLocationLink: 'https://maps.app.goo.gl/bf6',
-      
-      items: generateOrderItems(1),
-      totalAmount: 25900,
-      status: 'en_ruta',
-      paymentMethod: 'sinpe',
-      origin: 'csv',
-      createdAt: `${todayString}T13:00:00Z`,
-      updatedAt: `${todayString}T14:00:00Z`,
-      
-      assignedMessengerId: messengers[0].id, // Juan Pérez
-      assignedMessenger: messengers[0],
-      advisorId: advisors.find(a => a.companyId === '2')?.id,
-      advisor: advisors.find(a => a.companyId === '2'),
-      
-      notes: 'Entregar en la puerta principal',
-      deliveryAddress: 'Residencial El Bosque, Casa 25',
-      
-      companyId: '2',
-      company: mockCompanies[1],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'BF-TODAY-007',
-      customerName: 'Diego Ramírez',
-      customerPhone: '50687654323',
-      customerAddress: 'Condominio Vista Verde, Apto 8C',
-      customerProvince: 'San José',
-      customerCanton: 'TIBAS',
-      customerDistrict: 'TIBAS',
-      customerLocationLink: 'https://maps.app.goo.gl/bf7',
-      
-      items: generateOrderItems(2),
-      totalAmount: 55400,
-      status: 'en_ruta',
-      paymentMethod: 'efectivo',
-      origin: 'csv',
-      createdAt: `${todayString}T14:00:00Z`,
-      updatedAt: `${todayString}T14:00:00Z`,
-      
-      assignedMessengerId: messengers[2].id, // Ana Martínez
-      assignedMessenger: messengers[2],
-      advisorId: advisors.find(a => a.companyId === '2')?.id,
-      advisor: advisors.find(a => a.companyId === '2'),
-      
-      notes: 'Cliente prefiere entrega en la tarde',
-      deliveryAddress: 'Condominio Vista Verde, Apto 8C',
-      
-      companyId: '2',
-      company: mockCompanies[1],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'BF-TODAY-008',
-      customerName: 'Laura González',
-      customerPhone: '50687654324',
-      customerAddress: 'Residencial El Bosque, Casa 67',
-      customerProvince: 'San José',
-      customerCanton: 'CURRIDABAT',
-      customerDistrict: 'CURRIDABAT',
-      customerLocationLink: 'https://maps.app.goo.gl/bf8',
-      
-      items: generateOrderItems(1),
-      totalAmount: 18900,
-      status: 'en_ruta', // Cambiado a en_ruta
-      paymentMethod: 'sinpe',
-      origin: 'csv',
-      createdAt: `${todayString}T15:00:00Z`,
-      updatedAt: `${todayString}T15:00:00Z`,
-      
-      assignedMessengerId: messengers[1].id, // Luis González
-      assignedMessenger: messengers[1],
-      advisorId: advisors.find(a => a.companyId === '2')?.id,
-      advisor: advisors.find(a => a.companyId === '2'),
-      
-      notes: 'Entregar en la recepción',
-      deliveryAddress: 'Residencial El Bosque, Casa 67',
-      
-      companyId: '2',
-      company: mockCompanies[1],
-      routeSchedule: 'DIA',
-    },
-  ];
-
-  // AllStars - 8 pedidos del día
-  const asTodayOrders: Order[] = [
-    {
-      id: 'AS-TODAY-001',
-      customerName: 'Carlos Méndez',
-      customerPhone: '50687654321',
-      customerAddress: 'Residencial El Bosque, Casa 25',
-      customerProvince: 'San José',
-      customerCanton: 'CURRIDABAT',
-      customerDistrict: 'CURRIDABAT',
-      customerLocationLink: 'https://maps.app.goo.gl/as1',
-      
-      items: generateOrderItems(1),
-      totalAmount: 29500,
-      status: 'en_ruta',
-      paymentMethod: 'efectivo',
-      origin: 'csv',
-      createdAt: `${todayString}T08:00:00Z`,
-      updatedAt: `${todayString}T10:30:00Z`,
-      
-      assignedMessengerId: messengers[2].id, // Ana Martínez
-      assignedMessenger: messengers[2],
-      advisorId: advisors.find(a => a.companyId === '3')?.id,
-      advisor: advisors.find(a => a.companyId === '3'),
-      
-      notes: 'Entregar en la puerta principal',
-      deliveryAddress: 'Residencial El Bosque, Casa 25',
-      
-      companyId: '3',
-      company: mockCompanies[2],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'AS-TODAY-002',
-      customerName: 'Ana González',
-      customerPhone: '50687654322',
-      customerAddress: 'Condominio Vista Verde, Apto 8C',
-      customerProvince: 'San José',
-      customerCanton: 'TIBAS',
-      customerDistrict: 'TIBAS',
-      customerLocationLink: 'https://maps.app.goo.gl/as2',
-      
-      items: generateOrderItems(3),
-      totalAmount: 25900,
-      status: 'en_ruta', // Cambiado a en_ruta
-      paymentMethod: 'sinpe',
-      origin: 'csv',
-      createdAt: `${todayString}T09:00:00Z`,
-      updatedAt: `${todayString}T11:00:00Z`,
-      
-      assignedMessengerId: messengers[0].id, // Juan Pérez
-      assignedMessenger: messengers[0],
-      advisorId: advisors.find(a => a.companyId === '3')?.id,
-      advisor: advisors.find(a => a.companyId === '3'),
-      
-      notes: 'Cliente solicitó reagendar para mañana a las 9 AM',
-      deliveryAddress: 'Condominio Vista Verde, Apto 8C',
-      scheduledDate: '2024-12-02T09:00:00Z',
-      
-      companyId: '3',
-      company: mockCompanies[2],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'AS-TODAY-003',
-      customerName: 'Luis Ramírez',
-      customerPhone: '50687654323',
-      customerAddress: 'Urbanización Los Pinos, Casa 45',
-      customerProvince: 'San José',
-      customerCanton: 'SANTA ANA',
-      customerDistrict: 'SANTA ANA',
-      customerLocationLink: 'https://maps.app.goo.gl/as3',
-      
-      items: generateOrderItems(2),
-      totalAmount: 55400,
-      status: 'en_ruta', // Cambiado a en_ruta
-      paymentMethod: 'efectivo',
-      origin: 'csv',
-      createdAt: `${todayString}T10:30:00Z`,
-      updatedAt: `${todayString}T10:30:00Z`,
-      
-      assignedMessengerId: messengers[1].id, // Luis González
-      assignedMessenger: messengers[1],
-      advisorId: advisors.find(a => a.companyId === '3')?.id,
-      advisor: advisors.find(a => a.companyId === '3'),
-      
-      notes: 'Cliente prefiere entrega en la tarde',
-      deliveryAddress: 'Urbanización Los Pinos, Casa 45',
-      
-      companyId: '3',
-      company: mockCompanies[2],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'AS-TODAY-004',
-      customerName: 'María Fernández',
-      customerPhone: '50687654324',
-      customerAddress: 'Residencial El Bosque, Casa 67',
-      customerProvince: 'San José',
-      customerCanton: 'CURRIDABAT',
-      customerDistrict: 'CURRIDABAT',
-      customerLocationLink: 'https://maps.app.goo.gl/as4',
-      
-      items: generateOrderItems(1),
-      totalAmount: 18900,
-      status: 'en_ruta',
-      paymentMethod: 'sinpe',
-      origin: 'csv',
-      createdAt: `${todayString}T11:00:00Z`,
-      updatedAt: `${todayString}T12:30:00Z`,
-      
-      assignedMessengerId: messengers[2].id, // Ana Martínez
-      assignedMessenger: messengers[2],
-      advisorId: advisors.find(a => a.companyId === '3')?.id,
-      advisor: advisors.find(a => a.companyId === '3'),
-      
-      notes: 'Entregar en la recepción',
-      deliveryAddress: 'Residencial El Bosque, Casa 67',
-      
-      companyId: '3',
-      company: mockCompanies[2],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'AS-TODAY-005',
-      customerName: 'Pedro López',
-      customerPhone: '50687654325',
-      customerAddress: 'Condominio Vista Verde, Apto 12D',
-      customerProvince: 'San José',
-      customerCanton: 'TIBAS',
-      customerDistrict: 'TIBAS',
-      customerLocationLink: 'https://maps.app.goo.gl/as5',
-      
-      items: generateOrderItems(2),
-      totalAmount: 32500,
-      status: 'en_ruta', // Cambiado a en_ruta
-      paymentMethod: 'efectivo',
-      origin: 'csv',
-      createdAt: `${todayString}T12:00:00Z`,
-      updatedAt: `${todayString}T12:00:00Z`,
-      
-      assignedMessengerId: messengers[0].id, // Juan Pérez
-      assignedMessenger: messengers[0],
-      advisorId: advisors.find(a => a.companyId === '3')?.id,
-      advisor: advisors.find(a => a.companyId === '3'),
-      
-      notes: 'Nuevo pedido profesional',
-      deliveryAddress: 'Condominio Vista Verde, Apto 12D',
-      
-      companyId: '3',
-      company: mockCompanies[2],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'AS-TODAY-006',
-      customerName: 'Roberto Castro',
-      customerPhone: '50687654326',
-      customerAddress: 'Urbanización Los Pinos, Casa 89',
-      customerProvince: 'San José',
-      customerCanton: 'SANTA ANA',
-      customerDistrict: 'SANTA ANA',
-      customerLocationLink: 'https://maps.app.goo.gl/as6',
-      
-      items: generateOrderItems(1),
-      totalAmount: 29500,
-      status: 'en_ruta', // Cambiado a en_ruta
-      paymentMethod: 'sinpe',
-      origin: 'csv',
-      createdAt: `${todayString}T13:00:00Z`,
-      updatedAt: `${todayString}T13:00:00Z`,
-      
-      assignedMessengerId: messengers[1].id, // Luis González
-      assignedMessenger: messengers[1],
-      advisorId: advisors.find(a => a.companyId === '3')?.id,
-      advisor: advisors.find(a => a.companyId === '3'),
-      
-      notes: 'Cliente solicita entrega después del almuerzo',
-      deliveryAddress: 'Urbanización Los Pinos, Casa 89',
-      
-      companyId: '3',
-      company: mockCompanies[2],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'AS-TODAY-007',
-      customerName: 'Carmen Herrera',
-      customerPhone: '50687654327',
-      customerAddress: 'Residencial El Bosque, Casa 34',
-      customerProvince: 'San José',
-      customerCanton: 'CURRIDABAT',
-      customerDistrict: 'CURRIDABAT',
-      customerLocationLink: 'https://maps.app.goo.gl/as7',
-      
-      items: generateOrderItems(3),
-      totalAmount: 55400,
-      status: 'en_ruta',
-      paymentMethod: 'efectivo',
-      origin: 'csv',
-      createdAt: `${todayString}T14:00:00Z`,
-      updatedAt: `${todayString}T15:00:00Z`,
-      
-      assignedMessengerId: messengers[2].id, // Ana Martínez
-      assignedMessenger: messengers[2],
-      advisorId: advisors.find(a => a.companyId === '3')?.id,
-      advisor: advisors.find(a => a.companyId === '3'),
-      
-      notes: 'Entregar en la puerta principal',
-      deliveryAddress: 'Residencial El Bosque, Casa 34',
-      
-      companyId: '3',
-      company: mockCompanies[2],
-      routeSchedule: 'DIA',
-    },
-    {
-      id: 'AS-TODAY-008',
-      customerName: 'Diego Jiménez',
-      customerPhone: '50687654328',
-      customerAddress: 'Condominio Vista Verde, Apto 15E',
-      customerProvince: 'San José',
-      customerCanton: 'TIBAS',
-      customerDistrict: 'TIBAS',
-      customerLocationLink: 'https://maps.app.goo.gl/as8',
-      
-      items: generateOrderItems(2),
-      totalAmount: 25900,
-      status: 'en_ruta', // Cambiado a en_ruta
-      paymentMethod: 'sinpe',
-      origin: 'csv',
-      createdAt: `${todayString}T15:00:00Z`,
-      updatedAt: `${todayString}T15:00:00Z`,
-      
-      assignedMessengerId: messengers[0].id, // Juan Pérez
-      assignedMessenger: messengers[0],
-      advisorId: advisors.find(a => a.companyId === '3')?.id,
-      advisor: advisors.find(a => a.companyId === '3'),
-      
-      notes: 'Nuevo pedido profesional',
-      deliveryAddress: 'Condominio Vista Verde, Apto 15E',
-      
-      companyId: '3',
-      company: mockCompanies[2],
-      routeSchedule: 'DIA',
-    },
-  ];
-
-  // Combine all today's orders
-  todayOrders.push(...pmcTodayOrders, ...bfTodayOrders, ...asTodayOrders);
   
   return todayOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
@@ -1191,8 +555,8 @@ const generateMockOrders = (): Order[] => {
       createdAt: '2024-12-01T08:30:00Z',
       updatedAt: '2024-12-01T10:45:00Z',
       
-      assignedMessengerId: messengers[0].id,
-      assignedMessenger: messengers[0],
+      assignedMessengerId: messengers[1].id,
+      assignedMessenger: messengers[1],
       advisorId: advisors.find(a => a.companyId === '1')?.id,
       advisor: advisors.find(a => a.companyId === '1'),
       
@@ -1412,8 +776,8 @@ const generateMockOrders = (): Order[] => {
       createdAt: '2024-12-01T09:00:00Z',
       updatedAt: '2024-12-01T11:00:00Z',
       
-      assignedMessengerId: messengers[0].id,
-      assignedMessenger: messengers[0],
+      assignedMessengerId: messengers[1].id,
+      assignedMessenger: messengers[1],
       advisorId: advisors.find(a => a.companyId === '3')?.id,
       advisor: advisors.find(a => a.companyId === '3'),
       
