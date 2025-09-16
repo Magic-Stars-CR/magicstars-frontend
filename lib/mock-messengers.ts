@@ -423,6 +423,107 @@ export const mockMessengers: User[] = [
     isActive: true,
     createdAt: '2024-01-15T08:00:00Z',
   },
+  {
+    id: 'msg-021',
+    email: 'anibal@magicstars.com',
+    name: 'Anibal',
+    role: 'mensajero',
+    phone: '+506 8888-0021',
+    company: {
+      id: 'company-1',
+      name: 'Magic Stars',
+      taxId: '123456789',
+      address: 'San José, Costa Rica',
+      phone: '+506 0000-0000',
+      email: 'info@magicstars.com',
+      isActive: true,
+      createdAt: '2024-01-01T08:00:00Z',
+      updatedAt: '2024-01-01T08:00:00Z',
+    },
+    isActive: true,
+    createdAt: '2024-01-15T08:00:00Z',
+  },
+  {
+    id: 'msg-022',
+    email: 'anthony@magicstars.com',
+    name: 'Anthony',
+    role: 'mensajero',
+    phone: '+506 8888-0022',
+    company: {
+      id: 'company-1',
+      name: 'Magic Stars',
+      taxId: '123456789',
+      address: 'San José, Costa Rica',
+      phone: '+506 0000-0000',
+      email: 'info@magicstars.com',
+      isActive: true,
+      createdAt: '2024-01-01T08:00:00Z',
+      updatedAt: '2024-01-01T08:00:00Z',
+    },
+    isActive: true,
+    createdAt: '2024-01-15T08:00:00Z',
+  },
+  // Asesores
+  {
+    id: 'ase-001',
+    email: 'asesor@magicstars.com',
+    name: 'Asesor Principal',
+    role: 'asesor',
+    phone: '+506 8888-9001',
+    company: {
+      id: 'company-1',
+      name: 'Magic Stars',
+      taxId: '123456789',
+      address: 'San José, Costa Rica',
+      phone: '+506 0000-0000',
+      email: 'info@magicstars.com',
+      isActive: true,
+      createdAt: '2024-01-01T08:00:00Z',
+      updatedAt: '2024-01-01T08:00:00Z',
+    },
+    isActive: true,
+    createdAt: '2024-01-01T08:00:00Z',
+  },
+  {
+    id: 'ase-002',
+    email: 'maria@magicstars.com',
+    name: 'María González',
+    role: 'asesor',
+    phone: '+506 8888-9002',
+    company: {
+      id: 'company-1',
+      name: 'Magic Stars',
+      taxId: '123456789',
+      address: 'San José, Costa Rica',
+      phone: '+506 0000-0000',
+      email: 'info@magicstars.com',
+      isActive: true,
+      createdAt: '2024-01-01T08:00:00Z',
+      updatedAt: '2024-01-01T08:00:00Z',
+    },
+    isActive: true,
+    createdAt: '2024-01-01T08:00:00Z',
+  },
+  {
+    id: 'ase-003',
+    email: 'ana@magicstars.com',
+    name: 'Ana Rodríguez',
+    role: 'asesor',
+    phone: '+506 8888-9003',
+    company: {
+      id: 'company-1',
+      name: 'Magic Stars',
+      taxId: '123456789',
+      address: 'San José, Costa Rica',
+      phone: '+506 0000-0000',
+      email: 'info@magicstars.com',
+      isActive: true,
+      createdAt: '2024-01-01T08:00:00Z',
+      updatedAt: '2024-01-01T08:00:00Z',
+    },
+    isActive: true,
+    createdAt: '2024-01-01T08:00:00Z',
+  },
 ];
 
 // Funciones de autenticación simuladas
@@ -430,22 +531,36 @@ export const mockLogin = async (email: string, password: string): Promise<User |
   // Simular delay de red
   await new Promise(resolve => setTimeout(resolve, 1000));
   
+  console.log('=== INICIO DE AUTENTICACIÓN ===');
+  console.log('Email recibido:', email);
+  console.log('Contraseña recibida:', password ? 'Sí' : 'No');
+  console.log('Total de usuarios disponibles:', mockMessengers.length);
+  
   // Buscar usuario por email
   const user = mockMessengers.find(u => u.email === email);
   
-  console.log('Buscando usuario con email:', email);
   console.log('Usuario encontrado:', user ? 'Sí' : 'No');
-  console.log('Contraseña recibida:', password);
+  if (user) {
+    console.log('Detalles del usuario encontrado:');
+    console.log('- ID:', user.id);
+    console.log('- Nombre:', user.name);
+    console.log('- Email:', user.email);
+    console.log('- Rol:', user.role);
+    console.log('- Activo:', user.isActive);
+  }
   
   // Aceptar cualquier contraseña no vacía para simplificar el testing
   if (user && password && password.trim() !== '') {
-    console.log('Login exitoso para:', user.name);
+    console.log('✅ Login exitoso para:', user.name, 'con rol:', user.role);
     // Simular token de autenticación
-    localStorage.setItem('auth_token', 'mock_token_' + user.id);
+    localStorage.setItem('magicstars_token', 'mock_token_' + user.id);
+    console.log('Token guardado:', 'mock_token_' + user.id);
+    console.log('=== FIN DE AUTENTICACIÓN EXITOSA ===');
     return user;
   }
   
-  console.log('Login fallido - usuario no encontrado o contraseña vacía');
+  console.log('❌ Login fallido - usuario no encontrado o contraseña vacía');
+  console.log('=== FIN DE AUTENTICACIÓN FALLIDA ===');
   return null;
 };
 
@@ -454,16 +569,31 @@ export const mockLogout = async (): Promise<void> => {
   await new Promise(resolve => setTimeout(resolve, 500));
   
   // Remover token
-  localStorage.removeItem('auth_token');
+  localStorage.removeItem('magicstars_token');
 };
 
 export const mockGetUserByToken = async (token: string): Promise<User | null> => {
   // Simular delay de red
   await new Promise(resolve => setTimeout(resolve, 500));
   
+  console.log('=== VERIFICACIÓN DE TOKEN ===');
+  console.log('Token recibido:', token);
+  
   // Extraer ID del token simulado
   const userId = token.replace('mock_token_', '');
-  const user = mockMessengers.find(u => u.id === userId);
+  console.log('ID extraído del token:', userId);
   
+  const user = mockMessengers.find(u => u.id === userId);
+  console.log('Usuario encontrado por token:', user ? 'Sí' : 'No');
+  
+  if (user) {
+    console.log('Detalles del usuario restaurado:');
+    console.log('- ID:', user.id);
+    console.log('- Nombre:', user.name);
+    console.log('- Email:', user.email);
+    console.log('- Rol:', user.role);
+  }
+  
+  console.log('=== FIN DE VERIFICACIÓN DE TOKEN ===');
   return user || null;
 };

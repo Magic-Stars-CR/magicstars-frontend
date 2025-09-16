@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { mockApi } from '@/lib/mock-api';
-import { Order, MessengerStats, PedidoTest } from '@/lib/types';
+import { Order, MessengerStats, PedidoTest, OrderStatus } from '@/lib/types';
 import { getPedidos, getPedidosByDistrito, getPedidosByMensajero, updatePedido } from '@/lib/supabase-pedidos';
 import { StatsCard } from '@/components/dashboard/stats-card';
 import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
@@ -57,7 +57,7 @@ export default function MensajeroDashboard() {
   const [loading, setLoading] = useState(true);
   const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [activeFilter, setActiveFilter] = useState<'todos' | 'pendiente' | 'en_ruta' | 'entregado' | 'reagendado' | 'devolucion'>('todos');
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'date' | 'status' | 'amount'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -82,26 +82,56 @@ export default function MensajeroDashboard() {
       
       // Cargar pedidos de Supabase filtrados por mensajero
       const pedidosSupabase = await getPedidosByMensajero(user?.name || '');
-      console.log('Pedidos cargados para', user?.name, ':', pedidosSupabase.length);
+      console.log('=== LOG DE PEDIDOS DESPUÉS DE AUTENTICAR ===');
+      console.log('Usuario autenticado:', user?.name, '(', user?.email, ')');
+      console.log('Rol del usuario:', user?.role);
+      console.log('Total de pedidos cargados:', pedidosSupabase.length);
+      console.log('Pedidos completos:', pedidosSupabase);
+      console.log('=== FIN DEL LOG DE PEDIDOS ===');
       
       // Convertir pedidos de Supabase al formato de la aplicación
-      const ordersConverted: Order[] = pedidosSupabase.map((pedido, index) => ({
-        id: pedido.id_pedido,
-        customerName: `Cliente ${pedido.id_pedido}`, // Usar ID del pedido como identificador
-        customerPhone: '0000-0000', // Teléfono genérico
-        customerAddress: pedido.distrito, // Usar distrito como dirección
-        customerProvince: 'San José', // Provincia genérica
-        customerCanton: 'Central', // Cantón genérico
-        customerDistrict: pedido.distrito,
+      console.log('🔄 Iniciando conversión de pedidos...');
+      const ordersConverted: Order[] = pedidosSupabase.map((pedido, index) => {
+        try {
+          // Determinar el estado del pedido basado en los campos disponibles
+          let status: OrderStatus = 'pendiente';
+          if (pedido.mensajero_concretado) {
+            status = 'entregado';
+          } else if (pedido.mensajero_asignado) {
+            status = 'en_ruta';
+          }
+
+          // Usar la fecha de creación del pedido si está disponible, sino usar la fecha actual
+          const createdAt = pedido.fecha_creacion ? 
+            new Date(pedido.fecha_creacion).toISOString() : 
+            new Date().toISOString();
+
+          // Validar campos críticos
+          if (!pedido.id_pedido) {
+            console.warn(`⚠️ Pedido sin ID en índice ${index}:`, pedido);
+          }
+          if (pedido.valor_total === null || pedido.valor_total === undefined) {
+            console.warn(`⚠️ Pedido sin valor_total en índice ${index}:`, pedido);
+          }
+
+        return {
+          id: pedido.id_pedido || `pedido-${index}`,
+          customerName: pedido.cliente_nombre || `Cliente ${pedido.id_pedido || index}`,
+          customerPhone: pedido.cliente_telefono || '0000-0000',
+          customerAddress: pedido.direccion || pedido.distrito || 'Dirección no disponible',
+          customerProvince: pedido.provincia || 'San José',
+          customerCanton: pedido.canton || 'Central',
+          customerDistrict: pedido.distrito || 'Distrito no disponible',
         customerLocationLink: pedido.link_ubicacion || undefined,
         items: [], // Items vacíos por ahora
-        totalAmount: pedido.valor_total,
-        status: pedido.mensajero_concretado ? 'entregado' as const : 
-                pedido.mensajero_asignado ? 'en_ruta' as const : 'pendiente' as const,
-        paymentMethod: 'efectivo' as const,
+          totalAmount: pedido.valor_total ? parseFloat(pedido.valor_total.toString()) : 0,
+          status,
+          paymentMethod: (pedido.metodo_pago === 'SINPE' || pedido.metodo_pago === 'sinpe') ? 'sinpe' as const : 'efectivo' as const,
         origin: 'csv' as const,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+          createdAt,
+          updatedAt: createdAt,
+          scheduledDate: pedido.fecha_entrega || undefined,
+          deliveryDate: pedido.fecha_entrega || undefined,
         notes: pedido.notas || '',
         deliveryNotes: pedido.nota_asesor || '',
         assignedMessenger: pedido.mensajero_asignado ? { 
@@ -112,7 +142,33 @@ export default function MensajeroDashboard() {
           createdAt: new Date().toISOString(),
           isActive: true
         } : undefined,
-      }));
+        };
+        } catch (error) {
+          console.error(`❌ Error procesando pedido en índice ${index}:`, error);
+          console.error('Pedido problemático:', pedido);
+          // Devolver un pedido por defecto en caso de error
+          return {
+            id: `error-${index}`,
+            customerName: 'Error en pedido',
+            customerPhone: '0000-0000',
+            customerAddress: 'Error',
+            customerProvince: 'San José',
+            customerCanton: 'Central',
+            customerDistrict: 'Error',
+            items: [],
+            totalAmount: 0,
+            status: 'pendiente' as const,
+            paymentMethod: 'efectivo' as const,
+            origin: 'csv' as const,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            notes: 'Error al procesar pedido',
+            deliveryNotes: '',
+          };
+        }
+      });
+      
+      console.log('✅ Conversión completada. Pedidos convertidos:', ordersConverted.length);
 
       // Calcular estadísticas basadas en los datos de Supabase
       const totalOrders = ordersConverted.length;
@@ -148,8 +204,8 @@ export default function MensajeroDashboard() {
   // Filtrar y ordenar pedidos
   const filteredAndSortedOrders = allOrders
     .filter(order => {
-      // Filtro por estado
-      const statusMatch = statusFilter === 'all' || order.status === statusFilter;
+      // Filtro por estado usando el nuevo sistema de botones
+      const statusMatch = activeFilter === 'todos' || order.status === activeFilter;
       
       // Filtro por fecha
       const orderDate = new Date(order.createdAt);
@@ -268,6 +324,17 @@ export default function MensajeroDashboard() {
       currency: 'CRC',
       minimumFractionDigits: 0,
     }).format(amount);
+  };
+
+  const getFilterCount = (filter: string) => {
+    switch (filter) {
+      case 'pendiente': return allOrders.filter(o => o.status === 'pendiente').length;
+      case 'en_ruta': return allOrders.filter(o => o.status === 'en_ruta').length;
+      case 'entregado': return allOrders.filter(o => o.status === 'entregado').length;
+      case 'reagendado': return allOrders.filter(o => o.status === 'reagendado').length;
+      case 'devolucion': return allOrders.filter(o => o.status === 'devolucion').length;
+      default: return allOrders.length;
+    }
   };
 
   const formatDate = (date: string) => {
@@ -398,22 +465,113 @@ export default function MensajeroDashboard() {
             />
           </div>
 
-          {/* Filtros en grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los estados</SelectItem>
-                <SelectItem value="confirmado">Confirmado</SelectItem>
-                <SelectItem value="en_ruta">En Ruta</SelectItem>
-                <SelectItem value="entregado">Entregado</SelectItem>
-                <SelectItem value="devolucion">Devolución</SelectItem>
-                <SelectItem value="reagendado">Reagendado</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Filtros con botones similares a Mi Ruta Hoy */}
+          <div className="space-y-3">
+            {/* Todos - Ocupa las dos columnas */}
+            <Button
+              variant={activeFilter === 'todos' ? 'default' : 'outline'}
+              onClick={() => setActiveFilter('todos')}
+              className={`justify-start gap-2 h-12 w-full ${
+                activeFilter === 'todos' 
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' 
+                  : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
+              }`}
+            >
+              <Package className="w-4 h-4" />
+              <div className="flex flex-col items-start">
+                <span className="font-medium">Todos</span>
+                <span className="text-xs opacity-75">({getFilterCount('todos')})</span>
+              </div>
+            </Button>
+            
+            {/* Pendiente y En Ruta - Primera fila de dos columnas */}
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant={activeFilter === 'pendiente' ? 'default' : 'outline'}
+                onClick={() => setActiveFilter('pendiente')}
+                className={`justify-start gap-2 h-12 ${
+                  activeFilter === 'pendiente' 
+                    ? 'bg-orange-600 hover:bg-orange-700 text-white shadow-md' 
+                    : 'border-orange-200 hover:border-orange-300 hover:bg-orange-50'
+                }`}
+              >
+                <Clock className="w-4 h-4" />
+                <div className="flex flex-col items-start">
+                  <span className="font-medium">Pendiente</span>
+                  <span className="text-xs opacity-75">({getFilterCount('pendiente')})</span>
+                </div>
+              </Button>
+              <Button
+                variant={activeFilter === 'en_ruta' ? 'default' : 'outline'}
+                onClick={() => setActiveFilter('en_ruta')}
+                className={`justify-start gap-2 h-12 ${
+                  activeFilter === 'en_ruta' 
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' 
+                    : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
+                }`}
+              >
+                <Truck className="w-4 h-4" />
+                <div className="flex flex-col items-start">
+                  <span className="font-medium">En Ruta</span>
+                  <span className="text-xs opacity-75">({getFilterCount('en_ruta')})</span>
+                </div>
+              </Button>
+            </div>
+            
+            {/* Entregado y Reagendado - Segunda fila de dos columnas */}
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant={activeFilter === 'entregado' ? 'default' : 'outline'}
+                onClick={() => setActiveFilter('entregado')}
+                className={`justify-start gap-2 h-12 ${
+                  activeFilter === 'entregado' 
+                    ? 'bg-green-600 hover:bg-green-700 text-white shadow-md' 
+                    : 'border-green-200 hover:border-green-300 hover:bg-green-50'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <div className="flex flex-col items-start">
+                  <span className="font-medium">Entregado</span>
+                  <span className="text-xs opacity-75">({getFilterCount('entregado')})</span>
+                </div>
+              </Button>
+              <Button
+                variant={activeFilter === 'reagendado' ? 'default' : 'outline'}
+                onClick={() => setActiveFilter('reagendado')}
+                className={`justify-start gap-2 h-12 ${
+                  activeFilter === 'reagendado' 
+                    ? 'bg-orange-600 hover:bg-orange-700 text-white shadow-md' 
+                    : 'border-orange-200 hover:border-orange-300 hover:bg-orange-50'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <div className="flex flex-col items-start">
+                  <span className="font-medium">Reagendado</span>
+                  <span className="text-xs opacity-75">({getFilterCount('reagendado')})</span>
+                </div>
+              </Button>
+            </div>
+            
+            {/* Devolución - Ocupa las dos columnas */}
+            <Button
+              variant={activeFilter === 'devolucion' ? 'default' : 'outline'}
+              onClick={() => setActiveFilter('devolucion')}
+              className={`justify-start gap-2 h-12 w-full ${
+                activeFilter === 'devolucion' 
+                  ? 'bg-red-600 hover:bg-red-700 text-white shadow-md' 
+                  : 'border-red-200 hover:border-red-300 hover:bg-red-50'
+              }`}
+            >
+              <AlertTriangle className="w-4 h-4" />
+              <div className="flex flex-col items-start">
+                <span className="font-medium">Devolución</span>
+                <span className="text-xs opacity-75">({getFilterCount('devolucion')})</span>
+              </div>
+            </Button>
+          </div>
 
+          {/* Filtros adicionales en una fila separada */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select value={dateFilter} onValueChange={setDateFilter}>
               <SelectTrigger>
                 <SelectValue placeholder="Período" />
@@ -436,16 +594,6 @@ export default function MensajeroDashboard() {
                 <SelectItem value="amount">Monto</SelectItem>
               </SelectContent>
             </Select>
-
-            <Select value={sortOrder} onValueChange={(value: 'asc' | 'desc') => setSortOrder(value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Orden" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="desc">Más reciente</SelectItem>
-                <SelectItem value="asc">Más antiguo</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           {/* Resumen de resultados */}
@@ -453,13 +601,13 @@ export default function MensajeroDashboard() {
             <span>
               Mostrando {filteredAndSortedOrders.length} de {allOrders.length} pedidos
             </span>
-            {(searchTerm || statusFilter !== 'all' || dateFilter !== 'all') && (
+            {(searchTerm || activeFilter !== 'todos' || dateFilter !== 'all') && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
                   setSearchTerm('');
-                  setStatusFilter('all');
+                  setActiveFilter('todos');
                   setDateFilter('all');
                 }}
               >
@@ -477,18 +625,18 @@ export default function MensajeroDashboard() {
             <div className="text-center py-8 text-gray-500">
               <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>
-                {searchTerm || statusFilter !== 'all' || dateFilter !== 'all' 
+                {searchTerm || activeFilter !== 'todos' || dateFilter !== 'all' 
                   ? 'No se encontraron pedidos con esos criterios' 
                   : 'No hay pedidos en el historial'
                 }
               </p>
-              {(searchTerm || statusFilter !== 'all' || dateFilter !== 'all') && (
+              {(searchTerm || activeFilter !== 'todos' || dateFilter !== 'all') && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
                     setSearchTerm('');
-                    setStatusFilter('all');
+                    setActiveFilter('todos');
                     setDateFilter('all');
                   }}
                   className="mt-2"

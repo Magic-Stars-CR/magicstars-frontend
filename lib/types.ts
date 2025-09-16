@@ -611,13 +611,28 @@ export interface RouteStats {
 
 // Tipos para pedidos de Supabase (tabla pedidos_test)
 export interface PedidoTest {
+  idx: number;
   id_pedido: string;
+  fecha_creacion: string;
+  cliente_nombre: string;
+  cliente_telefono: string;
+  direccion: string;
+  provincia: string;
+  canton: string;
   distrito: string;
   valor_total: number;
   productos: string;
   link_ubicacion: string | null;
   nota_asesor: string | null;
   notas: string | null;
+  jornada_ruta: string;
+  tienda: string;
+  estado_pedido: string | null;
+  metodo_pago: string | null;
+  fecha_entrega: string | null;
+  comprobante_sinpe: string | null;
+  efectivo_2_pagos: string | null;
+  sinpe_2_pagos: string | null;
   mensajero_asignado: string | null;
   mensajero_concretado: string | null;
 }

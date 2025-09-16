@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { mockApi } from '@/lib/mock-api';
-import { Order } from '@/lib/types';
+import { Order, PedidoTest, OrderStatus } from '@/lib/types';
+import { getPedidosByMensajero, updatePedido } from '@/lib/supabase-pedidos';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -144,11 +145,95 @@ export default function MiRutaHoy() {
       setLoading(true);
       const today = new Date().toDateString();
       
-      // Obtener pedidos del día
-      const orders = await mockApi.getOrders({ 
-        assignedMessengerId: user?.id,
-        date: today
+      // Obtener pedidos de Supabase filtrados por mensajero
+      const pedidosSupabase = await getPedidosByMensajero(user?.name || '');
+      console.log('=== LOG DE PEDIDOS EN MI RUTA HOY ===');
+      console.log('Usuario autenticado:', user?.name, '(', user?.email, ')');
+      console.log('Rol del usuario:', user?.role);
+      console.log('Total de pedidos cargados:', pedidosSupabase.length);
+      console.log('Pedidos completos:', pedidosSupabase);
+      console.log('=== FIN DEL LOG DE PEDIDOS ===');
+      
+      // Convertir pedidos de Supabase al formato de la aplicación
+      console.log('🔄 Iniciando conversión de pedidos en Mi Ruta Hoy...');
+      const orders: Order[] = pedidosSupabase.map((pedido, index) => {
+        try {
+          // Determinar el estado del pedido basado en los campos disponibles
+          let status: OrderStatus = 'pendiente';
+          if (pedido.mensajero_concretado) {
+            status = 'entregado';
+          } else if (pedido.mensajero_asignado) {
+            status = 'en_ruta';
+          }
+
+          // Usar la fecha de creación del pedido si está disponible, sino usar la fecha actual
+          const createdAt = pedido.fecha_creacion ? 
+            new Date(pedido.fecha_creacion).toISOString() : 
+            new Date().toISOString();
+
+          // Validar campos críticos
+          if (!pedido.id_pedido) {
+            console.warn(`⚠️ Pedido sin ID en índice ${index}:`, pedido);
+          }
+          if (pedido.valor_total === null || pedido.valor_total === undefined) {
+            console.warn(`⚠️ Pedido sin valor_total en índice ${index}:`, pedido);
+          }
+
+        return {
+          id: pedido.id_pedido || `pedido-${index}`,
+          customerName: pedido.cliente_nombre || `Cliente ${pedido.id_pedido || index}`,
+          customerPhone: pedido.cliente_telefono || '0000-0000',
+          customerAddress: pedido.direccion || pedido.distrito || 'Dirección no disponible',
+          customerProvince: pedido.provincia || 'San José',
+          customerCanton: pedido.canton || 'Central',
+          customerDistrict: pedido.distrito || 'Distrito no disponible',
+          customerLocationLink: pedido.link_ubicacion || undefined,
+          items: [], // Items vacíos por ahora
+          totalAmount: pedido.valor_total ? parseFloat(pedido.valor_total.toString()) : 0,
+          status,
+          paymentMethod: (pedido.metodo_pago === 'SINPE' || pedido.metodo_pago === 'sinpe') ? 'sinpe' as const : 'efectivo' as const,
+          origin: 'csv' as const,
+          createdAt,
+          updatedAt: createdAt,
+          scheduledDate: pedido.fecha_entrega || undefined,
+          deliveryDate: pedido.fecha_entrega || undefined,
+          notes: pedido.notas || '',
+          deliveryNotes: pedido.nota_asesor || '',
+          assignedMessenger: pedido.mensajero_asignado ? { 
+            id: '1', 
+            name: pedido.mensajero_asignado, 
+            email: '', 
+            role: 'mensajero' as const,
+            createdAt: new Date().toISOString(),
+            isActive: true
+          } : undefined,
+        };
+        } catch (error) {
+          console.error(`❌ Error procesando pedido en índice ${index}:`, error);
+          console.error('Pedido problemático:', pedido);
+          // Devolver un pedido por defecto en caso de error
+          return {
+            id: `error-${index}`,
+            customerName: 'Error en pedido',
+            customerPhone: '0000-0000',
+            customerAddress: 'Error',
+            customerProvince: 'San José',
+            customerCanton: 'Central',
+            customerDistrict: 'Error',
+            items: [],
+            totalAmount: 0,
+            status: 'pendiente' as const,
+            paymentMethod: 'efectivo' as const,
+            origin: 'csv' as const,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            notes: 'Error al procesar pedido',
+            deliveryNotes: '',
+          };
+        }
       });
+      
+      console.log('✅ Conversión completada en Mi Ruta Hoy. Pedidos convertidos:', orders.length);
 
       // Simular gastos del día (en una implementación real, esto vendría de la API)
       const mockExpenses: Expense[] = [
