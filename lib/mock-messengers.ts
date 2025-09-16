@@ -433,12 +433,19 @@ export const mockLogin = async (email: string, password: string): Promise<User |
   // Buscar usuario por email
   const user = mockMessengers.find(u => u.email === email);
   
-  if (user && password === 'password') {
+  console.log('Buscando usuario con email:', email);
+  console.log('Usuario encontrado:', user ? 'Sí' : 'No');
+  console.log('Contraseña recibida:', password);
+  
+  // Aceptar cualquier contraseña no vacía para simplificar el testing
+  if (user && password && password.trim() !== '') {
+    console.log('Login exitoso para:', user.name);
     // Simular token de autenticación
     localStorage.setItem('auth_token', 'mock_token_' + user.id);
     return user;
   }
   
+  console.log('Login fallido - usuario no encontrado o contraseña vacía');
   return null;
 };
 
