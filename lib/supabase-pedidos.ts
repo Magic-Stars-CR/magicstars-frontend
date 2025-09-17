@@ -79,29 +79,29 @@ export const getPedidoById = async (id: string): Promise<PedidoTest | null> => {
   }
 };
 
-// Función para obtener pedidos por mensajero asignado
+// Función para obtener pedidos por mensajero concretado
 export const getPedidosByMensajero = async (mensajeroName: string): Promise<PedidoTest[]> => {
   try {
-    console.log('🔍 Buscando pedidos para mensajero:', mensajeroName);
+    console.log('🔍 Buscando pedidos para mensajero concretado:', mensajeroName);
     
     const { data, error } = await supabasePedidos
       .from('pedidos_test')
       .select('*')
-      .eq('mensajero_asignado', mensajeroName);
+      .eq('mensajero_concretado', mensajeroName);
 
-    console.log('📊 Resultado de la consulta por mensajero:');
+    console.log('📊 Resultado de la consulta por mensajero concretado:');
     console.log('Data:', data);
     console.log('Error:', error);
     console.log('Cantidad de pedidos encontrados:', data?.length || 0);
 
     if (error) {
-      console.error('❌ Error al obtener pedidos por mensajero:', error);
+      console.error('❌ Error al obtener pedidos por mensajero concretado:', error);
       throw error;
     }
 
-    // Si no hay pedidos asignados específicamente, devolver todos los pedidos para testing
+    // Si no hay pedidos concretados específicamente, devolver todos los pedidos para testing
     if (!data || data.length === 0) {
-      console.log('⚠️ No hay pedidos asignados específicamente a', mensajeroName);
+      console.log('⚠️ No hay pedidos concretados específicamente por', mensajeroName);
       console.log('🔄 Obteniendo todos los pedidos para testing...');
       
       const { data: allData, error: allError } = await supabasePedidos
@@ -121,6 +121,45 @@ export const getPedidosByMensajero = async (mensajeroName: string): Promise<Pedi
     return data || [];
   } catch (error) {
     console.error('❌ Error en getPedidosByMensajero:', error);
+    // En caso de error, devolver array vacío en lugar de lanzar excepción
+    return [];
+  }
+};
+
+// Función para obtener pedidos del día actual por mensajero concretado
+export const getPedidosDelDiaByMensajero = async (mensajeroName: string): Promise<PedidoTest[]> => {
+  try {
+    console.log('🔍 Buscando pedidos del día para mensajero concretado:', mensajeroName);
+    
+    // Obtener la fecha actual en formato YYYY-MM-DD
+    const today = new Date().toISOString().split('T')[0];
+    console.log('📅 Fecha actual:', today);
+    
+    const { data, error } = await supabasePedidos
+      .from('pedidos_test')
+      .select('*')
+      .eq('mensajero_concretado', mensajeroName)
+      .eq('fecha_creacion', today);
+
+    console.log('📊 Resultado de la consulta por mensajero concretado del día:');
+    console.log('Data:', data);
+    console.log('Error:', error);
+    console.log('Cantidad de pedidos del día encontrados:', data?.length || 0);
+
+    if (error) {
+      console.error('❌ Error al obtener pedidos del día por mensajero concretado:', error);
+      throw error;
+    }
+
+    // Si no hay pedidos del día, devolver array vacío
+    if (!data || data.length === 0) {
+      console.log('⚠️ No hay pedidos del día concretados por', mensajeroName);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('❌ Error en getPedidosDelDiaByMensajero:', error);
     // En caso de error, devolver array vacío en lugar de lanzar excepción
     return [];
   }

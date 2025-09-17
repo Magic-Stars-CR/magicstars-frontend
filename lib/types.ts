@@ -8,7 +8,7 @@ export type OrderStatus =
   | 'devolucion'
   | 'reagendado';
 
-export type PaymentMethod = 'efectivo' | 'sinpe';
+export type PaymentMethod = 'efectivo' | 'sinpe' | 'tarjeta';
 
 export type OrderOrigin = 'shopify' | 'manual' | 'csv';
 
@@ -92,7 +92,9 @@ export interface Order {
   
   // Información del pedido
   items: OrderItem[];
+  productos?: string; // Campo de productos del CSV
   totalAmount: number;
+  metodoPagoOriginal?: string; // Método de pago original del CSV
   status: OrderStatus;
   paymentMethod: PaymentMethod;
   origin: OrderOrigin;

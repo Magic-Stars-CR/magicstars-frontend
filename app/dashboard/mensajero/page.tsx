@@ -94,12 +94,37 @@ export default function MensajeroDashboard() {
       const ordersConverted: Order[] = pedidosSupabase.map((pedido, index) => {
         try {
           // Determinar el estado del pedido basado en los campos disponibles
-          let status: OrderStatus = 'pendiente';
-          if (pedido.mensajero_concretado) {
-            status = 'entregado';
-          } else if (pedido.mensajero_asignado) {
-            status = 'en_ruta';
-          }
+             let status: OrderStatus = 'pendiente';
+             
+             // Mapear estados específicos del CSV
+             if (pedido.estado_pedido) {
+               const estado = pedido.estado_pedido.toLowerCase();
+               if (estado === 'entregado') {
+                 status = 'entregado';
+               } else if (estado === 'devolucion') {
+                 status = 'devolucion';
+               } else if (estado === 'reagendado' || estado === 'reagendo') {
+                 status = 'reagendado';
+               } else if (estado === 'en_ruta' || estado === 'en ruta') {
+                 status = 'en_ruta';
+               } else if (estado === 'pendiente') {
+                 status = 'pendiente';
+               } else {
+                 // Para otros estados, usar lógica de mensajero
+                 if (pedido.mensajero_concretado) {
+                   status = 'entregado';
+                 } else if (pedido.mensajero_asignado) {
+                   status = 'en_ruta';
+                 }
+               }
+             } else {
+               // Si estado_pedido es null, vacío o empty, usar lógica de mensajero
+               if (pedido.mensajero_concretado) {
+                 status = 'entregado';
+               } else if (pedido.mensajero_asignado) {
+                 status = 'en_ruta';
+               }
+             }
 
           // Usar la fecha de creación del pedido si está disponible, sino usar la fecha actual
           const createdAt = pedido.fecha_creacion ? 
@@ -115,18 +140,27 @@ export default function MensajeroDashboard() {
           }
 
         return {
-          id: pedido.id_pedido || `pedido-${index}`,
+          id: pedido.id_pedido ? `${pedido.id_pedido}-${index}` : `pedido-${index}`,
           customerName: pedido.cliente_nombre || `Cliente ${pedido.id_pedido || index}`,
           customerPhone: pedido.cliente_telefono || '0000-0000',
           customerAddress: pedido.direccion || pedido.distrito || 'Dirección no disponible',
           customerProvince: pedido.provincia || 'San José',
           customerCanton: pedido.canton || 'Central',
           customerDistrict: pedido.distrito || 'Distrito no disponible',
-        customerLocationLink: pedido.link_ubicacion || undefined,
-        items: [], // Items vacíos por ahora
+          customerLocationLink: pedido.link_ubicacion || undefined,
+          items: [], // Items vacíos por ahora
+          productos: pedido.productos || 'Productos no especificados',
           totalAmount: pedido.valor_total ? parseFloat(pedido.valor_total.toString()) : 0,
           status,
-          paymentMethod: (pedido.metodo_pago === 'SINPE' || pedido.metodo_pago === 'sinpe') ? 'sinpe' as const : 'efectivo' as const,
+          paymentMethod: (() => {
+            const metodo = pedido.metodo_pago?.toLowerCase();
+            if (metodo === 'sinpe') return 'sinpe' as const;
+            if (metodo === 'tarjeta') return 'tarjeta' as const;
+            if (metodo === 'cambio') return 'efectivo' as const; // CAMBIO se trata como efectivo
+            if (metodo === '2pagos' || metodo === '2 pagos') return 'efectivo' as const; // 2PAGOS se trata como efectivo
+            return 'efectivo' as const;
+          })(),
+          metodoPagoOriginal: pedido.metodo_pago || 'No especificado',
         origin: 'csv' as const,
           createdAt,
           updatedAt: createdAt,
@@ -134,14 +168,14 @@ export default function MensajeroDashboard() {
           deliveryDate: pedido.fecha_entrega || undefined,
         notes: pedido.notas || '',
         deliveryNotes: pedido.nota_asesor || '',
-        assignedMessenger: pedido.mensajero_asignado ? { 
-          id: '1', 
-          name: pedido.mensajero_asignado, 
-          email: '', 
-          role: 'mensajero' as const,
-          createdAt: new Date().toISOString(),
-          isActive: true
-        } : undefined,
+               assignedMessenger: pedido.mensajero_concretado ? {
+                 id: '1',
+                 name: pedido.mensajero_concretado,
+                 email: '',
+                 role: 'mensajero' as const,
+                 createdAt: new Date().toISOString(),
+                 isActive: true
+               } : undefined,
         };
         } catch (error) {
           console.error(`❌ Error procesando pedido en índice ${index}:`, error);
@@ -669,12 +703,18 @@ export default function MensajeroDashboard() {
                         <span>{order.customerName}</span>
                       </div>
                       <div className="flex items-center gap-2 text-sm">
-                        <MapPin className="w-4 h-4 text-gray-500" />
-                        <span className="truncate">{order.deliveryAddress}</span>
+                        <Package className="w-4 h-4 text-gray-500" />
+                        <span className="truncate">{order.productos || 'No especificados'}</span>
                       </div>
                       <div className="flex items-center gap-2 text-sm">
                         <DollarSign className="w-4 h-4 text-gray-500" />
                         <span className="font-semibold">{formatCurrency(order.totalAmount)}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <CreditCard className="w-4 h-4 text-gray-500" />
+                        <span className="text-gray-600 capitalize">
+                          {order.metodoPagoOriginal || 'No especificado'}
+                        </span>
                       </div>
                       <div className="flex items-center gap-2 text-sm">
                         <Clock className="w-4 h-4 text-gray-500" />

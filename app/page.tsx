@@ -13,8 +13,15 @@ export default function Home() {
     if (!loading) {
       if (user) {
         console.log('Usuario logueado:', user);
-        console.log('Redirigiendo a:', `/dashboard/${user.role}`);
-        router.push(`/dashboard/${user.role}`);
+        
+        // Redirección específica por rol
+        if (user.role === 'mensajero') {
+          console.log('Redirigiendo mensajero a Mi Ruta Hoy');
+          router.push('/dashboard/mensajero/mi-ruta-hoy');
+        } else {
+          console.log('Redirigiendo a:', `/dashboard/${user.role}`);
+          router.push(`/dashboard/${user.role}`);
+        }
       } else {
         console.log('No hay usuario, redirigiendo a login');
         router.push('/auth/login');
