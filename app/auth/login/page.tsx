@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import { useHydration } from '@/hooks/use-hydration';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,12 +12,35 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Star, Eye, EyeOff } from 'lucide-react';
 import Link from 'next/link';
 
+// Mover el array fuera del componente para evitar problemas de hidratación
+const demoUsers = [
+  { email: 'admin@magicstars.com', role: 'Administrador', password: 'Admin1234' },
+  { email: 'alex@magicstars.com', role: 'Mensajero - Alex', password: 'Alex1234' },
+  { email: 'andrey@magicstars.com', role: 'Mensajero - Andrey', password: 'Andrey5678' },
+  { email: 'anibal@magicstars.com', role: 'Mensajero - Anibal', password: 'Anibal9012' },
+  { email: 'anthony@magicstars.com', role: 'Mensajero - Anthony', password: 'Anthony3456' },
+  { email: 'gabriel@magicstars.com', role: 'Mensajero - Gabriel', password: 'Gabriel7890' },
+  { email: 'gerson@magicstars.com', role: 'Mensajero - Gerson', password: 'Gerson2468' },
+  { email: 'irving@magicstars.com', role: 'Mensajero - Irving', password: 'Irving1357' },
+  { email: 'javier@magicstars.com', role: 'Mensajero - Javier', password: 'Javier4680' },
+  { email: 'jose@magicstars.com', role: 'Mensajero - Jose', password: 'Jose8024' },
+  { email: 'josue@magicstars.com', role: 'Mensajero - Josue', password: 'Josue1593' },
+  { email: 'loria@magicstars.com', role: 'Mensajero - Loria', password: 'Loria7531' },
+  { email: 'luis@magicstars.com', role: 'Mensajero - Luis', password: 'Luis1234' },
+  { email: 'luisq@magicstars.com', role: 'Mensajero - LuisQ', password: 'LuisQ9642' },
+  { email: 'manuel@magicstars.com', role: 'Mensajero - Manuel', password: 'Manuel8520' },
+  { email: 'michael@magicstars.com', role: 'Mensajero - Michael', password: 'Michael7410' },
+  { email: 'pablo@magicstars.com', role: 'Mensajero - Pablo', password: 'Pablo9630' },
+  { email: 'pablonocturna@magicstars.com', role: 'Mensajero - PabloNocturna', password: 'PabloNocturna2580' },
+];
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const isHydrated = useHydration();
   const { login } = useAuth();
   const router = useRouter();
 
@@ -34,26 +58,6 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
-
-  const demoUsers = [
-    { email: 'admin@magicstars.com', role: 'Administrador', password: 'Admin1234' },
-    { email: 'alex@magicstars.com', role: 'Mensajero - Alex', password: 'Alex1234' },
-    { email: 'andrey@magicstars.com', role: 'Mensajero - Andrey', password: 'Andrey5678' },
-    { email: 'anibal@magicstars.com', role: 'Mensajero - Anibal', password: 'Anibal9012' },
-    { email: 'anthony@magicstars.com', role: 'Mensajero - Anthony', password: 'Anthony3456' },
-    { email: 'gabriel@magicstars.com', role: 'Mensajero - Gabriel', password: 'Gabriel7890' },
-    { email: 'gerson@magicstars.com', role: 'Mensajero - Gerson', password: 'Gerson2468' },
-    { email: 'irving@magicstars.com', role: 'Mensajero - Irving', password: 'Irving1357' },
-    { email: 'javier@magicstars.com', role: 'Mensajero - Javier', password: 'Javier4680' },
-    { email: 'jose@magicstars.com', role: 'Mensajero - Jose', password: 'Jose8024' },
-    { email: 'josue@magicstars.com', role: 'Mensajero - Josue', password: 'Josue1593' },
-    { email: 'loria@magicstars.com', role: 'Mensajero - Loria', password: 'Loria7531' },
-    { email: 'luisq@magicstars.com', role: 'Mensajero - LuisQ', password: 'LuisQ9642' },
-    { email: 'manuel@magicstars.com', role: 'Mensajero - Manuel', password: 'Manuel8520' },
-    { email: 'michael@magicstars.com', role: 'Mensajero - Michael', password: 'Michael7410' },
-    { email: 'pablo@magicstars.com', role: 'Mensajero - Pablo', password: 'Pablo9630' },
-    { email: 'pablonocturna@magicstars.com', role: 'Mensajero - PabloNocturna', password: 'PabloNocturna2580' },
-  ];
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-4">
@@ -148,33 +152,35 @@ export default function LoginPage() {
         </Card>
 
         {/* Demo Users */}
-        <Card className="shadow-lg border-0 bg-white/60 backdrop-blur">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Usuarios de Demostración</CardTitle>
-            <CardDescription className="text-xs">
-              Haz clic para usar las credenciales de mensajeros
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {demoUsers.map((user) => (
-              <Button
-                key={user.email}
-                variant="outline"
-                className="w-full justify-start text-xs h-auto py-2"
-                onClick={() => {
-                  setEmail(user.email);
-                  setPassword(user.password);
-                }}
-                disabled={loading}
-              >
-                <div className="text-left">
-                  <div className="font-medium">{user.role}</div>
-                  <div className="text-muted-foreground">{user.email}</div>
-                </div>
-              </Button>
-            ))}
-          </CardContent>
-        </Card>
+        {isHydrated && (
+          <Card className="shadow-lg border-0 bg-white/60 backdrop-blur">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Usuarios de Demostración</CardTitle>
+              <CardDescription className="text-xs">
+                Haz clic para usar las credenciales de mensajeros
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {demoUsers.map((user) => (
+                <Button
+                  key={user.email}
+                  variant="outline"
+                  className="w-full justify-start text-xs h-auto py-2"
+                  onClick={() => {
+                    setEmail(user.email);
+                    setPassword(user.password);
+                  }}
+                  disabled={loading}
+                >
+                  <div className="text-left">
+                    <div className="font-medium">{user.role}</div>
+                    <div className="text-muted-foreground">{user.email}</div>
+                  </div>
+                </Button>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

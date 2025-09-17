@@ -1,11 +1,11 @@
--- Script para insertar datos de prueba en la tabla pedidos_test
+-- Script para insertar datos de prueba en la tabla pedidos
 -- Ejecuta esto en el SQL Editor de Supabase
 
 -- Primero, verificar si ya hay datos
-SELECT COUNT(*) as total_antes FROM pedidos_test;
+SELECT COUNT(*) as total_antes FROM pedidos;
 
 -- Insertar datos de prueba
-INSERT INTO pedidos_test (id_pedido, distrito, valor_total, productos, link_ubicacion, nota_asesor, notas) VALUES
+INSERT INTO pedidos (id_pedido, distrito, valor_total, productos, link_ubicacion, nota_asesor, notas) VALUES
 ('PED-001', 'San José Centro', 25000.00, 'Producto A, Producto B', 'https://maps.google.com/ejemplo1', 'Cliente VIP', 'Entregar en horario de oficina'),
 ('PED-002', 'Escazú', 15000.00, 'Producto C', 'https://maps.google.com/ejemplo2', 'Llamar antes de entregar', NULL),
 ('PED-003', 'Cartago Centro', 30000.00, 'Producto D, Producto E, Producto F', 'https://maps.google.com/ejemplo3', NULL, 'Casa con portón azul'),
@@ -18,7 +18,7 @@ INSERT INTO pedidos_test (id_pedido, distrito, valor_total, productos, link_ubic
 ('PED-010', 'Cartago Centro', 19000.00, 'Producto P', 'https://maps.google.com/ejemplo10', NULL, 'Casa blanca');
 
 -- Verificar que se insertaron los datos
-SELECT COUNT(*) as total_despues FROM pedidos_test;
+SELECT COUNT(*) as total_despues FROM pedidos;
 
 -- Mostrar algunos registros para verificar
-SELECT * FROM pedidos_test LIMIT 5;
+SELECT * FROM pedidos LIMIT 5;

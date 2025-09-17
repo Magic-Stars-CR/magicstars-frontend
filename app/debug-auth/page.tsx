@@ -228,6 +228,41 @@ export default function DebugAuthPage() {
                   >
                     🎯 Probar Anthony Específicamente
                   </Button>
+                  <Button 
+                    onClick={() => testSpecificUser('luis@magicstars.com')} 
+                    variant="outline" 
+                    className="w-full"
+                  >
+                    🎯 Probar Luis Específicamente
+                  </Button>
+                  <Button 
+                    onClick={() => testSpecificUser('luisq@magicstars.com')} 
+                    variant="outline" 
+                    className="w-full"
+                  >
+                    🎯 Probar LuisQ Específicamente
+                  </Button>
+                  <Button 
+                    onClick={() => testSpecificUser('javier@magicstars.com')} 
+                    variant="outline" 
+                    className="w-full"
+                  >
+                    🎯 Probar Javier Específicamente
+                  </Button>
+                  <Button 
+                    onClick={() => testSpecificUser('gerson@magicstars.com')} 
+                    variant="outline" 
+                    className="w-full"
+                  >
+                    🎯 Probar Gerson Específicamente
+                  </Button>
+                  <Button 
+                    onClick={() => testSpecificUser('irving@magicstars.com')} 
+                    variant="outline" 
+                    className="w-full"
+                  >
+                    🎯 Probar Irving Específicamente
+                  </Button>
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
                   Abre la consola para ver los resultados de la prueba

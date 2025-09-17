@@ -611,7 +611,7 @@ export interface RouteStats {
   paymentPerMessenger: number;
 }
 
-// Tipos para pedidos de Supabase (tabla pedidos_test)
+// Tipos para pedidos de Supabase (tabla pedidos)
 export interface PedidoTest {
   idx: number;
   id_pedido: string;

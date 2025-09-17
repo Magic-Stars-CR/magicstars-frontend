@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User } from '@/lib/types';
 import { mockLogin, mockLogout, mockGetUserByToken } from '@/lib/mock-messengers';
+import { useHydration } from '@/hooks/use-hydration';
 
 interface AuthContextType {
   user: User | null;
@@ -16,8 +17,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const isHydrated = useHydration();
 
   useEffect(() => {
+    // Solo ejecutar después de la hidratación
+    if (!isHydrated) return;
+    
     // Verificar si hay una sesión guardada
     const checkStoredSession = async () => {
       console.log('Verificando sesión guardada...');
@@ -49,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     checkStoredSession();
-  }, []);
+  }, [isHydrated]);
 
   const login = async (email: string, password: string) => {
     try {
@@ -58,9 +63,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('Login exitoso, usuario:', user);
       
       if (user) {
-        // Guardar en localStorage
-        localStorage.setItem('magicstars_user', JSON.stringify(user));
-        localStorage.setItem('magicstars_token', 'mock_token_' + user.id);
+        // Solo guardar en localStorage si estamos en el cliente
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('magicstars_user', JSON.stringify(user));
+          localStorage.setItem('magicstars_token', 'mock_token_' + user.id);
+        }
         
         setUser(user);
         console.log('Usuario establecido en contexto');
@@ -76,15 +83,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     await mockLogout();
     
-    // Limpiar localStorage
-    localStorage.removeItem('magicstars_user');
-    localStorage.removeItem('magicstars_token');
+    // Solo limpiar localStorage si estamos en el cliente
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('magicstars_user');
+      localStorage.removeItem('magicstars_token');
+    }
     
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, loading: loading || !isHydrated }}>
       {children}
     </AuthContext.Provider>
   );

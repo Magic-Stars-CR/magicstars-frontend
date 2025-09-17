@@ -1,12 +1,12 @@
--- Script para diagnosticar problemas con la tabla pedidos_test
+-- Script para diagnosticar problemas con la tabla pedidos
 -- Ejecuta esto en el SQL Editor de Supabase
 
 -- 1. Verificar que la tabla existe
 SELECT 
-  'Tabla pedidos_test existe' as status,
+  'Tabla pedidos existe' as status,
   COUNT(*) as total_tables
 FROM information_schema.tables 
-WHERE table_name = 'pedidos_test' 
+WHERE table_name = 'pedidos' 
 AND table_schema = 'public';
 
 -- 2. Ver la estructura de la tabla
@@ -16,7 +16,7 @@ SELECT
   is_nullable,
   column_default
 FROM information_schema.columns 
-WHERE table_name = 'pedidos_test' 
+WHERE table_name = 'pedidos' 
 AND table_schema = 'public'
 ORDER BY ordinal_position;
 
@@ -24,13 +24,13 @@ ORDER BY ordinal_position;
 SELECT 
   'Total de registros' as info,
   COUNT(*) as total_pedidos
-FROM pedidos_test;
+FROM pedidos;
 
 -- 4. Ver algunos registros de ejemplo (primeros 5)
 SELECT 
   'Registros de ejemplo' as info,
   *
-FROM pedidos_test 
+FROM pedidos 
 LIMIT 5;
 
 -- 5. Verificar si hay políticas RLS que bloqueen el acceso
@@ -43,7 +43,7 @@ SELECT
   cmd,
   qual
 FROM pg_policies 
-WHERE tablename = 'pedidos_test';
+WHERE tablename = 'pedidos';
 
 -- 6. Verificar si RLS está habilitado
 SELECT 
@@ -51,5 +51,5 @@ SELECT
   tablename,
   rowsecurity as rls_enabled
 FROM pg_tables 
-WHERE tablename = 'pedidos_test' 
+WHERE tablename = 'pedidos' 
 AND schemaname = 'public';

@@ -16,6 +16,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
 import {
   Package,
   CheckCircle,
@@ -59,6 +62,7 @@ export default function MensajeroDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<'todos' | 'pendiente' | 'en_ruta' | 'entregado' | 'reagendado' | 'devolucion'>('todos');
   const [dateFilter, setDateFilter] = useState<string>('all');
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [sortBy, setSortBy] = useState<'date' | 'status' | 'amount'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -245,23 +249,29 @@ export default function MensajeroDashboard() {
       const orderDate = new Date(order.createdAt);
       const now = new Date();
       let dateMatch = true;
-      
-      switch (dateFilter) {
-        case 'today':
-          dateMatch = orderDate.toDateString() === now.toDateString();
-          break;
-        case 'week':
-          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          dateMatch = orderDate >= weekAgo;
-          break;
-        case 'month':
-          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          dateMatch = orderDate >= monthAgo;
-          break;
-        case 'all':
-        default:
-          dateMatch = true;
-          break;
+
+      // Si hay una fecha específica seleccionada, usar esa
+      if (selectedDate) {
+        dateMatch = orderDate.toDateString() === selectedDate.toDateString();
+      } else {
+        // Usar el filtro de período si no hay fecha específica
+        switch (dateFilter) {
+          case 'today':
+            dateMatch = orderDate.toDateString() === now.toDateString();
+            break;
+          case 'week':
+            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            dateMatch = orderDate >= weekAgo;
+            break;
+          case 'month':
+            const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            dateMatch = orderDate >= monthAgo;
+            break;
+          case 'all':
+          default:
+            dateMatch = true;
+            break;
+        }
       }
       
       // Búsqueda por texto
@@ -369,6 +379,11 @@ export default function MensajeroDashboard() {
       case 'devolucion': return allOrders.filter(o => o.status === 'devolucion').length;
       default: return allOrders.length;
     }
+  };
+
+  const clearDateFilter = () => {
+    setSelectedDate(undefined);
+    setDateFilter('all');
   };
 
   const formatDate = (date: string) => {
@@ -606,17 +621,67 @@ export default function MensajeroDashboard() {
 
           {/* Filtros adicionales en una fila separada */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Select value={dateFilter} onValueChange={setDateFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Período" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todo el historial</SelectItem>
-                <SelectItem value="today">Hoy</SelectItem>
-                <SelectItem value="week">Esta semana</SelectItem>
-                <SelectItem value="month">Este mes</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Selector de fecha con calendario */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Filtrar por fecha</Label>
+              <div className="flex gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !selectedDate && "text-muted-foreground"
+                      )}
+                    >
+                      <Calendar className="mr-2 h-4 w-4" />
+                      {selectedDate ? (
+                        selectedDate.toLocaleDateString('es-CR', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })
+                      ) : (
+                        "Seleccionar fecha"
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={setSelectedDate}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                {selectedDate && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={clearDateFilter}
+                    className="shrink-0"
+                  >
+                    <XCircle className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Selector de período (solo cuando no hay fecha específica) */}
+            {!selectedDate && (
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Período" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todo el historial</SelectItem>
+                  <SelectItem value="today">Hoy</SelectItem>
+                  <SelectItem value="week">Esta semana</SelectItem>
+                  <SelectItem value="month">Este mes</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
 
             <Select value={sortBy} onValueChange={(value: 'date' | 'status' | 'amount') => setSortBy(value)}>
               <SelectTrigger>
@@ -635,7 +700,7 @@ export default function MensajeroDashboard() {
             <span>
               Mostrando {filteredAndSortedOrders.length} de {allOrders.length} pedidos
             </span>
-            {(searchTerm || activeFilter !== 'todos' || dateFilter !== 'all') && (
+            {(searchTerm || activeFilter !== 'todos' || dateFilter !== 'all' || selectedDate) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -643,8 +708,10 @@ export default function MensajeroDashboard() {
                   setSearchTerm('');
                   setActiveFilter('todos');
                   setDateFilter('all');
+                  setSelectedDate(undefined);
                 }}
               >
+                <XCircle className="w-4 h-4 mr-2" />
                 Limpiar filtros
               </Button>
             )}
@@ -664,7 +731,7 @@ export default function MensajeroDashboard() {
                   : 'No hay pedidos en el historial'
                 }
               </p>
-              {(searchTerm || activeFilter !== 'todos' || dateFilter !== 'all') && (
+              {(searchTerm || activeFilter !== 'todos' || dateFilter !== 'all' || selectedDate) && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -672,9 +739,11 @@ export default function MensajeroDashboard() {
                     setSearchTerm('');
                     setActiveFilter('todos');
                     setDateFilter('all');
+                    setSelectedDate(undefined);
                   }}
                   className="mt-2"
                 >
+                  <XCircle className="w-4 h-4 mr-2" />
                   Limpiar filtros
                 </Button>
               )}

@@ -10,7 +10,7 @@ export const getPedidos = async (limit?: number): Promise<PedidoTest[]> => {
     console.log('🔍 Iniciando consulta a Supabase...');
     
     let query = supabasePedidos
-      .from('pedidos_test')
+      .from('pedidos')
       .select('*')
       .order('id_pedido', { ascending: false }); // Ordenar por ID descendente (más recientes primero)
     
@@ -42,7 +42,7 @@ export const getPedidos = async (limit?: number): Promise<PedidoTest[]> => {
 export const getPedidosByDistrito = async (distrito: string): Promise<PedidoTest[]> => {
   try {
     const { data, error } = await supabasePedidos
-      .from('pedidos_test')
+      .from('pedidos')
       .select('*')
       .eq('distrito', distrito);
 
@@ -62,7 +62,7 @@ export const getPedidosByDistrito = async (distrito: string): Promise<PedidoTest
 export const getPedidoById = async (id: string): Promise<PedidoTest | null> => {
   try {
     const { data, error } = await supabasePedidos
-      .from('pedidos_test')
+      .from('pedidos')
       .select('*')
       .eq('id_pedido', id)
       .single();
@@ -85,7 +85,7 @@ export const getPedidosByMensajero = async (mensajeroName: string): Promise<Pedi
     console.log('🔍 Buscando pedidos para mensajero concretado:', mensajeroName);
     
     const { data, error } = await supabasePedidos
-      .from('pedidos_test')
+      .from('pedidos')
       .select('*')
       .eq('mensajero_concretado', mensajeroName);
 
@@ -105,7 +105,7 @@ export const getPedidosByMensajero = async (mensajeroName: string): Promise<Pedi
       console.log('🔄 Obteniendo todos los pedidos para testing...');
       
       const { data: allData, error: allError } = await supabasePedidos
-        .from('pedidos_test')
+        .from('pedidos')
         .select('*')
         .limit(10); // Limitar a 10 pedidos para testing
       
@@ -136,7 +136,7 @@ export const getPedidosDelDiaByMensajero = async (mensajeroName: string): Promis
     console.log('📅 Fecha actual:', today);
     
     const { data, error } = await supabasePedidos
-      .from('pedidos_test')
+      .from('pedidos')
       .select('*')
       .eq('mensajero_concretado', mensajeroName)
       .eq('fecha_creacion', today);
@@ -169,7 +169,7 @@ export const getPedidosDelDiaByMensajero = async (mensajeroName: string): Promis
 export const updatePedido = async (id: string, updates: Partial<PedidoTest>): Promise<boolean> => {
   try {
     const { error } = await supabasePedidos
-      .from('pedidos_test')
+      .from('pedidos')
       .update(updates)
       .eq('id_pedido', id);
 

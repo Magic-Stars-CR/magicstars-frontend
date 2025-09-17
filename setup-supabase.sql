@@ -3,8 +3,8 @@
 -- Ejecuta esto en el SQL Editor de Supabase
 -- =============================================
 
--- 1. Crear la tabla pedidos_test
-CREATE TABLE IF NOT EXISTS pedidos_test (
+-- 1. Crear la tabla pedidos
+CREATE TABLE IF NOT EXISTS pedidos (
   id_pedido TEXT PRIMARY KEY,
   distrito TEXT NOT NULL,
   valor_total DECIMAL(10,2) NOT NULL,
@@ -19,10 +19,10 @@ CREATE TABLE IF NOT EXISTS pedidos_test (
 );
 
 -- 2. Habilitar RLS (Row Level Security)
-ALTER TABLE pedidos_test ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pedidos ENABLE ROW LEVEL SECURITY;
 
 -- 3. Crear políticas de seguridad (permitir lectura y escritura para todos por ahora)
-CREATE POLICY "Allow all operations on pedidos_test" ON pedidos_test
+CREATE POLICY "Allow all operations on pedidos" ON pedidos
   FOR ALL USING (true);
 
 -- 4. Crear función para actualizar updated_at automáticamente
@@ -35,14 +35,14 @@ END;
 $$ language 'plpgsql';
 
 -- 5. Crear trigger para actualizar updated_at
-DROP TRIGGER IF EXISTS update_pedidos_test_updated_at ON pedidos_test;
-CREATE TRIGGER update_pedidos_test_updated_at
-    BEFORE UPDATE ON pedidos_test
+DROP TRIGGER IF EXISTS update_pedidos_updated_at ON pedidos;
+CREATE TRIGGER update_pedidos_updated_at
+    BEFORE UPDATE ON pedidos
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
 -- 6. Insertar datos de prueba
-INSERT INTO pedidos_test (id_pedido, distrito, valor_total, productos, link_ubicacion, nota_asesor, notas) VALUES
+INSERT INTO pedidos (id_pedido, distrito, valor_total, productos, link_ubicacion, nota_asesor, notas) VALUES
 ('PED-001', 'San José Centro', 25000.00, 'Producto A, Producto B', 'https://maps.google.com/ejemplo1', 'Cliente VIP', 'Entregar en horario de oficina'),
 ('PED-002', 'Escazú', 15000.00, 'Producto C', 'https://maps.google.com/ejemplo2', 'Llamar antes de entregar', NULL),
 ('PED-003', 'Cartago Centro', 30000.00, 'Producto D, Producto E, Producto F', 'https://maps.google.com/ejemplo3', NULL, 'Casa con portón azul'),
@@ -51,6 +51,6 @@ INSERT INTO pedidos_test (id_pedido, distrito, valor_total, productos, link_ubic
 
 -- 7. Verificar que la tabla se creó correctamente
 SELECT 
-  'Tabla pedidos_test creada correctamente' as status,
+  'Tabla pedidos creada correctamente' as status,
   COUNT(*) as total_pedidos
-FROM pedidos_test;
+FROM pedidos;
