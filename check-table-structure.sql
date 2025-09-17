@@ -1,4 +1,4 @@
--- Script para verificar la estructura de la tabla pedidos existente
+-- Script para verificar la estructura de la tabla pedidos_test existente
 -- Ejecuta esto en el SQL Editor de Supabase
 
 -- 1. Ver la estructura de la tabla
@@ -8,12 +8,12 @@ SELECT
   is_nullable,
   column_default
 FROM information_schema.columns 
-WHERE table_name = 'pedidos' 
+WHERE table_name = 'pedidos_test' 
 AND table_schema = 'public'
 ORDER BY ordinal_position;
 
 -- 2. Ver algunos registros de ejemplo
-SELECT * FROM pedidos LIMIT 5;
+SELECT * FROM pedidos_test LIMIT 5;
 
 -- 3. Contar total de registros
-SELECT COUNT(*) as total_pedidos FROM pedidos;
+SELECT COUNT(*) as total_pedidos_test FROM pedidos_test;

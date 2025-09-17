@@ -6,12 +6,12 @@ SELECT
   'Estado actual de RLS' as info,
   rowsecurity as rls_enabled
 FROM pg_tables 
-WHERE table_name = 'pedidos' 
+WHERE table_name = 'pedidos_test' 
 AND table_schema = 'public';
 
 -- 2. Crear una política que permita todas las operaciones para todos los usuarios
 -- (Esto es para desarrollo - en producción deberías ser más restrictivo)
-CREATE POLICY "Allow all operations on pedidos" ON pedidos
+CREATE POLICY "Allow all operations on pedidos_test" ON pedidos_test
   FOR ALL USING (true) WITH CHECK (true);
 
 -- 3. Verificar que la política se creó correctamente
@@ -22,13 +22,13 @@ SELECT
   cmd,
   qual
 FROM pg_policies 
-WHERE tablename = 'pedidos';
+WHERE tablename = 'pedidos_test';
 
 -- 4. Probar que ahora puedes acceder a los datos
 SELECT 
   'Prueba de acceso' as info,
-  COUNT(*) as total_pedidos
-FROM pedidos;
+  COUNT(*) as total_pedidos_test
+FROM pedidos_test;
 
 -- 5. Mostrar algunos registros
 SELECT 
@@ -36,5 +36,5 @@ SELECT
   id_pedido,
   distrito,
   valor_total
-FROM pedidos 
+FROM pedidos_test 
 LIMIT 3;

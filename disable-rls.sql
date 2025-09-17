@@ -7,11 +7,11 @@ SELECT
   table_name,
   row_security as rls_enabled
 FROM information_schema.tables 
-WHERE table_name = 'pedidos' 
+WHERE table_name = 'pedidos_test' 
 AND table_schema = 'public';
 
--- 2. Desactivar RLS en la tabla pedidos
-ALTER TABLE pedidos DISABLE ROW LEVEL SECURITY;
+-- 2. Desactivar RLS en la tabla pedidos_test
+ALTER TABLE pedidos_test DISABLE ROW LEVEL SECURITY;
 
 -- 3. Verificar que RLS se desactivó
 SELECT 
@@ -19,14 +19,14 @@ SELECT
   table_name,
   row_security as rls_enabled
 FROM information_schema.tables 
-WHERE table_name = 'pedidos' 
+WHERE table_name = 'pedidos_test' 
 AND table_schema = 'public';
 
 -- 4. Probar que ahora puedes acceder a los datos
 SELECT 
   'Prueba de acceso' as info,
-  COUNT(*) as total_pedidos
-FROM pedidos;
+  COUNT(*) as total_pedidos_test
+FROM pedidos_test;
 
 -- 5. Mostrar algunos registros
 SELECT 
@@ -34,5 +34,5 @@ SELECT
   id_pedido,
   distrito,
   valor_total
-FROM pedidos 
+FROM pedidos_test 
 LIMIT 5;
