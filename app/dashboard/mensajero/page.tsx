@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { mockApi } from '@/lib/mock-api';
 import { Order, MessengerStats, PedidoTest, OrderStatus } from '@/lib/types';
-import { getPedidos, getPedidosByDistrito, getPedidosByMensajero, updatePedido } from '@/lib/supabase-pedidos';
+import { getPedidos, getPedidosByDistrito, getPedidosByMensajero, updatePedido, debugMensajeros, testBusquedaAnibal, buscarPedidosEspecificos } from '@/lib/supabase-pedidos';
 import { StatsCard } from '@/components/dashboard/stats-card';
 import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import {
   Package,
@@ -48,7 +49,8 @@ import {
   Route,
   CreditCard,
   FileText,
-  Upload
+  Upload,
+  ChevronDown
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -63,8 +65,12 @@ export default function MensajeroDashboard() {
   const [activeFilter, setActiveFilter] = useState<'todos' | 'pendiente' | 'en_ruta' | 'entregado' | 'reagendado' | 'devolucion'>('todos');
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({ from: undefined, to: undefined });
+  const [dayOfWeekFilter, setDayOfWeekFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'date' | 'status' | 'amount'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [isDateFiltersOpen, setIsDateFiltersOpen] = useState(false);
+  const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [newStatus, setNewStatus] = useState<string>('');
@@ -84,6 +90,15 @@ export default function MensajeroDashboard() {
       setLoading(true);
       console.log('Cargando pedidos de Supabase para mensajero:', user?.name);
       
+      // Debug: Mostrar nombres de mensajeros en la base de datos
+      await debugMensajeros();
+      
+      // Prueba específica para "Anibal"
+      await testBusquedaAnibal();
+      
+      // Buscar pedidos específicos VT5851 y WS3057
+      await buscarPedidosEspecificos();
+      
       // Cargar pedidos de Supabase filtrados por mensajero
       const pedidosSupabase = await getPedidosByMensajero(user?.name || '');
       console.log('=== LOG DE PEDIDOS DESPUÉS DE AUTENTICAR ===');
@@ -95,6 +110,13 @@ export default function MensajeroDashboard() {
       
       // Convertir pedidos de Supabase al formato de la aplicación
       console.log('🔄 Iniciando conversión de pedidos...');
+      
+      // Debug específico para VT5851 y WS3057
+      const pedidosEspecificos = pedidosSupabase.filter(p => 
+        p.id_pedido === 'VT5851' || p.id_pedido === 'WS3057'
+      );
+      console.log('🎯 PEDIDOS ESPECÍFICOS ENCONTRADOS EN SUPABASE:', pedidosEspecificos);
+      
       const ordersConverted: Order[] = pedidosSupabase.map((pedido, index) => {
         try {
           // Determinar el estado del pedido basado en los campos disponibles
@@ -134,6 +156,16 @@ export default function MensajeroDashboard() {
           const createdAt = pedido.fecha_creacion ? 
             new Date(pedido.fecha_creacion).toISOString() : 
             new Date().toISOString();
+
+          // Debug específico para fechas de VT5851 y WS3057
+          if (pedido.id_pedido === 'VT5851' || pedido.id_pedido === 'WS3057') {
+            console.log('🕐 DEBUG FECHA para', pedido.id_pedido, {
+              fecha_creacion_original: pedido.fecha_creacion,
+              fecha_creacion_parsed: new Date(pedido.fecha_creacion),
+              fecha_creacion_iso: new Date(pedido.fecha_creacion).toISOString(),
+              createdAt_final: createdAt
+            });
+          }
 
           // Validar campos críticos
           if (!pedido.id_pedido) {
@@ -207,6 +239,13 @@ export default function MensajeroDashboard() {
       });
       
       console.log('✅ Conversión completada. Pedidos convertidos:', ordersConverted.length);
+      
+      // Debug específico para VT5851 y WS3057 después de la conversión
+      const ordersEspecificos = ordersConverted.filter(o => 
+        o.id.includes('VT5851') || o.id.includes('WS3057')
+      );
+      console.log('🎯 PEDIDOS ESPECÍFICOS DESPUÉS DE CONVERSIÓN:', ordersEspecificos);
+      console.log('🎯 IDs de pedidos específicos:', ordersEspecificos.map(o => o.id));
 
       // Calcular estadísticas basadas en los datos de Supabase
       const totalOrders = ordersConverted.length;
@@ -242,6 +281,18 @@ export default function MensajeroDashboard() {
   // Filtrar y ordenar pedidos
   const filteredAndSortedOrders = allOrders
     .filter(order => {
+      // Debug específico para VT5851 y WS3057
+      if (order.id.includes('VT5851') || order.id.includes('WS3057')) {
+        console.log('🔍 DEBUGGING PEDIDO ESPECÍFICO:', order.id, {
+          status: order.status,
+          activeFilter,
+          createdAt: order.createdAt,
+          selectedDate,
+          dateRange,
+          dateFilter
+        });
+      }
+      
       // Filtro por estado usando el nuevo sistema de botones
       const statusMatch = activeFilter === 'todos' || order.status === activeFilter;
       
@@ -250,22 +301,43 @@ export default function MensajeroDashboard() {
       const now = new Date();
       let dateMatch = true;
 
-      // Si hay una fecha específica seleccionada, usar esa
-      if (selectedDate) {
+      // Si hay un rango de fechas seleccionado, usar ese
+      if (dateRange.from && dateRange.to) {
+        dateMatch = orderDate >= dateRange.from && orderDate <= dateRange.to;
+      } else if (dateRange.from) {
+        dateMatch = orderDate >= dateRange.from;
+      } else if (dateRange.to) {
+        dateMatch = orderDate <= dateRange.to;
+      } else if (selectedDate) {
+        // Si hay una fecha específica seleccionada, usar esa
         dateMatch = orderDate.toDateString() === selectedDate.toDateString();
       } else {
-        // Usar el filtro de período si no hay fecha específica
+        // Usar el filtro de período si no hay fechas específicas
         switch (dateFilter) {
           case 'today':
             dateMatch = orderDate.toDateString() === now.toDateString();
+            break;
+          case 'yesterday':
+            const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            dateMatch = orderDate.toDateString() === yesterday.toDateString();
             break;
           case 'week':
             const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
             dateMatch = orderDate >= weekAgo;
             break;
+          case 'lastWeek':
+            const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+            const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            dateMatch = orderDate >= twoWeeksAgo && orderDate < oneWeekAgo;
+            break;
           case 'month':
             const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
             dateMatch = orderDate >= monthAgo;
+            break;
+          case 'lastMonth':
+            const twoMonthsAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+            const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            dateMatch = orderDate >= twoMonthsAgo && orderDate < oneMonthAgo;
             break;
           case 'all':
           default:
@@ -274,6 +346,37 @@ export default function MensajeroDashboard() {
         }
       }
       
+      // Filtro por día de la semana
+      let dayMatch = true;
+      if (dayOfWeekFilter !== 'all') {
+        const orderDay = orderDate.getDay(); // 0 = Domingo, 1 = Lunes, etc.
+        const dayMap: { [key: string]: number } = {
+          'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 
+          'thursday': 4, 'friday': 5, 'saturday': 6
+        };
+        dayMatch = orderDay === dayMap[dayOfWeekFilter];
+      }
+      
+      // Debug específico para VT5851 y WS3057 - resultado de filtros
+      if (order.id.includes('VT5851') || order.id.includes('WS3057')) {
+        const searchMatch = searchTerm === '' || 
+          order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (order.deliveryAddress && order.deliveryAddress.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          order.customerPhone.includes(searchTerm);
+        
+        const finalResult = statusMatch && dateMatch && dayMatch && searchMatch;
+        
+        console.log('🔍 RESULTADO DE FILTROS PARA:', order.id, {
+          statusMatch,
+          dateMatch,
+          dayMatch,
+          searchMatch,
+          finalResult
+        });
+      }
+      
+      
       // Búsqueda por texto
       const searchMatch = searchTerm === '' || 
         order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -281,7 +384,7 @@ export default function MensajeroDashboard() {
         (order.deliveryAddress && order.deliveryAddress.toLowerCase().includes(searchTerm.toLowerCase())) ||
         order.customerPhone.includes(searchTerm);
       
-      return statusMatch && dateMatch && searchMatch;
+      return statusMatch && dateMatch && dayMatch && searchMatch;
     })
     .sort((a, b) => {
       let comparison = 0;
@@ -300,6 +403,14 @@ export default function MensajeroDashboard() {
       
       return sortOrder === 'asc' ? comparison : -comparison;
     });
+
+  // Debug específico para VT5851 y WS3057 después del filtrado
+  const pedidosFiltradosEspecificos = filteredAndSortedOrders.filter(o => 
+    o.id.includes('VT5851') || o.id.includes('WS3057')
+  );
+  console.log('🎯 PEDIDOS ESPECÍFICOS DESPUÉS DEL FILTRADO:', pedidosFiltradosEspecificos);
+  console.log('🎯 IDs de pedidos específicos filtrados:', pedidosFiltradosEspecificos.map(o => o.id));
+  console.log('🎯 TOTAL PEDIDOS FILTRADOS:', filteredAndSortedOrders.length);
 
   const updateOrderStatus = async (orderId: string, status: 'en_ruta' | 'entregado' | 'devolucion' | 'reagendado') => {
     try {
@@ -383,17 +494,82 @@ export default function MensajeroDashboard() {
 
   const clearDateFilter = () => {
     setSelectedDate(undefined);
+    setDateRange({ from: undefined, to: undefined });
     setDateFilter('all');
+    setDayOfWeekFilter('all');
   };
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('es-CR', {
+    // Si la fecha no tiene hora (solo fecha), agregar hora local para evitar problemas de zona horaria
+    const dateObj = new Date(date);
+    
+    // Si la fecha es solo fecha (sin hora), tratarla como fecha local
+    if (date.includes('T00:00:00.000Z') || (!date.includes('T') && !date.includes(' '))) {
+      // Es una fecha sin hora, crear una fecha local
+      const [year, month, day] = date.split('T')[0].split('-');
+      const localDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0);
+      return localDate.toLocaleDateString('es-CR', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    
+    return dateObj.toLocaleDateString('es-CR', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const getDateFilterDescription = () => {
+    if (selectedDate) {
+      return `Fecha: ${selectedDate.toLocaleDateString('es-CR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })}`;
+    }
+    
+    if (dateRange.from && dateRange.to) {
+      return `Rango: ${dateRange.from.toLocaleDateString('es-CR', {
+        month: 'short',
+        day: 'numeric'
+      })} - ${dateRange.to.toLocaleDateString('es-CR', {
+        month: 'short',
+        day: 'numeric'
+      })}`;
+    }
+    
+    if (dateRange.from) {
+      return `Desde: ${dateRange.from.toLocaleDateString('es-CR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })}`;
+    }
+    
+    if (dateRange.to) {
+      return `Hasta: ${dateRange.to.toLocaleDateString('es-CR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })}`;
+    }
+    
+    switch (dateFilter) {
+      case 'today': return 'Hoy';
+      case 'yesterday': return 'Ayer';
+      case 'week': return 'Esta semana';
+      case 'lastWeek': return 'Semana pasada';
+      case 'month': return 'Este mes';
+      case 'lastMonth': return 'Mes pasado';
+      default: return 'Todo el historial';
+    }
   };
 
   if (loading) {
@@ -619,101 +795,332 @@ export default function MensajeroDashboard() {
             </Button>
           </div>
 
-          {/* Filtros adicionales en una fila separada */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Selector de fecha con calendario */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Filtrar por fecha</Label>
-              <div className="flex gap-2">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !selectedDate && "text-muted-foreground"
-                      )}
-                    >
-                      <Calendar className="mr-2 h-4 w-4" />
-                      {selectedDate ? (
-                        selectedDate.toLocaleDateString('es-CR', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric'
-                        })
-                      ) : (
-                        "Seleccionar fecha"
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <CalendarComponent
-                      mode="single"
-                      selected={selectedDate}
-                      onSelect={setSelectedDate}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-                {selectedDate && (
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={clearDateFilter}
-                    className="shrink-0"
-                  >
-                    <XCircle className="h-4 w-4" />
-                  </Button>
-                )}
+          {/* Filtros de fecha reorganizados */}
+          <div className="space-y-4">
+            {/* Filtros de fecha específica y rango */}
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Fecha específica */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-gray-600">Fecha específica</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal h-10",
+                          !selectedDate && "text-muted-foreground"
+                        )}
+                      >
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {selectedDate ? (
+                          selectedDate.toLocaleDateString('es-CR', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })
+                        ) : (
+                          "Seleccionar fecha"
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={(date) => {
+                          setSelectedDate(date);
+                          setDateFilter('all');
+                          setDateRange({ from: undefined, to: undefined });
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Rango de fechas */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-gray-600">Rango de fechas</Label>
+                  <div className="flex gap-1">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "flex-1 justify-start text-left font-normal h-10 text-xs",
+                            !dateRange.from && "text-muted-foreground"
+                          )}
+                        >
+                          <Calendar className="mr-1 h-3 w-3" />
+                          {dateRange.from ? (
+                            dateRange.from.toLocaleDateString('es-CR', {
+                              month: 'short',
+                              day: 'numeric'
+                            })
+                          ) : (
+                            "Desde"
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarComponent
+                          mode="single"
+                          selected={dateRange.from}
+                          onSelect={(date) => {
+                            setDateRange(prev => ({ ...prev, from: date }));
+                            setSelectedDate(undefined);
+                            setDateFilter('all');
+                          }}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "flex-1 justify-start text-left font-normal h-10 text-xs",
+                            !dateRange.to && "text-muted-foreground"
+                          )}
+                        >
+                          <Calendar className="mr-1 h-3 w-3" />
+                          {dateRange.to ? (
+                            dateRange.to.toLocaleDateString('es-CR', {
+                              month: 'short',
+                              day: 'numeric'
+                            })
+                          ) : (
+                            "Hasta"
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarComponent
+                          mode="single"
+                          selected={dateRange.to}
+                          onSelect={(date) => {
+                            setDateRange(prev => ({ ...prev, to: date }));
+                            setSelectedDate(undefined);
+                            setDateFilter('all');
+                          }}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Selector de período (solo cuando no hay fecha específica) */}
-            {!selectedDate && (
-              <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Período" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todo el historial</SelectItem>
-                  <SelectItem value="today">Hoy</SelectItem>
-                  <SelectItem value="week">Esta semana</SelectItem>
-                  <SelectItem value="month">Este mes</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
+            {/* Collapsible para filtros rápidos */}
+            <Collapsible open={isDateFiltersOpen} onOpenChange={setIsDateFiltersOpen}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-between p-0 h-auto font-normal"
+                >
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm">Filtros rápidos</span>
+                  </div>
+                  <ChevronDown className={cn(
+                    "w-4 h-4 transition-transform",
+                    isDateFiltersOpen && "rotate-180"
+                  )} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-3 mt-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant={dateFilter === 'today' ? 'default' : 'outline'}
+                    onClick={() => {
+                      setDateFilter('today');
+                      setSelectedDate(undefined);
+                      setDateRange({ from: undefined, to: undefined });
+                    }}
+                    className="h-10 text-sm"
+                  >
+                    Hoy
+                  </Button>
+                  <Button
+                    variant={dateFilter === 'yesterday' ? 'default' : 'outline'}
+                    onClick={() => {
+                      setDateFilter('yesterday');
+                      setSelectedDate(undefined);
+                      setDateRange({ from: undefined, to: undefined });
+                    }}
+                    className="h-10 text-sm"
+                  >
+                    Ayer
+                  </Button>
+                  <Button
+                    variant={dateFilter === 'week' ? 'default' : 'outline'}
+                    onClick={() => {
+                      setDateFilter('week');
+                      setSelectedDate(undefined);
+                      setDateRange({ from: undefined, to: undefined });
+                    }}
+                    className="h-10 text-sm"
+                  >
+                    Esta semana
+                  </Button>
+                  <Button
+                    variant={dateFilter === 'lastWeek' ? 'default' : 'outline'}
+                    onClick={() => {
+                      setDateFilter('lastWeek');
+                      setSelectedDate(undefined);
+                      setDateRange({ from: undefined, to: undefined });
+                    }}
+                    className="h-10 text-sm"
+                  >
+                    Semana pasada
+                  </Button>
+                  <Button
+                    variant={dateFilter === 'month' ? 'default' : 'outline'}
+                    onClick={() => {
+                      setDateFilter('month');
+                      setSelectedDate(undefined);
+                      setDateRange({ from: undefined, to: undefined });
+                    }}
+                    className="h-10 text-sm"
+                  >
+                    Este mes
+                  </Button>
+                  <Button
+                    variant={dateFilter === 'lastMonth' ? 'default' : 'outline'}
+                    onClick={() => {
+                      setDateFilter('lastMonth');
+                      setSelectedDate(undefined);
+                      setDateRange({ from: undefined, to: undefined });
+                    }}
+                    className="h-10 text-sm"
+                  >
+                    Mes pasado
+                  </Button>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
 
-            <Select value={sortBy} onValueChange={(value: 'date' | 'status' | 'amount') => setSortBy(value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Ordenar por" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="date">Fecha</SelectItem>
-                <SelectItem value="status">Estado</SelectItem>
-                <SelectItem value="amount">Monto</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            {/* Collapsible para filtros avanzados */}
+            <Collapsible open={isAdvancedFiltersOpen} onOpenChange={setIsAdvancedFiltersOpen}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-between p-0 h-auto font-normal"
+                >
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-green-600" />
+                    <span className="text-sm">Filtros avanzados</span>
+                  </div>
+                  <ChevronDown className={cn(
+                    "w-4 h-4 transition-transform",
+                    isAdvancedFiltersOpen && "rotate-180"
+                  )} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-3 mt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Filtro por día de la semana */}
+                  <div className="space-y-2">
+                    <Label className="text-xs text-gray-600">Día de la semana</Label>
+                    <Select value={dayOfWeekFilter} onValueChange={setDayOfWeekFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos los días" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos los días</SelectItem>
+                        <SelectItem value="monday">Lunes</SelectItem>
+                        <SelectItem value="tuesday">Martes</SelectItem>
+                        <SelectItem value="wednesday">Miércoles</SelectItem>
+                        <SelectItem value="thursday">Jueves</SelectItem>
+                        <SelectItem value="friday">Viernes</SelectItem>
+                        <SelectItem value="saturday">Sábado</SelectItem>
+                        <SelectItem value="sunday">Domingo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-          {/* Resumen de resultados */}
-          <div className="flex items-center justify-between text-sm text-gray-600">
-            <span>
-              Mostrando {filteredAndSortedOrders.length} de {allOrders.length} pedidos
-            </span>
-            {(searchTerm || activeFilter !== 'todos' || dateFilter !== 'all' || selectedDate) && (
+                  {/* Ordenamiento */}
+                  <div className="space-y-2">
+                    <Label className="text-xs text-gray-600">Ordenar por</Label>
+                    <Select value={sortBy} onValueChange={(value: 'date' | 'status' | 'amount') => setSortBy(value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Ordenar por" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="date">Fecha</SelectItem>
+                        <SelectItem value="status">Estado</SelectItem>
+                        <SelectItem value="amount">Monto</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-gray-600">Orden</Label>
+                    <Select value={sortOrder} onValueChange={(value: 'asc' | 'desc') => setSortOrder(value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Orden" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="desc">Más reciente primero</SelectItem>
+                        <SelectItem value="asc">Más antiguo primero</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* Botón para limpiar filtros de fecha */}
+            {(selectedDate || dateRange.from || dateRange.to || dateFilter !== 'all' || dayOfWeekFilter !== 'all') && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setSearchTerm('');
-                  setActiveFilter('todos');
-                  setDateFilter('all');
-                  setSelectedDate(undefined);
-                }}
+                onClick={clearDateFilter}
+                className="w-full"
               >
                 <XCircle className="w-4 h-4 mr-2" />
-                Limpiar filtros
+                Limpiar filtros de fecha
               </Button>
+            )}
+          </div>
+
+          {/* Resumen de resultados */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm text-gray-600">
+              <span>
+                Mostrando {filteredAndSortedOrders.length} de {allOrders.length} pedidos
+              </span>
+            </div>
+            
+            {/* Indicador de filtros activos */}
+            {(selectedDate || dateRange.from || dateRange.to || dateFilter !== 'all' || dayOfWeekFilter !== 'all') && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
+                  <Calendar className="w-4 h-4" />
+                  <span className="font-medium">Filtros activos:</span>
+                  <span>{getDateFilterDescription()}</span>
+                </div>
+                {dayOfWeekFilter !== 'all' && (
+                  <div className="flex items-center gap-2 text-xs text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+                    <Clock className="w-4 h-4" />
+                    <span className="font-medium">Filtro adicional:</span>
+                    <span className="capitalize">
+                      {dayOfWeekFilter === 'monday' ? 'Lunes' : 
+                       dayOfWeekFilter === 'tuesday' ? 'Martes' :
+                       dayOfWeekFilter === 'wednesday' ? 'Miércoles' :
+                       dayOfWeekFilter === 'thursday' ? 'Jueves' :
+                       dayOfWeekFilter === 'friday' ? 'Viernes' :
+                       dayOfWeekFilter === 'saturday' ? 'Sábado' :
+                       dayOfWeekFilter === 'sunday' ? 'Domingo' : dayOfWeekFilter}
+                    </span>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </CardContent>
@@ -726,12 +1133,12 @@ export default function MensajeroDashboard() {
             <div className="text-center py-8 text-gray-500">
               <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>
-                {searchTerm || activeFilter !== 'todos' || dateFilter !== 'all' 
+                {searchTerm || activeFilter !== 'todos' || dateFilter !== 'all' || selectedDate || dateRange.from || dateRange.to || dayOfWeekFilter !== 'all'
                   ? 'No se encontraron pedidos con esos criterios' 
                   : 'No hay pedidos en el historial'
                 }
               </p>
-              {(searchTerm || activeFilter !== 'todos' || dateFilter !== 'all' || selectedDate) && (
+              {(searchTerm || activeFilter !== 'todos' || dateFilter !== 'all' || selectedDate || dateRange.from || dateRange.to || dayOfWeekFilter !== 'all') && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -740,6 +1147,8 @@ export default function MensajeroDashboard() {
                     setActiveFilter('todos');
                     setDateFilter('all');
                     setSelectedDate(undefined);
+                    setDateRange({ from: undefined, to: undefined });
+                    setDayOfWeekFilter('all');
                   }}
                   className="mt-2"
                 >

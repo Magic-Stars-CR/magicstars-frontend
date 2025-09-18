@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { mockApi } from '@/lib/mock-api';
 import { Order, PedidoTest, OrderStatus } from '@/lib/types';
 import { getPedidosByMensajero, getPedidosDelDiaByMensajero, updatePedido } from '@/lib/supabase-pedidos';
+import { supabasePedidos } from '@/lib/supabase-pedidos';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
 import {
   Package,
   CheckCircle,
@@ -106,6 +110,9 @@ export default function MiRutaHoy() {
   const [activeFilter, setActiveFilter] = useState<'todos' | 'en_ruta' | 'completados' | 'reagendados' | 'devoluciones'>('todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [dateFilter, setDateFilter] = useState<string>('all');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -138,33 +145,89 @@ export default function MiRutaHoy() {
     if (user) {
       loadRouteData();
     }
-  }, [user]);
+  }, [user, selectedDate, dateFilter]);
 
   const loadRouteData = async () => {
     try {
       setLoading(true);
-      const today = new Date().toDateString();
-      const todayISO = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
       
-      console.log('📅 Fecha actual (formato completo):', today);
-      console.log('📅 Fecha actual (ISO):', todayISO);
+      // Determinar la fecha objetivo basada en el filtro activo
+      let targetDateISO: string;
+      let targetDateString: string;
       
-      // Obtener pedidos de Supabase filtrados por mensajero Y fecha del día
-      const pedidosSupabase = await getPedidosDelDiaByMensajero(user?.name || '');
+      if (selectedDate) {
+        // Si hay una fecha específica seleccionada, usar esa
+        targetDateISO = selectedDate.toISOString().split('T')[0];
+        targetDateString = selectedDate.toDateString();
+      } else {
+        // Usar el filtro de período por defecto
+        const now = new Date();
+        switch (dateFilter) {
+          case 'today':
+            targetDateISO = now.toISOString().split('T')[0];
+            targetDateString = now.toDateString();
+            break;
+          case 'yesterday':
+            const yesterday = new Date(now);
+            yesterday.setDate(yesterday.getDate() - 1);
+            targetDateISO = yesterday.toISOString().split('T')[0];
+            targetDateString = yesterday.toDateString();
+            break;
+          case 'thisWeek':
+            // Para esta semana, usar hoy por defecto
+            targetDateISO = now.toISOString().split('T')[0];
+            targetDateString = now.toDateString();
+            break;
+          case 'thisMonth':
+            // Para este mes, usar hoy por defecto
+            targetDateISO = now.toISOString().split('T')[0];
+            targetDateString = now.toDateString();
+            break;
+          default:
+            targetDateISO = now.toISOString().split('T')[0];
+            targetDateString = now.toDateString();
+        }
+      }
+      
+      console.log('📅 Fecha objetivo (formato completo):', targetDateString);
+      console.log('📅 Fecha objetivo (ISO):', targetDateISO);
+      console.log('📅 Filtro activo:', dateFilter);
+      
+      // Obtener pedidos de Supabase filtrados por mensajero Y fecha objetivo
+      const pedidosSupabase = await getPedidosDelDiaByMensajero(user?.name || '', targetDateISO);
       console.log('=== LOG DE PEDIDOS EN MI RUTA HOY ===');
       console.log('Usuario autenticado:', user?.name, '(', user?.email, ')');
       console.log('Rol del usuario:', user?.role);
-      console.log('Fecha de consulta:', todayISO);
+      console.log('Fecha de consulta:', targetDateISO);
       console.log('Total de pedidos del día cargados:', pedidosSupabase.length);
       console.log('Pedidos completos:', pedidosSupabase);
       console.log('=== FIN DEL LOG DE PEDIDOS ===');
       
-      // Filtrar pedidos del día actual (validación adicional)
-      const pedidosDelDia = pedidosSupabase.filter(pedido => {
+      // Si no hay pedidos para la fecha objetivo y es el filtro de "hoy", 
+      // buscar en todas las fechas disponibles para mostrar algo
+      let pedidosDelDia = pedidosSupabase.filter(pedido => {
         if (!pedido.fecha_creacion) return false;
         const pedidoDate = new Date(pedido.fecha_creacion).toISOString().split('T')[0];
-        return pedidoDate === todayISO;
+        return pedidoDate === targetDateISO;
       });
+
+      // Si no hay pedidos para hoy y es el filtro de "hoy", buscar en todas las fechas
+      if (pedidosDelDia.length === 0 && dateFilter === 'today') {
+        console.log('🔍 No hay pedidos para hoy, buscando en todas las fechas...');
+        const { data: allPedidos, error: allError } = await supabasePedidos
+          .from('pedidos')
+          .select('*')
+          .or(`mensajero_asignado.ilike.${user?.name || ''},mensajero_concretado.ilike.${user?.name || ''}`);
+        
+        if (!allError && allPedidos) {
+          console.log('📊 Pedidos encontrados en todas las fechas:', allPedidos.length);
+          // Mostrar los pedidos más recientes (últimos 10)
+          pedidosDelDia = allPedidos
+            .sort((a, b) => new Date(b.fecha_creacion || '').getTime() - new Date(a.fecha_creacion || '').getTime())
+            .slice(0, 10);
+          console.log('📊 Mostrando los 10 pedidos más recientes:', pedidosDelDia.length);
+        }
+      }
       
       console.log('🔍 Filtrado adicional por fecha:');
       console.log('Pedidos antes del filtro:', pedidosSupabase.length);
@@ -679,12 +742,23 @@ export default function MiRutaHoy() {
               <h1 className="text-xl font-bold">Mi Ruta de Hoy</h1>
               <div className="flex items-center gap-2 text-sm opacity-90">
                 <Calendar className="w-4 h-4" />
-                <span className="font-medium">{getTodayInfo().dayName} {getTodayInfo().day} de {getTodayInfo().month}</span>
+                <span className="font-medium">
+                  {selectedDate ? 
+                    selectedDate.toLocaleDateString('es-CR', { 
+                      weekday: 'long', 
+                      day: 'numeric', 
+                      month: 'long' 
+                    }) : 
+                    getTodayInfo().dayName + ' ' + getTodayInfo().day + ' de ' + getTodayInfo().month
+                  }
+                </span>
               </div>
             </div>
-            <Badge variant="secondary" className="bg-white/20 text-white">
-              {getTodayInfo().fullDate}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="bg-white/20 text-white">
+                {selectedDate ? selectedDate.toLocaleDateString('es-CR') : getTodayInfo().fullDate}
+              </Badge>
+            </div>
           </div>
           <div className="bg-white/10 p-3 rounded-lg">
             <div className="flex items-center justify-between">
@@ -1125,6 +1199,80 @@ export default function MiRutaHoy() {
                   <span className="font-medium">Devoluciones</span>
                   <span className="text-xs opacity-75">({getFilterCount('devoluciones')})</span>
                 </div>
+              </Button>
+            </div>
+          </div>
+
+          {/* Filtros de fecha rápida */}
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-2">
+              {/* Selector de fecha específica */}
+              <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal h-10",
+                      !selectedDate && "text-muted-foreground"
+                    )}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    {selectedDate ? (
+                      selectedDate.toLocaleDateString('es-CR', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })
+                    ) : (
+                      <span>Seleccionar fecha</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(date) => {
+                      setSelectedDate(date);
+                      setDateFilter('all');
+                      setIsDatePickerOpen(false);
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant={dateFilter === 'today' ? 'default' : 'outline'}
+                onClick={() => {
+                  setDateFilter('today');
+                  setSelectedDate(undefined);
+                }}
+                className={`justify-start gap-2 h-10 text-sm ${
+                  dateFilter === 'today' 
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' 
+                    : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                Hoy
+              </Button>
+              <Button
+                variant={dateFilter === 'yesterday' ? 'default' : 'outline'}
+                onClick={() => {
+                  setDateFilter('yesterday');
+                  setSelectedDate(undefined);
+                }}
+                className={`justify-start gap-2 h-10 text-sm ${
+                  dateFilter === 'yesterday' 
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' 
+                    : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                Ayer
               </Button>
             </div>
           </div>
