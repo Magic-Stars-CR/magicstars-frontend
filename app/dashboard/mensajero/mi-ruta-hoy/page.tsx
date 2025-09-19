@@ -488,6 +488,56 @@ export default function MiRutaHoy() {
         notes: statusComment ? `${selectedOrderForUpdate.notes || ''}\n[${new Date().toLocaleString()}] ${statusComment}`.trim() : selectedOrderForUpdate.notes
       };
       
+      // Llamar al webhook de actualización de pedidos
+      try {
+        const webhookData = {
+          // Datos ya conocidos desde antes
+          idPedido: selectedOrderForUpdate.id,
+          mensajero: user?.name || 'Mensajero',
+          
+          // Datos tomados del formulario
+          estadoPedido: newStatus,
+          metodoPago: paymentMethod || selectedOrderForUpdate.paymentMethod || 'efectivo',
+          nota: statusComment || '',
+          
+          // Datos adicionales del pedido
+          clienteNombre: selectedOrderForUpdate.customerName,
+          clienteTelefono: selectedOrderForUpdate.customerPhone,
+          direccion: selectedOrderForUpdate.customerAddress,
+          provincia: selectedOrderForUpdate.customerProvince,
+          canton: selectedOrderForUpdate.customerCanton,
+          distrito: selectedOrderForUpdate.customerDistrict,
+          valorTotal: selectedOrderForUpdate.totalAmount,
+          productos: selectedOrderForUpdate.productos || 'No especificados',
+          
+          // Ejemplo adicional de base64 para imagen (si aplica)
+          imagenBase64: uploadedReceipt || uploadedEvidence || null,
+          mimeType: uploadedReceipt || uploadedEvidence ? "image/jpeg" : null
+        };
+
+        console.log('🚀 Enviando datos al webhook:', webhookData);
+
+        const response = await fetch("https://primary-production-2b25b.up.railway.app/webhook/actualizar-pedido", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(webhookData)
+        });
+
+        const resultado = await response.json();
+        console.log("📡 Respuesta del webhook:", resultado);
+        
+        if (!response.ok) {
+          console.error('❌ Error en la respuesta del webhook:', resultado);
+        } else {
+          console.log('✅ Webhook ejecutado exitosamente');
+        }
+      } catch (webhookError) {
+        console.error('❌ Error al llamar al webhook:', webhookError);
+        // No interrumpir el flujo principal si falla el webhook
+      }
+      
       await mockApi.updateOrderStatus(selectedOrderForUpdate.id, newStatus as any, statusComment);
       await loadRouteData();
       setIsUpdateStatusModalOpen(false);
