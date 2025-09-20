@@ -192,8 +192,7 @@ export default function MensajeroDashboard() {
             const metodo = pedido.metodo_pago?.toLowerCase();
             if (metodo === 'sinpe') return 'sinpe' as const;
             if (metodo === 'tarjeta') return 'tarjeta' as const;
-            if (metodo === 'cambio') return 'efectivo' as const; // CAMBIO se trata como efectivo
-            if (metodo === '2pagos' || metodo === '2 pagos') return 'efectivo' as const; // 2PAGOS se trata como efectivo
+            if (metodo === '2pagos' || metodo === '2 pagos') return '2pagos' as const;
             return 'efectivo' as const;
           })(),
           metodoPagoOriginal: pedido.metodo_pago || 'No especificado',
@@ -524,6 +523,26 @@ export default function MensajeroDashboard() {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const getStatusBorderColor = (status: string) => {
+    switch (status) {
+      case 'en_ruta': return 'border-l-blue-500';
+      case 'entregado': return 'border-l-green-500';
+      case 'devolucion': return 'border-l-red-500';
+      case 'reagendado': return 'border-l-orange-500';
+      default: return 'border-l-gray-500';
+    }
+  };
+
+  const getStatusIndicatorColor = (status: string) => {
+    switch (status) {
+      case 'en_ruta': return 'bg-blue-500';
+      case 'entregado': return 'bg-green-500';
+      case 'devolucion': return 'bg-red-500';
+      case 'reagendado': return 'bg-orange-500';
+      default: return 'bg-gray-500';
+    }
   };
 
   const getDateFilterDescription = () => {
@@ -1128,7 +1147,16 @@ export default function MensajeroDashboard() {
 
       {/* Lista de Pedidos */}
       <Card>
-        <CardContent className="p-0">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Package className="w-5 h-5 text-blue-600" />
+            Mis Pedidos
+          </CardTitle>
+          <div className="text-sm text-gray-600 mt-1">
+            <span className="font-medium">{user?.name}</span> • Historial completo de pedidos
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
           {filteredAndSortedOrders.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -1158,91 +1186,167 @@ export default function MensajeroDashboard() {
               )}
             </div>
           ) : (
-            <div className="space-y-2 p-4">
-              {filteredAndSortedOrders.map((order) => (
-                <Card key={order.id} className="p-4">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${
-                          order.status === 'entregado' ? 'bg-green-500' :
-                          order.status === 'en_ruta' ? 'bg-blue-500' :
-                          order.status === 'devolucion' ? 'bg-red-500' :
-                          'bg-orange-500'
-                        }`} />
-                        <h3 className="font-semibold">{order.id}</h3>
-                      </div>
-                      <OrderStatusBadge status={order.status} />
+            filteredAndSortedOrders.map((order, index) => (
+              <div key={order.id} className={`border rounded-lg p-4 bg-white shadow-sm border-l-4 ${getStatusBorderColor(order.status)}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-4 h-4 rounded-full ${getStatusIndicatorColor(order.status)}`} />
+                      <span className="text-2xl font-bold text-gray-700">#{index + 1}</span>
                     </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <User className="w-4 h-4 text-gray-500" />
-                        <span>{order.customerName}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Package className="w-4 h-4 text-gray-500" />
-                        <span className="truncate">{order.productos || 'No especificados'}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <DollarSign className="w-4 h-4 text-gray-500" />
-                        <span className="font-semibold">{formatCurrency(order.totalAmount)}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <CreditCard className="w-4 h-4 text-gray-500" />
-                        <span className="text-gray-600 capitalize">
-                          {order.metodoPagoOriginal || 'No especificado'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Clock className="w-4 h-4 text-gray-500" />
-                        <span>{formatDate(order.createdAt)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => order.customerPhone && window.open(`tel:${order.customerPhone}`)}
-                        className="flex-1"
-                        disabled={!order.customerPhone}
-                      >
-                        <Phone className="w-4 h-4 mr-1" />
-                        Llamar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          if (order.deliveryAddress) {
-                            const encodedAddress = encodeURIComponent(order.deliveryAddress);
-                            window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`);
-                          }
-                        }}
-                        className="flex-1"
-                        disabled={!order.deliveryAddress}
-                      >
-                        <Navigation className="w-4 h-4 mr-1" />
-                        Ruta
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setSelectedOrder(order);
-                          setIsUpdateModalOpen(true);
-                        }}
-                        className="flex-1"
-                      >
-                        <Edit3 className="w-4 h-4 mr-1" />
-                        Actualizar
-                      </Button>
+                    <div>
+                      <h3 className="font-semibold text-lg">{order.id}</h3>
+                      {order.company?.name && (
+                        <Badge variant="secondary" className="text-xs mt-1 bg-blue-100 text-blue-700 hover:bg-blue-200">
+                          {order.company.name}
+                        </Badge>
+                      )}
                     </div>
                   </div>
-                </Card>
-              ))}
-            </div>
+                </div>
+
+                <div className="space-y-2 mb-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <User className="w-4 h-4 text-gray-500" />
+                    <span className="font-medium">{order.customerName}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Package className="w-4 h-4 text-gray-500" />
+                    <span className="truncate">{order.productos || 'No especificados'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <Building2 className="w-3 h-3" />
+                    <span>{order.customerProvince} • {order.customerCanton} • {order.customerDistrict}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <DollarSign className="w-4 h-4 text-gray-500" />
+                    <span className="font-semibold">{formatCurrency(order.totalAmount)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <CreditCard className="w-4 h-4 text-gray-500" />
+                    <span className="text-gray-600 capitalize">
+                      {order.paymentMethod === '2pagos' ? '💰 2 Pagos' : (order.metodoPagoOriginal || 'No especificado')}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Clock className="w-4 h-4 text-gray-500" />
+                    <span>{formatDate(order.createdAt)}</span>
+                  </div>
+                  {order.notes && (
+                    <div className="flex items-start gap-2 text-xs text-gray-600 bg-yellow-50 p-2 rounded border-l-2 border-yellow-200">
+                      <FileText className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                      <span className="line-clamp-2">{order.notes}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-5 gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => order.customerPhone && window.open(`tel:${order.customerPhone}`)}
+                    className="h-12 text-xs bg-green-50 border-green-200 hover:bg-green-100 hover:border-green-300 text-green-700 font-medium transition-all duration-200"
+                    disabled={!order.customerPhone}
+                  >
+                    <Phone className="w-4 h-4" />
+                    <span className="hidden sm:inline ml-2">Llamar</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (order.customerPhone) {
+                        // Crear mensaje personalizado
+                        const messengerName = user?.name || 'Mensajero';
+                        const companyName = order.company?.name || 'Empresa';
+                        const products = order.items.map(item => `${item.quantity}x ${item.product?.name || 'Producto'}`).join(', ');
+                        const orderNumber = order.id;
+                        
+                        const message = `¡Hola! Soy ${messengerName} de ${companyName}. 
+
+Tengo su pedido ${orderNumber} listo para entregar:
+${products}
+
+Total: ${formatCurrency(order.totalAmount)}
+
+¿En qué momento le conviene recibir su pedido?`;
+
+                        const encodedMessage = encodeURIComponent(message);
+                        const whatsappUrl = `https://wa.me/506${order.customerPhone.replace(/\D/g, '')}?text=${encodedMessage}`;
+                        window.open(whatsappUrl);
+                      }
+                    }}
+                    className="h-12 text-xs bg-emerald-50 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 text-emerald-700 font-medium transition-all duration-200"
+                    disabled={!order.customerPhone}
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span className="hidden sm:inline ml-2">WhatsApp</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (order.customerLocationLink) {
+                        window.open(order.customerLocationLink, '_blank');
+                      } else if (order.deliveryAddress) {
+                        const encodedAddress = encodeURIComponent(order.deliveryAddress);
+                        window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`);
+                      }
+                    }}
+                    className="h-12 text-xs bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-300 text-blue-700 font-medium transition-all duration-200"
+                    disabled={!order.customerLocationLink && !order.deliveryAddress}
+                  >
+                    <MapPin className="w-4 h-4" />
+                    <span className="hidden sm:inline ml-2">Ubicación</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      // Aquí podrías agregar funcionalidad para ver notas
+                      console.log('Ver notas del pedido:', order.id);
+                    }}
+                    className="h-12 text-xs bg-yellow-50 border-yellow-200 hover:bg-yellow-100 hover:border-yellow-300 text-yellow-700 font-medium transition-all duration-200"
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span className="hidden sm:inline ml-2">Notas</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      // Aquí podrías agregar funcionalidad para ver timeline
+                      console.log('Ver timeline del pedido:', order.id);
+                    }}
+                    className="h-12 text-xs bg-purple-50 border-purple-200 hover:bg-purple-100 hover:border-purple-300 text-purple-700 font-medium transition-all duration-200"
+                  >
+                    <Clock className="w-4 h-4" />
+                    <span className="hidden sm:inline ml-2">Timeline</span>
+                  </Button>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedOrder(order);
+                      setNewStatus(order.status);
+                      setIsUpdateModalOpen(true);
+                    }}
+                    className="w-full h-12 text-sm bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 hover:from-blue-100 hover:to-indigo-100 hover:border-blue-300 text-blue-700 font-semibold transition-all duration-200 shadow-sm hover:shadow-md"
+                    disabled={updatingOrder === order.id}
+                  >
+                    {updatingOrder === order.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <Edit3 className="w-4 h-4 mr-2" />
+                    )}
+                    <span>Actualizar Estado</span>
+                  </Button>
+                </div>
+              </div>
+            ))
           )}
         </CardContent>
       </Card>

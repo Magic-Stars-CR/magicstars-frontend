@@ -8,7 +8,7 @@ export type OrderStatus =
   | 'devolucion'
   | 'reagendado';
 
-export type PaymentMethod = 'efectivo' | 'sinpe' | 'tarjeta';
+export type PaymentMethod = 'efectivo' | 'sinpe' | 'tarjeta' | '2pagos';
 
 export type OrderOrigin = 'shopify' | 'manual' | 'csv';
 
