@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
@@ -151,6 +152,10 @@ export default function MiRutaHoy() {
   const [isReagendadoAsChange, setIsReagendadoAsChange] = useState(false);
   const [reagendadoDate, setReagendadoDate] = useState<Date | undefined>(undefined);
   const [isReagendadoDatePickerOpen, setIsReagendadoDatePickerOpen] = useState(false);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [countdown, setCountdown] = useState(3);
+  const [errorMessage, setErrorMessage] = useState('');
   const [isTimelineModalOpen, setIsTimelineModalOpen] = useState(false);
   const [selectedOrderForTimeline, setSelectedOrderForTimeline] = useState<Order | null>(null);
   const [statusChanges, setStatusChanges] = useState<StatusChange[]>([]);
@@ -160,6 +165,20 @@ export default function MiRutaHoy() {
       loadRouteData();
     }
   }, [user, selectedDate, dateFilter]);
+
+  // Countdown para el modal de éxito
+  useEffect(() => {
+    if (isSuccessModalOpen && countdown > 0) {
+      const timer = setTimeout(() => {
+        setCountdown(countdown - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (isSuccessModalOpen && countdown === 0) {
+      setIsSuccessModalOpen(false);
+      setCountdown(3);
+      setSuccessMessage('');
+    }
+  }, [isSuccessModalOpen, countdown]);
 
   const loadRouteData = async () => {
     try {
@@ -298,7 +317,7 @@ export default function MiRutaHoy() {
           }
 
         return {
-          id: pedido.id_pedido ? `${pedido.id_pedido}-${index}` : `pedido-${index}`,
+          id: pedido.id_pedido || `pedido-${index}`,
           customerName: pedido.cliente_nombre || `Cliente ${pedido.id_pedido || index}`,
           customerPhone: pedido.cliente_telefono || '0000-0000',
           customerAddress: pedido.direccion || pedido.distrito || 'Dirección no disponible',
@@ -325,6 +344,7 @@ export default function MiRutaHoy() {
           deliveryDate: pedido.fecha_entrega || undefined,
           notes: pedido.notas || '',
           deliveryNotes: pedido.nota_asesor || '',
+          tienda: pedido.tienda || 'ALL STARS',
                assignedMessenger: pedido.mensajero_concretado ? {
                  id: '1',
                  name: pedido.mensajero_concretado,
@@ -576,13 +596,28 @@ export default function MiRutaHoy() {
         // No interrumpir el flujo principal si falla el webhook
       }
       
-      await mockApi.updateOrderStatus(selectedOrderForUpdate.id, newStatus as any, statusComment);
+      // El webhook ya se ejecutó exitosamente, no necesitamos el mock API
+      // await mockApi.updateOrderStatus(selectedOrderForUpdate.id, newStatus as any, statusComment);
       await loadRouteData();
+      
+      // Mostrar modal de éxito
+      const statusLabels = {
+        'entregado': 'Entregado',
+        'en_ruta': 'En Ruta',
+        'devolucion': 'Devolución',
+        'reagendado': 'Reagendado'
+      };
+      
+      setSuccessMessage(`El pedido ${selectedOrderForUpdate.id} fue actualizado a ${statusLabels[newStatus as keyof typeof statusLabels] || newStatus} con éxito`);
+      setIsSuccessModalOpen(true);
+      setCountdown(3);
+      
       setIsUpdateStatusModalOpen(false);
       setSelectedOrderForUpdate(null);
       resetModalState();
     } catch (error) {
       console.error('Error updating order status:', error);
+      setErrorMessage(`Error al actualizar el pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`);
     } finally {
       setUpdatingOrder(null);
     }
@@ -666,6 +701,7 @@ export default function MiRutaHoy() {
     setIsReagendadoAsChange(false);
     setReagendadoDate(undefined);
     setIsReagendadoDatePickerOpen(false);
+    setErrorMessage('');
   };
 
   const handleOpenTimeline = (order: Order) => {
@@ -1448,23 +1484,19 @@ export default function MiRutaHoy() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-gray-50">
-                    <TableHead className="w-16 text-center">#</TableHead>
                     <TableHead className="min-w-[120px]">ID Pedido</TableHead>
                     <TableHead className="min-w-[150px]">Cliente</TableHead>
                     <TableHead className="min-w-[200px]">Productos</TableHead>
-                    <TableHead className="min-w-[200px]">Ubicación</TableHead>
+                    <TableHead className="min-w-[250px]">Dirección</TableHead>
                     <TableHead className="w-24 text-right">Monto</TableHead>
                     <TableHead className="w-24">Pago</TableHead>
                     <TableHead className="w-24">Estado</TableHead>
-                    <TableHead className="w-32">Acciones</TableHead>
+                    <TableHead className="w-24">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredOrders.map((order, index) => (
                     <TableRow key={order.id} className="hover:bg-gray-50">
-                      <TableCell className="text-center font-bold text-lg">
-                        {order.routeOrder || index + 1}
-                      </TableCell>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           <div className={`w-3 h-3 rounded-full ${getStatusIndicatorColor(order.status)}`} />
@@ -1472,9 +1504,52 @@ export default function MiRutaHoy() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="space-y-1">
-                          <div className="font-medium">{order.customerName}</div>
-                          <div className="text-xs text-gray-500">{order.customerPhone}</div>
+                        <div className="space-y-2">
+                          <div className="space-y-1">
+                            <div className="font-medium">{order.customerName}</div>
+                            <div className="text-xs text-gray-500">{order.customerPhone}</div>
+                          </div>
+                          
+                          {/* Botones de contacto */}
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => order.customerPhone && window.open(`tel:${order.customerPhone}`)}
+                              className="h-7 px-2 text-xs bg-green-50 border-green-200 hover:bg-green-100 text-green-700"
+                              disabled={!order.customerPhone}
+                              title="Llamar"
+                            >
+                              <Phone className="w-3 h-3 mr-1" />
+                              Llamar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                if (order.customerPhone) {
+                                  const messengerName = user?.name || 'Mensajero';
+                                  const tiendaName = order.tienda || 'ALL STARS';
+                                  const products = order.productos || 'Productos no especificados';
+                                  const orderNumber = order.routeOrder ? `#${order.routeOrder}` : order.id;
+                                  
+                                  const message = `Buen día *${order.customerName}* 📍 Soy el mensajero que va entregar tu pedido de *${products}* de la tienda *${tiendaName}* Y me dirijo a la dirección *${order.customerAddress}* en *${order.customerCanton}* en el distrito *${order.customerDistrict}* en la provincia *${order.customerProvince}* 📍. Por favor confirmame que te encuentras ahí.`;
+
+                                  // Remover +506 del número si está presente
+                                  const cleanPhone = order.customerPhone.replace(/^\+506/, '');
+                                  const encodedMessage = encodeURIComponent(message);
+                                  const whatsappUrl = `https://wa.me/506${cleanPhone}?text=${encodedMessage}`;
+                                  window.open(whatsappUrl);
+                                }
+                              }}
+                              className="h-7 px-2 text-xs bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700"
+                              disabled={!order.customerPhone}
+                              title="WhatsApp"
+                            >
+                              <MessageCircle className="w-3 h-3 mr-1" />
+                              WhatsApp
+                            </Button>
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -1483,11 +1558,38 @@ export default function MiRutaHoy() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="space-y-1">
-                          <div className="text-sm">{order.customerProvince}</div>
-                          <div className="text-xs text-gray-500">
-                            {order.customerCanton} • {order.customerDistrict}
+                        <div className="space-y-2">
+                          {/* Dirección principal */}
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium text-gray-900">
+                              {order.customerAddress || 'Dirección no especificada'}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              <span className="font-medium">Provincia:</span> {order.customerProvince || 'No especificada'}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              <span className="font-medium">Cantón:</span> {order.customerCanton || 'No especificado'}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              <span className="font-medium">Distrito:</span> {order.customerDistrict || 'No especificado'}
+                            </div>
                           </div>
+                          
+                          {/* Botón de Maps */}
+                          {order.customerLocationLink && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                window.open(order.customerLocationLink, '_blank');
+                              }}
+                              className="h-7 px-2 text-xs bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
+                              title="Abrir en Maps"
+                            >
+                              <Navigation className="w-3 h-3 mr-1" />
+                              Maps
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-semibold">
@@ -1527,60 +1629,6 @@ export default function MiRutaHoy() {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => order.customerPhone && window.open(`tel:${order.customerPhone}`)}
-                            className="h-8 w-8 p-0 bg-green-50 border-green-200 hover:bg-green-100 text-green-700"
-                            disabled={!order.customerPhone}
-                            title="Llamar"
-                          >
-                            <Phone className="w-3 h-3" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              if (order.customerPhone) {
-                                const messengerName = user?.name || 'Mensajero';
-                                const companyName = order.company?.name || 'Empresa';
-                                const products = order.items.map(item => `${item.quantity}x ${item.product?.name || 'Producto'}`).join(', ');
-                                const orderNumber = order.routeOrder ? `#${order.routeOrder}` : order.id;
-                                
-                                const message = `¡Hola! Soy ${messengerName} de ${companyName}. 
-
-Tengo su pedido ${orderNumber} listo para entregar:
-${products}
-
-Total: ${formatCurrency(order.totalAmount)}
-
-¿En qué momento le conviene recibir su pedido?`;
-
-                                const encodedMessage = encodeURIComponent(message);
-                                const whatsappUrl = `https://wa.me/506${order.customerPhone.replace(/\D/g, '')}?text=${encodedMessage}`;
-                                window.open(whatsappUrl);
-                              }
-                            }}
-                            className="h-8 w-8 p-0 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700"
-                            disabled={!order.customerPhone}
-                            title="WhatsApp"
-                          >
-                            <MessageCircle className="w-3 h-3" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              if (order.customerLocationLink) {
-                                window.open(order.customerLocationLink, '_blank');
-                              }
-                            }}
-                            className="h-8 w-8 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
-                            disabled={!order.customerLocationLink}
-                            title="Ubicación"
-                          >
-                            <LocationIcon className="w-3 h-3" />
-                          </Button>
                           <Button
                             size="sm"
                             variant="outline"
@@ -2354,6 +2402,57 @@ Total: ${formatCurrency(order.totalAmount)}
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Éxito */}
+      <AlertDialog open={isSuccessModalOpen} onOpenChange={setIsSuccessModalOpen}>
+        <AlertDialogContent className="sm:max-w-[400px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-green-600">
+              <CheckCircle className="w-5 h-5" />
+              ¡Actualización Exitosa!
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center py-4">
+              <div className="space-y-3">
+                <p className="text-lg font-medium text-gray-900">
+                  {successMessage}
+                </p>
+                <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
+                  <Clock className="w-4 h-4" />
+                  <span>Cerrando automáticamente en {countdown} segundos...</span>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal de Error */}
+      {errorMessage && (
+        <AlertDialog open={!!errorMessage} onOpenChange={() => setErrorMessage('')}>
+          <AlertDialogContent className="sm:max-w-[400px]">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="w-5 h-5" />
+                Error en la Actualización
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-center py-4">
+                <div className="space-y-3">
+                  <p className="text-lg font-medium text-gray-900">
+                    {errorMessage}
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => setErrorMessage('')}
+                    className="w-full"
+                  >
+                    Cerrar
+                  </Button>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
 
     </div>
   );

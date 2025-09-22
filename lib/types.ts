@@ -115,6 +115,7 @@ export interface Order {
   deliveryNotes?: string;
   trackingUrl?: string;
   deliveryAddress?: string;
+  tienda?: string;
   
   // Empresa y jornada
   companyId?: string;
