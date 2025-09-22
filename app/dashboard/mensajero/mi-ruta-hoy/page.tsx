@@ -137,7 +137,7 @@ export default function MiRutaHoy() {
   const [selectedOrderForNotes, setSelectedOrderForNotes] = useState<Order | null>(null);
   const [newNote, setNewNote] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<string>('');
-  const [uploadedReceipt, setUploadedReceipt] = useState<string | null>(null);
+  const [uploadedReceipts, setUploadedReceipts] = useState<string[]>([]);
   const [uploadedEvidence, setUploadedEvidence] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   
@@ -382,25 +382,10 @@ export default function MiRutaHoy() {
       
       console.log('✅ Conversión completada en Mi Ruta Hoy. Pedidos convertidos:', orders.length);
 
-      // Simular gastos del día (en una implementación real, esto vendría de la API)
-      const mockExpenses: Expense[] = [
-        {
-          id: '1',
-          type: 'fuel',
-          amount: 5000,
-          description: 'Combustible para la ruta',
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: '2',
-          type: 'food',
-          amount: 3000,
-          description: 'Almuerzo',
-          createdAt: new Date().toISOString()
-        }
-      ];
+      // Gastos vacíos - se conectará al backend esta semana
+      const mockExpenses: Expense[] = [];
 
-      const totalExpenses = mockExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+      const totalExpenses = 0;
       const totalRevenue = orders.reduce((sum, order) => sum + order.totalAmount, 0);
       const completedOrders = orders.filter(order => order.status === 'entregado').length;
 
@@ -511,7 +496,7 @@ export default function MiRutaHoy() {
         newStatus,
         statusComment,
         paymentMethod,
-        uploadedReceipt || undefined,
+        uploadedReceipts.length > 0 ? uploadedReceipts[0] : undefined,
         uploadedEvidence || undefined
       );
       
@@ -570,8 +555,8 @@ export default function MiRutaHoy() {
           productos: selectedOrderForUpdate.productos || 'No especificados',
           
           // Ejemplo adicional de base64 para imagen (si aplica)
-          imagenBase64: uploadedReceipt || uploadedEvidence || null,
-          mimeType: uploadedReceipt || uploadedEvidence ? "image/jpeg" : null
+          imagenBase64: uploadedReceipts.length > 0 ? uploadedReceipts[0] : uploadedEvidence || null,
+          mimeType: uploadedReceipts.length > 0 || uploadedEvidence ? "image/jpeg" : null
         };
 
         console.log('🚀 Enviando datos al webhook:', webhookData);
@@ -654,19 +639,33 @@ export default function MiRutaHoy() {
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, type: 'receipt' | 'evidence') => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = event.target.files;
+    if (!files) return;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result as string;
-      if (type === 'receipt') {
-        setUploadedReceipt(result);
-      } else {
+    if (type === 'receipt') {
+      // Manejar múltiples comprobantes
+      const newReceipts: string[] = [];
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const result = e.target?.result as string;
+          newReceipts.push(result);
+          if (newReceipts.length === files.length) {
+            setUploadedReceipts(prev => [...prev, ...newReceipts]);
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    } else {
+      // Manejar evidencia (solo una)
+      const file = files[0];
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
         setUploadedEvidence(result);
-      }
-    };
-    reader.readAsDataURL(file);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleDualPaymentFileUpload = (event: React.ChangeEvent<HTMLInputElement>, paymentNumber: 'first' | 'second') => {
@@ -689,8 +688,8 @@ export default function MiRutaHoy() {
     setNewStatus('en_ruta');
     setStatusComment('');
     setPaymentMethod('');
-    setUploadedReceipt(null);
-    setUploadedEvidence(null);
+      setUploadedReceipts([]);
+      setUploadedEvidence(null);
     setIsUploading(false);
     setIsDualPayment(false);
     setFirstPaymentMethod('');
@@ -1895,30 +1894,39 @@ export default function MiRutaHoy() {
                     <div className="space-y-2">
                       <Label>Comprobante de Transacción *</Label>
                       <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                        {uploadedReceipt ? (
+                        {uploadedReceipts.length > 0 ? (
                           <div className="space-y-3">
-                            <img
-                              src={uploadedReceipt}
-                              alt="Comprobante"
-                              className="max-w-full h-32 object-contain mx-auto rounded-lg"
-                            />
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setUploadedReceipt(null)}
-                              className="text-red-600 hover:text-red-700"
-                            >
-                              <X className="w-4 h-4 mr-1" />
-                              Eliminar
-                            </Button>
+                            <div className="grid grid-cols-2 gap-2">
+                              {uploadedReceipts.map((receipt, index) => (
+                                <div key={index} className="relative">
+                                  <img
+                                    src={receipt}
+                                    alt={`Comprobante ${index + 1}`}
+                                    className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setUploadedReceipts(prev => prev.filter((_, i) => i !== index))}
+                                    className="absolute -top-2 -right-2 h-6 w-6 p-0 text-red-600 hover:text-red-700 bg-white border border-red-200"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="text-xs text-gray-500 text-center">
+                              {uploadedReceipts.length} comprobante{uploadedReceipts.length !== 1 ? 's' : ''} seleccionado{uploadedReceipts.length !== 1 ? 's' : ''}
+                            </div>
                           </div>
                         ) : (
                           <div className="space-y-3">
                             <Camera className="w-8 h-8 mx-auto text-gray-400" />
-                            <p className="text-sm text-gray-600">Toca para seleccionar comprobante</p>
+                            <p className="text-sm text-gray-600">Toca para seleccionar comprobantes (múltiples)</p>
                             <input
                               type="file"
                               accept="image/*"
+                              multiple
                               onChange={(e) => handleFileUpload(e, 'receipt')}
                               className="hidden"
                               id="receipt-upload"
@@ -1928,7 +1936,7 @@ export default function MiRutaHoy() {
                               onClick={() => document.getElementById('receipt-upload')?.click()}
                             >
                               <ImageIcon className="w-4 h-4 mr-2" />
-                              Seleccionar Imagen
+                              Seleccionar Comprobantes
                             </Button>
                           </div>
                         )}
@@ -2269,7 +2277,7 @@ export default function MiRutaHoy() {
                     !newStatus || 
                     updatingOrder === selectedOrderForUpdate?.id ||
                     (newStatus === 'entregado' && !paymentMethod) ||
-                    (newStatus === 'entregado' && (paymentMethod === 'sinpe' || paymentMethod === 'tarjeta') && !uploadedReceipt) ||
+                    (newStatus === 'entregado' && (paymentMethod === 'sinpe' || paymentMethod === 'tarjeta') && uploadedReceipts.length === 0) ||
                     (newStatus === 'entregado' && paymentMethod === '2pagos' && (
                       !firstPaymentMethod || !secondPaymentMethod || 
                       !firstPaymentAmount || !secondPaymentAmount ||
