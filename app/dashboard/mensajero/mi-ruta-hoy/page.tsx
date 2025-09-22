@@ -115,7 +115,7 @@ export default function MiRutaHoy() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-  const [dateFilter, setDateFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('today');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -158,6 +158,7 @@ export default function MiRutaHoy() {
   const [errorMessage, setErrorMessage] = useState('');
   const [isTimelineModalOpen, setIsTimelineModalOpen] = useState(false);
   const [selectedOrderForTimeline, setSelectedOrderForTimeline] = useState<Order | null>(null);
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [statusChanges, setStatusChanges] = useState<StatusChange[]>([]);
 
   useEffect(() => {
@@ -752,15 +753,6 @@ export default function MiRutaHoy() {
     }
   };
 
-  const getStatusBorderColor = (status: string) => {
-    switch (status) {
-      case 'en_ruta': return 'border-l-blue-500';
-      case 'entregado': return 'border-l-green-500';
-      case 'devolucion': return 'border-l-red-500';
-      case 'reagendado': return 'border-l-orange-500';
-      default: return 'border-l-gray-500';
-    }
-  };
 
   const getStatusIndicatorColor = (status: string) => {
     switch (status) {
@@ -769,6 +761,36 @@ export default function MiRutaHoy() {
       case 'devolucion': return 'bg-red-500';
       case 'reagendado': return 'bg-orange-500';
       default: return 'bg-gray-500';
+    }
+  };
+
+  const getStatusRowColor = (status: string) => {
+    switch (status) {
+      case 'en_ruta': return 'bg-blue-50/30 border-l-4 border-l-blue-400';
+      case 'entregado': return 'bg-green-50/30 border-l-4 border-l-green-400';
+      case 'devolucion': return 'bg-red-50/30 border-l-4 border-l-red-400';
+      case 'reagendado': return 'bg-orange-50/30 border-l-4 border-l-orange-400';
+      default: return 'bg-gray-50/30 border-l-4 border-l-gray-400';
+    }
+  };
+
+  const getStatusBorderColor = (status: string) => {
+    switch (status) {
+      case 'en_ruta': return 'border-blue-400';
+      case 'entregado': return 'border-green-400';
+      case 'devolucion': return 'border-red-400';
+      case 'reagendado': return 'border-orange-400';
+      default: return 'border-gray-400';
+    }
+  };
+
+  const getStatusStickyStyle = (status: string) => {
+    switch (status) {
+      case 'en_ruta': return 'border-l-8 border-l-blue-500 bg-blue-100/90 shadow-xl';
+      case 'entregado': return 'border-l-8 border-l-green-500 bg-green-100/90 shadow-xl';
+      case 'devolucion': return 'border-l-8 border-l-red-500 bg-red-100/90 shadow-xl';
+      case 'reagendado': return 'border-l-8 border-l-orange-500 bg-orange-100/90 shadow-xl';
+      default: return 'border-l-8 border-l-gray-500 bg-gray-100/90 shadow-xl';
     }
   };
 
@@ -1480,30 +1502,56 @@ export default function MiRutaHoy() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+              <div className="mb-2 text-xs text-gray-500 text-center">
+                💡 Haz clic en cualquier fila para fijar la columna ID y verla siempre visible
+              </div>
+              <Table className="min-w-[1250px]">
                 <TableHeader>
-                  <TableRow className="bg-gray-50">
-                    <TableHead className="min-w-[120px]">ID Pedido</TableHead>
-                    <TableHead className="min-w-[150px]">Cliente</TableHead>
-                    <TableHead className="min-w-[200px]">Productos</TableHead>
-                    <TableHead className="min-w-[250px]">Dirección</TableHead>
-                    <TableHead className="w-24 text-right">Monto</TableHead>
-                    <TableHead className="w-24">Pago</TableHead>
-                    <TableHead className="w-24">Estado</TableHead>
-                    <TableHead className="w-24">Acciones</TableHead>
+                  <TableRow className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+                    <TableHead className="min-w-[140px] px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <span className="font-bold text-gray-800 text-sm">ID Pedido</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="min-w-[180px] px-4 py-3 font-bold text-gray-800 text-sm">Cliente</TableHead>
+                    <TableHead className="min-w-[280px] px-4 py-3 font-bold text-gray-800 text-sm">Productos</TableHead>
+                    <TableHead className="min-w-[300px] px-4 py-3 font-bold text-gray-800 text-sm">Dirección</TableHead>
+                    <TableHead className="min-w-[100px] text-right px-4 py-3 font-bold text-gray-800 text-sm">Monto</TableHead>
+                    <TableHead className="min-w-[120px] px-4 py-3 font-bold text-gray-800 text-sm">Pago</TableHead>
+                    <TableHead className="min-w-[120px] px-4 py-3 font-bold text-gray-800 text-sm">Estado</TableHead>
+                    <TableHead className="min-w-[140px] px-4 py-3 font-bold text-gray-800 text-sm">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredOrders.map((order, index) => (
-                    <TableRow key={order.id} className="hover:bg-gray-50">
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full ${getStatusIndicatorColor(order.status)}`} />
-                          {order.id}
+                    <TableRow 
+                      key={order.id} 
+                      className={`hover:bg-gray-50 ${getStatusRowColor(order.status)} cursor-pointer transition-all duration-200 ${
+                        selectedRowId === order.id 
+                          ? 'ring-2 ring-blue-500 ring-opacity-50 bg-blue-50/20 shadow-md' 
+                          : ''
+                      }`}
+                      onClick={() => setSelectedRowId(selectedRowId === order.id ? null : order.id)}
+                    >
+                      <TableCell className={`font-medium px-4 py-3 ${
+                        selectedRowId === order.id 
+                          ? `sticky left-0 z-30 border-r-2 border-gray-300 ${getStatusStickyStyle(order.status)}` 
+                          : ''
+                      }`}>
+                        {/* El borde izquierdo (border-l-8) SÍ es sticky porque está en la TableCell sticky */}
+                        <div className="flex items-center gap-3">
+                          <div className={`w-5 h-5 rounded-full ${getStatusIndicatorColor(order.status)} shadow-md border-2 border-white ${
+                            selectedRowId === order.id ? 'ring-2 ring-white ring-opacity-50' : ''
+                          }`} />
+                          <div className="flex flex-col">
+                            <span className="font-mono text-sm font-bold text-gray-900">{order.id}</span>
+                            <span className="text-xs text-gray-500 font-medium">Pedido</span>
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-4 py-3">
                         <div className="space-y-2">
                           <div className="space-y-1">
                             <div className="font-medium">{order.customerName}</div>
@@ -1535,10 +1583,14 @@ export default function MiRutaHoy() {
                                   
                                   const message = `Buen día *${order.customerName}* 📍 Soy el mensajero que va entregar tu pedido de *${products}* de la tienda *${tiendaName}* Y me dirijo a la dirección *${order.customerAddress}* en *${order.customerCanton}* en el distrito *${order.customerDistrict}* en la provincia *${order.customerProvince}* 📍. Por favor confirmame que te encuentras ahí.`;
 
-                                  // Remover +506 del número si está presente
-                                  const cleanPhone = order.customerPhone.replace(/^\+506/, '');
+                                  // Limpiar el número de teléfono para WhatsApp
+                                  let cleanPhone = order.customerPhone;
+                                  // Remover +506 o 506 del inicio si está presente
+                                  cleanPhone = cleanPhone.replace(/^(\+506|506)/, '');
+                                  // Asegurar que el número tenga el formato correcto para WhatsApp
+                                  const whatsappPhone = `506${cleanPhone}`;
                                   const encodedMessage = encodeURIComponent(message);
-                                  const whatsappUrl = `https://wa.me/506${cleanPhone}?text=${encodedMessage}`;
+                                  const whatsappUrl = `https://wa.me/${whatsappPhone}?text=${encodedMessage}`;
                                   window.open(whatsappUrl);
                                 }
                               }}
@@ -1552,12 +1604,22 @@ export default function MiRutaHoy() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="max-w-[200px] truncate" title={order.productos || 'No especificados'}>
-                          {order.productos || 'No especificados'}
+                      <TableCell className="px-4 py-3">
+                        <div className="max-w-[280px] space-y-2">
+                          {/* Tienda */}
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                            <span className="text-xs font-bold text-purple-700 bg-purple-100 px-2 py-1 rounded-md border border-purple-200">
+                              {order.tienda || 'ALL STARS'}
+                            </span>
+                          </div>
+                          {/* Productos */}
+                          <div className="text-sm text-gray-700 leading-relaxed" title={order.productos || 'No especificados'}>
+                            {order.productos || 'No especificados'}
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-4 py-3">
                         <div className="space-y-2">
                           {/* Dirección principal */}
                           <div className="space-y-1">
@@ -1592,10 +1654,10 @@ export default function MiRutaHoy() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-semibold">
+                      <TableCell className="text-right font-semibold px-4 py-3">
                         {formatCurrency(order.totalAmount)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-4 py-3">
                         <Badge 
                           variant="outline" 
                           className={`text-xs ${
@@ -1609,7 +1671,7 @@ export default function MiRutaHoy() {
                           {order.paymentMethod === '2pagos' ? '💰 2 Pagos' : (order.metodoPagoOriginal || 'No especificado')}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-4 py-3">
                         <Badge 
                           variant="outline"
                           className={`text-xs ${
@@ -1627,7 +1689,7 @@ export default function MiRutaHoy() {
                            '📝 Pendiente'}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-4 py-3">
                         <div className="flex gap-1">
                           <Button
                             size="sm"

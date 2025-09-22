@@ -1271,8 +1271,15 @@ Total: ${formatCurrency(order.totalAmount)}
 
 ¿En qué momento le conviene recibir su pedido?`;
 
+                        // Limpiar el número de teléfono para WhatsApp
+                        let cleanPhone = order.customerPhone.replace(/\D/g, '');
+                        // Remover 506 del inicio si está presente
+                        cleanPhone = cleanPhone.replace(/^506/, '');
+                        // Asegurar que el número tenga el formato correcto para WhatsApp
+                        const whatsappPhone = `506${cleanPhone}`;
+                        
                         const encodedMessage = encodeURIComponent(message);
-                        const whatsappUrl = `https://wa.me/506${order.customerPhone.replace(/\D/g, '')}?text=${encodedMessage}`;
+                        const whatsappUrl = `https://wa.me/${whatsappPhone}?text=${encodedMessage}`;
                         window.open(whatsappUrl);
                       }
                     }}

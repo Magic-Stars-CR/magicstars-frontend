@@ -9,6 +9,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   Package,
   CheckCircle,
   RotateCcw,
@@ -25,6 +36,7 @@ import {
   Clock,
   Building2,
   Warehouse,
+  RefreshCw,
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -34,10 +46,87 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  // Actualizar el contador de tiempo cada segundo
+  useEffect(() => {
+    if (!canSync() && lastSyncTime) {
+      const interval = setInterval(() => {
+        // Forzar re-render para actualizar el contador
+        setLastSyncTime(prev => prev);
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [lastSyncTime]);
+
+  const canSync = () => {
+    if (!lastSyncTime) return true;
+    const fiveMinutes = 5 * 60 * 1000; // 5 minutos en milisegundos
+    return Date.now() - lastSyncTime > fiveMinutes;
+  };
+
+  const getTimeUntilNextSync = () => {
+    if (!lastSyncTime) return null;
+    const fiveMinutes = 5 * 60 * 1000;
+    const timeLeft = fiveMinutes - (Date.now() - lastSyncTime);
+    if (timeLeft <= 0) return null;
+    
+    const minutes = Math.floor(timeLeft / 60000);
+    const seconds = Math.floor((timeLeft % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const syncRegistries = async () => {
+    try {
+      setSyncing(true);
+      setSyncMessage(null);
+      
+      console.log('Iniciando sincronización de registros...');
+      
+      const response = await fetch('https://primary-production-2b25b.up.railway.app/webhook/Sync-Today-Registries', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error en la sincronización: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Sincronización exitosa:', result);
+      
+      setSyncMessage('Sincronización exitosa. Los datos se han actualizado.');
+      setLastSyncTime(Date.now());
+      
+      // Recargar los datos después de la sincronización
+      await loadData();
+      
+      // Limpiar el mensaje después de 3 segundos
+      setTimeout(() => {
+        setSyncMessage(null);
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Error en la sincronización:', error);
+      setSyncMessage('Error en la sincronización. Por favor, inténtalo de nuevo.');
+      
+      // Limpiar el mensaje de error después de 5 segundos
+      setTimeout(() => {
+        setSyncMessage(null);
+      }, 5000);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -221,69 +310,145 @@ export default function AdminDashboard() {
         </p>
       </div>
 
+      {/* Sync Message */}
+      {syncMessage && (
+        <div className={`p-4 rounded-lg border ${
+          syncMessage.includes('exitoso') 
+            ? 'bg-green-50 border-green-200 text-green-800' 
+            : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+          <div className="flex items-center gap-2">
+            {syncMessage.includes('exitoso') ? (
+              <CheckCircle className="w-5 h-5" />
+            ) : (
+              <RotateCcw className="w-5 h-5" />
+            )}
+            <span className="font-medium">{syncMessage}</span>
+          </div>
+        </div>
+      )}
+
       {/* Quick Actions */}
-      <div className="grid md:grid-cols-6 gap-4">
-        <Card className="border-2 border-dashed border-blue-200 hover:border-blue-400 transition-colors">
+      <div className="grid md:grid-cols-7 gap-6">
+        {/* Sincronizar Registros - Botón Principal */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-cyan-50 to-blue-50 border-2 border-cyan-200 hover:border-cyan-400 hover:shadow-lg hover:shadow-cyan-100 transition-all duration-300 transform hover:-translate-y-1">
           <CardContent className="flex items-center justify-center p-6">
-            <Button asChild className="w-full">
-              <Link href="/dashboard/admin/pedidos">
-                <Package className="w-4 h-4 mr-2" />
-                Gestionar Pedidos
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  disabled={syncing || !canSync()}
+                  className="w-full h-16 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                  variant="outline"
+                >
+                  <div className="flex flex-col items-center gap-1">
+                    {syncing ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-5 h-5" />
+                    )}
+                    <span className="text-xs">
+                      {syncing ? 'Sincronizando...' : 'Sincronizar Registros'}
+                    </span>
+                  </div>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Confirmar Sincronización</AlertDialogTitle>
+                  <AlertDialogDescription className="space-y-2">
+                    <p>¿Estás seguro de que quieres sincronizar los registros con Google Sheets?</p>
+                    <p className="font-medium text-amber-600">
+                      ⚠️ Importante: No realices múltiples sincronizaciones en menos de 5 minutos para evitar sobrecargar el sistema.
+                    </p>
+                    {!canSync() && (
+                      <p className="font-medium text-red-600">
+                        Debes esperar {getTimeUntilNextSync()} antes de poder sincronizar nuevamente.
+                      </p>
+                    )}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={syncRegistries}
+                    disabled={!canSync()}
+                    className="bg-cyan-600 hover:bg-cyan-700"
+                  >
+                    Confirmar Sincronización
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </CardContent>
+        </Card>
+
+        {/* Gestionar Pedidos */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-100 transition-all duration-300 transform hover:-translate-y-1">
+          <CardContent className="flex items-center justify-center p-6">
+            <Button asChild className="w-full h-16 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <Link href="/dashboard/admin/pedidos" className="flex flex-col items-center gap-1">
+                <Package className="w-5 h-5" />
+                <span className="text-xs">Gestionar Pedidos</span>
               </Link>
             </Button>
           </CardContent>
         </Card>
 
-        <Card className="border-2 border-dashed border-emerald-200 hover:border-emerald-400 transition-colors">
+        {/* Gestionar Inventario */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-200 hover:border-emerald-400 hover:shadow-lg hover:shadow-emerald-100 transition-all duration-300 transform hover:-translate-y-1">
           <CardContent className="flex items-center justify-center p-6">
-            <Button asChild variant="outline" className="w-full">
-              <Link href="/dashboard/admin/inventory">
-                <Warehouse className="w-4 h-4 mr-2" />
-                Gestionar Inventario
+            <Button asChild className="w-full h-16 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <Link href="/dashboard/admin/inventory" className="flex flex-col items-center gap-1">
+                <Warehouse className="w-5 h-5" />
+                <span className="text-xs">Gestionar Inventario</span>
               </Link>
             </Button>
           </CardContent>
         </Card>
 
-        <Card className="border-2 border-dashed border-green-200 hover:border-green-400 transition-colors">
+        {/* Asignar Rutas */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-green-50 to-teal-50 border-2 border-green-200 hover:border-green-400 hover:shadow-lg hover:shadow-green-100 transition-all duration-300 transform hover:-translate-y-1">
           <CardContent className="flex items-center justify-center p-6">
-            <Button asChild variant="outline" className="w-full">
-              <Link href="/dashboard/admin/routes">
-                <Truck className="w-4 h-4 mr-2" />
-                Asignar Rutas
+            <Button asChild className="w-full h-16 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <Link href="/dashboard/admin/routes" className="flex flex-col items-center gap-1">
+                <Truck className="w-5 h-5" />
+                <span className="text-xs">Asignar Rutas</span>
               </Link>
             </Button>
           </CardContent>
         </Card>
 
-        <Card className="border-2 border-dashed border-purple-200 hover:border-purple-400 transition-colors">
+        {/* Gestionar Usuarios */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-100 transition-all duration-300 transform hover:-translate-y-1">
           <CardContent className="flex items-center justify-center p-6">
-            <Button asChild variant="outline" className="w-full">
-              <Link href="/dashboard/admin/users">
-                <Users className="w-4 h-4 mr-2" />
-                Gestionar Usuarios
+            <Button asChild className="w-full h-16 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <Link href="/dashboard/admin/users" className="flex flex-col items-center gap-1">
+                <Users className="w-5 h-5" />
+                <span className="text-xs">Gestionar Usuarios</span>
               </Link>
             </Button>
           </CardContent>
         </Card>
 
-        <Card className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 transition-colors">
+        {/* Gestionar Empresas */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-indigo-50 to-blue-50 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg hover:shadow-indigo-100 transition-all duration-300 transform hover:-translate-y-1">
           <CardContent className="flex items-center justify-center p-6">
-            <Button asChild variant="outline" className="w-full">
-              <Link href="/dashboard/admin/companies">
-                <Building2 className="w-4 h-4 mr-2" />
-                Gestionar Empresas
+            <Button asChild className="w-full h-16 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <Link href="/dashboard/admin/companies" className="flex flex-col items-center gap-1">
+                <Building2 className="w-5 h-5" />
+                <span className="text-xs">Gestionar Empresas</span>
               </Link>
             </Button>
           </CardContent>
         </Card>
 
-        <Card className="border-2 border-dashed border-orange-200 hover:border-orange-400 transition-colors">
+        {/* Estadísticas */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-orange-200 hover:border-orange-400 hover:shadow-lg hover:shadow-orange-100 transition-all duration-300 transform hover:-translate-y-1">
           <CardContent className="flex items-center justify-center p-6">
-            <Button asChild variant="outline" className="w-full">
-              <Link href="/dashboard/admin/stats">
-                <BarChart3 className="w-4 h-4 mr-2" />
-                Estadísticas
+            <Button asChild className="w-full h-16 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <Link href="/dashboard/admin/stats" className="flex flex-col items-center gap-1">
+                <BarChart3 className="w-5 h-5" />
+                <span className="text-xs">Estadísticas</span>
               </Link>
             </Button>
           </CardContent>
