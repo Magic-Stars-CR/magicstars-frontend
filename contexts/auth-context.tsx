@@ -7,7 +7,7 @@ import { useHydration } from '@/hooks/use-hydration';
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => void;
   loading: boolean;
 }
@@ -19,13 +19,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const isHydrated = useHydration();
 
+  // Debug: Monitorear cambios en el estado del usuario
   useEffect(() => {
+    console.log('🔄 Estado del usuario cambió:', user ? `${user.name} (${user.role})` : 'null', 'timestamp:', new Date().toISOString());
+  }, [user]);
+
+  useEffect(() => {
+    console.log('🔄 AuthContext useEffect - isHydrated:', isHydrated, 'timestamp:', new Date().toISOString());
     // Solo ejecutar después de la hidratación
-    if (!isHydrated) return;
+    if (!isHydrated) {
+      console.log('⏳ Esperando hidratación...');
+      return;
+    }
     
     // Verificar si hay una sesión guardada
     const checkStoredSession = async () => {
-      console.log('Verificando sesión guardada...');
+      console.log('🔍 Verificando sesión guardada...');
       const storedToken = localStorage.getItem('magicstars_token');
       const storedUser = localStorage.getItem('magicstars_user');
       
@@ -39,17 +48,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('Token válido:', isValidToken ? 'Sí' : 'No');
         
         if (isValidToken) {
-          console.log('Restaurando usuario:', userData);
+          console.log('✅ Restaurando usuario:', userData);
           setUser(userData);
         } else {
-          console.log('Token inválido, limpiando storage');
+          console.log('❌ Token inválido, limpiando storage');
           // Token inválido, limpiar storage
           localStorage.removeItem('magicstars_token');
           localStorage.removeItem('magicstars_user');
         }
       }
       
-      console.log('Finalizando verificación de sesión');
+      console.log('🏁 Finalizando verificación de sesión');
       setLoading(false);
     };
 
@@ -58,9 +67,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      console.log('Intentando login con:', email);
+      console.log('🔐 Intentando login con:', email, 'timestamp:', new Date().toISOString());
+      setLoading(true);
       const user = await mockLogin(email, password);
-      console.log('Login exitoso, usuario:', user);
+      console.log('✅ Login exitoso, usuario:', user);
       
       if (user) {
         // Solo guardar en localStorage si estamos en el cliente
@@ -70,12 +80,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         
         setUser(user);
-        console.log('Usuario establecido en contexto');
+        console.log('👤 Usuario establecido en contexto:', user);
+        console.log('🔄 Estado del usuario después de setUser:', user);
+        
+        // Esperar un poco para que el estado se actualice
+        setTimeout(() => {
+          setLoading(false);
+          console.log('🏁 Loading establecido a false después del login', 'timestamp:', new Date().toISOString());
+        }, 50);
+        
+        return user; // Devolver el usuario para la redirección
       } else {
+        setLoading(false);
         throw new Error('Credenciales inválidas');
       }
     } catch (error) {
-      console.error('Error en login:', error);
+      console.error('❌ Error en login:', error);
+      setLoading(false);
       throw error;
     }
   };
@@ -92,8 +113,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
+  const finalLoading = loading || !isHydrated;
+  
+  const contextValue = {
+    user,
+    login,
+    logout,
+    loading: finalLoading
+  };
+
+  console.log('🔍 AuthContext Provider - Valor actual:', {
+    user: user ? `${user.name} (${user.role})` : 'null',
+    loading,
+    isHydrated,
+    finalLoading,
+    timestamp: new Date().toISOString()
+  });
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading: loading || !isHydrated }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

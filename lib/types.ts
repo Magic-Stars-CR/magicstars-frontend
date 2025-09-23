@@ -106,12 +106,14 @@ export interface Order {
   
   // Asignaciones
   assignedMessengerId?: string;
-  assignedMessenger?: User;
+  assignedMessenger?: User | { id: string; name: string; phone?: string };
   advisorId?: string;
   advisor?: User;
+  asesor?: { id: string; name: string; store: string; email?: string };
   
   // Notas y tracking
   notes?: string;
+  asesorNotes?: string; // Notas del asesor (nota_asesor)
   deliveryNotes?: string;
   trackingUrl?: string;
   deliveryAddress?: string;

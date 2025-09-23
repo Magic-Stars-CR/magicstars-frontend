@@ -15,6 +15,9 @@ import Link from 'next/link';
 // Mover el array fuera del componente para evitar problemas de hidratación
 const demoUsers = [
   { email: 'admin@magicstars.com', role: 'Administrador', password: 'Admin1234' },
+  { email: 'asesor@magicstars.com', role: 'Asesor', password: 'Asesor1234' },
+  { email: 'asesor-allstars@magicstars.com', role: 'Asesor - All Stars', password: 'AllStars1234' },
+  { email: 'asesor-beautyfan@magicstars.com', role: 'Asesor - Beauty Fan', password: 'BeautyFan1234' },
   { email: 'alex@magicstars.com', role: 'Mensajero - Alex', password: 'Alex1234' },
   { email: 'andrey@magicstars.com', role: 'Mensajero - Andrey', password: 'Andrey5678' },
   { email: 'anibal@magicstars.com', role: 'Mensajero - Anibal', password: 'Anibal9012' },
@@ -50,9 +53,29 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(email, password);
-      router.push('/');
+      console.log('🔐 Iniciando proceso de login...');
+      const user = await login(email, password);
+      console.log('✅ Usuario recibido del login:', user);
+      
+      // Esperar un poco para que el contexto se actualice
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Redirigir según el rol del usuario
+      if (user?.role === 'admin') {
+        console.log('🔄 Redirigiendo a admin dashboard');
+        router.push('/dashboard/admin');
+      } else if (user?.role === 'asesor') {
+        console.log('🔄 Redirigiendo a asesor dashboard');
+        router.push('/dashboard/asesor');
+      } else if (user?.role === 'mensajero') {
+        console.log('🔄 Redirigiendo a mensajero dashboard');
+        router.push('/dashboard/mensajero');
+      } else {
+        console.log('🔄 Redirigiendo a página principal');
+        router.push('/');
+      }
     } catch (err: any) {
+      console.error('❌ Error en login:', err);
       setError(err.message || 'Error al iniciar sesión');
     } finally {
       setLoading(false);
@@ -157,7 +180,7 @@ export default function LoginPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">Usuarios de Demostración</CardTitle>
               <CardDescription className="text-xs">
-                Haz clic para usar las credenciales de mensajeros
+                Haz clic para usar las credenciales de usuarios
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">

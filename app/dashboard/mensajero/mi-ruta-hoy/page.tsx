@@ -21,6 +21,20 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  PieChart as RechartsPieChart, 
+  Pie,
+  Cell,
+  LineChart,
+  Line
+} from 'recharts';
 import {
   Package,
   CheckCircle,
@@ -57,7 +71,10 @@ import {
   Search,
   Filter,
   MessageCircle,
-  Map
+  Map,
+  BarChart3,
+  PieChart,
+  Activity
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -113,7 +130,7 @@ export default function MiRutaHoy() {
   const [activeFilter, setActiveFilter] = useState<'todos' | 'en_ruta' | 'completados' | 'reagendados' | 'devoluciones'>('todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState<string>('today');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
@@ -136,6 +153,10 @@ export default function MiRutaHoy() {
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
   const [selectedOrderForNotes, setSelectedOrderForNotes] = useState<Order | null>(null);
   const [newNote, setNewNote] = useState('');
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<Order | null>(null);
+  const [newDetailNote, setNewDetailNote] = useState('');
+  const [isAddingDetailNote, setIsAddingDetailNote] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [uploadedReceipts, setUploadedReceipts] = useState<string[]>([]);
   const [uploadedEvidence, setUploadedEvidence] = useState<string | null>(null);
@@ -160,12 +181,21 @@ export default function MiRutaHoy() {
   const [selectedOrderForTimeline, setSelectedOrderForTimeline] = useState<Order | null>(null);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [statusChanges, setStatusChanges] = useState<StatusChange[]>([]);
+  
+  // Estados para modales de métricas
+  const [isCompletedModalOpen, setIsCompletedModalOpen] = useState(false);
+  const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
+  const [isRescheduledModalOpen, setIsRescheduledModalOpen] = useState(false);
+  const [isReturnsModalOpen, setIsReturnsModalOpen] = useState(false);
+  const [isCashModalOpen, setIsCashModalOpen] = useState(false);
+  const [isSinpeModalOpen, setIsSinpeModalOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
       loadRouteData();
     }
   }, [user, selectedDate, dateFilter]);
+
 
   // Countdown para el modal de éxito
   useEffect(() => {
@@ -181,6 +211,40 @@ export default function MiRutaHoy() {
     }
   }, [isSuccessModalOpen, countdown]);
 
+  // Función helper para obtener la fecha actual en zona horaria de Costa Rica
+  const getCostaRicaDate = () => {
+    const now = new Date();
+    console.log('🔍 Fecha del sistema:', now);
+    console.log('🔍 Año del sistema:', now.getFullYear());
+    console.log('🔍 Zona horaria del sistema:', Intl.DateTimeFormat().resolvedOptions().timeZone);
+    
+    // Costa Rica está en GMT-6 (UTC-6)
+    const costaRicaOffset = -6 * 60; // -6 horas en minutos
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const costaRicaTime = new Date(utc + (costaRicaOffset * 60000));
+    
+    // Crear una fecha que muestre correctamente GMT-6
+    const costaRicaDate = new Date(costaRicaTime.getTime());
+    
+    console.log('📅 Fecha para Costa Rica (GMT-6):', costaRicaDate);
+    console.log('📅 Año para Costa Rica:', costaRicaDate.getFullYear());
+    console.log('📅 Zona horaria aplicada: GMT-6 (Costa Rica)');
+    
+    return costaRicaDate;
+  };
+
+  // Función helper para obtener la fecha ISO en zona horaria de Costa Rica
+  const getCostaRicaDateISO = () => {
+    const costaRicaDate = getCostaRicaDate();
+    const year = costaRicaDate.getFullYear();
+    const month = String(costaRicaDate.getMonth() + 1).padStart(2, '0');
+    const day = String(costaRicaDate.getDate()).padStart(2, '0');
+    const isoDate = `${year}-${month}-${day}`;
+    
+    console.log('📅 Fecha ISO para Costa Rica:', isoDate);
+    return isoDate;
+  };
+
   const loadRouteData = async () => {
     try {
       setLoading(true);
@@ -189,37 +253,55 @@ export default function MiRutaHoy() {
       let targetDateISO: string;
       let targetDateString: string;
       
+      console.log('🔍 DEBUGGING FECHA:');
+      console.log('selectedDate:', selectedDate);
+      console.log('dateFilter:', dateFilter);
+      
+      const now = new Date();
+      const costaRicaNow = getCostaRicaDate();
+      console.log('📅 Fecha UTC:', now);
+      console.log('📅 Fecha Costa Rica:', costaRicaNow);
+      console.log('📅 Zona horaria detectada:', Intl.DateTimeFormat().resolvedOptions().timeZone);
+      
       if (selectedDate) {
-        // Si hay una fecha específica seleccionada, usar esa
-        targetDateISO = selectedDate.toISOString().split('T')[0];
+        // Si hay una fecha específica seleccionada, usar esa pero con zona horaria de Costa Rica
+        const year = selectedDate.getFullYear();
+        const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+        const day = String(selectedDate.getDate()).padStart(2, '0');
+        targetDateISO = `${year}-${month}-${day}`;
         targetDateString = selectedDate.toDateString();
+        console.log('📅 Usando selectedDate (Costa Rica):', { targetDateISO, targetDateString });
       } else {
-        // Usar el filtro de período por defecto
-        const now = new Date();
+        // Usar el filtro de período por defecto con zona horaria de Costa Rica
         switch (dateFilter) {
           case 'today':
-            targetDateISO = now.toISOString().split('T')[0];
-            targetDateString = now.toDateString();
+            targetDateISO = getCostaRicaDateISO();
+            targetDateString = costaRicaNow.toDateString();
+            console.log('📅 Filtro TODAY (Costa Rica):', { targetDateISO, targetDateString });
             break;
           case 'yesterday':
-            const yesterday = new Date(now);
+            const yesterday = new Date(costaRicaNow);
             yesterday.setDate(yesterday.getDate() - 1);
-            targetDateISO = yesterday.toISOString().split('T')[0];
+            targetDateISO = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
             targetDateString = yesterday.toDateString();
+            console.log('📅 Filtro YESTERDAY (Costa Rica):', { targetDateISO, targetDateString });
             break;
           case 'thisWeek':
             // Para esta semana, usar hoy por defecto
-            targetDateISO = now.toISOString().split('T')[0];
-            targetDateString = now.toDateString();
+            targetDateISO = getCostaRicaDateISO();
+            targetDateString = costaRicaNow.toDateString();
+            console.log('📅 Filtro THIS WEEK (Costa Rica):', { targetDateISO, targetDateString });
             break;
           case 'thisMonth':
             // Para este mes, usar hoy por defecto
-            targetDateISO = now.toISOString().split('T')[0];
-            targetDateString = now.toDateString();
+            targetDateISO = getCostaRicaDateISO();
+            targetDateString = costaRicaNow.toDateString();
+            console.log('📅 Filtro THIS MONTH (Costa Rica):', { targetDateISO, targetDateString });
             break;
           default:
-            targetDateISO = now.toISOString().split('T')[0];
-            targetDateString = now.toDateString();
+            targetDateISO = getCostaRicaDateISO();
+            targetDateString = costaRicaNow.toDateString();
+            console.log('📅 Filtro DEFAULT (Costa Rica):', { targetDateISO, targetDateString });
         }
       }
       
@@ -344,6 +426,7 @@ export default function MiRutaHoy() {
           scheduledDate: pedido.fecha_entrega || undefined,
           deliveryDate: pedido.fecha_entrega || undefined,
           notes: pedido.notas || '',
+          asesorNotes: pedido.nota_asesor || '',
           deliveryNotes: pedido.nota_asesor || '',
           tienda: pedido.tienda || 'ALL STARS',
                assignedMessenger: pedido.mensajero_concretado ? {
@@ -408,6 +491,75 @@ export default function MiRutaHoy() {
         completedOrders,
         totalRevenue
       });
+
+      // Ordenar pedidos por ubicación (provincia, cantón, distrito) y estado
+      const sortedOrders = orders.sort((a, b) => {
+        // Función helper para normalizar texto para comparación
+        const normalizeText = (text: string) => {
+          return text
+            .toLowerCase()
+            .trim()
+            .replace(/[áàäâ]/g, 'a')
+            .replace(/[éèëê]/g, 'e')
+            .replace(/[íìïî]/g, 'i')
+            .replace(/[óòöô]/g, 'o')
+            .replace(/[úùüû]/g, 'u')
+            .replace(/ñ/g, 'n');
+        };
+        
+        // Primero por provincia (normalizada)
+        const provinciaA = normalizeText(a.customerProvince || 'zzz sin provincia');
+        const provinciaB = normalizeText(b.customerProvince || 'zzz sin provincia');
+        const provinciaCompare = provinciaA.localeCompare(provinciaB, 'es-CR');
+        
+        console.log(`🔍 Comparando provincias: "${a.customerProvince}" vs "${b.customerProvince}" = ${provinciaCompare}`);
+        
+        if (provinciaCompare !== 0) {
+          return provinciaCompare;
+        }
+        
+        // Luego por cantón (normalizado)
+        const cantonA = normalizeText(a.customerCanton || 'zzz sin canton');
+        const cantonB = normalizeText(b.customerCanton || 'zzz sin canton');
+        const cantonCompare = cantonA.localeCompare(cantonB, 'es-CR');
+        
+        console.log(`🔍 Comparando cantones: "${a.customerCanton}" vs "${b.customerCanton}" = ${cantonCompare}`);
+        
+        if (cantonCompare !== 0) {
+          return cantonCompare;
+        }
+        
+        // Después por distrito (normalizado)
+        const distritoA = normalizeText(a.customerDistrict || 'zzz sin distrito');
+        const distritoB = normalizeText(b.customerDistrict || 'zzz sin distrito');
+        const distritoCompare = distritoA.localeCompare(distritoB, 'es-CR');
+        
+        console.log(`🔍 Comparando distritos: "${a.customerDistrict}" vs "${b.customerDistrict}" = ${distritoCompare}`);
+        
+        if (distritoCompare !== 0) {
+          return distritoCompare;
+        }
+        
+        // Finalmente por estado (pendientes primero)
+        const statusOrder = { 'pendiente': 0, 'en_ruta': 1, 'entregado': 2, 'reagendado': 3, 'devolucion': 4 };
+        const statusA = statusOrder[a.status as keyof typeof statusOrder] || 5;
+        const statusB = statusOrder[b.status as keyof typeof statusOrder] || 5;
+        
+        if (statusA !== statusB) {
+          return statusA - statusB;
+        }
+        
+        // Por último por ID
+        return a.id.localeCompare(b.id, 'es-CR');
+      });
+      
+      // Actualizar el estado con los pedidos ordenados
+      setRouteData(prev => ({
+        ...prev,
+        orders: sortedOrders
+      }));
+      console.log('🔍 Pedidos ordenados por ubicación:', sortedOrders);
+
 
       setAccountingMetrics({
         totalCash,
@@ -620,6 +772,49 @@ export default function MiRutaHoy() {
     setNewNote('');
   };
 
+  const handleViewDetails = (order: Order) => {
+    setSelectedOrderForDetails(order);
+    setIsDetailsModalOpen(true);
+  };
+
+  const handleCloseDetails = () => {
+    setIsDetailsModalOpen(false);
+    setSelectedOrderForDetails(null);
+    setNewDetailNote('');
+  };
+
+  const handleAddDetailNote = async () => {
+    if (!selectedOrderForDetails || !newDetailNote.trim()) return;
+    
+    try {
+      setIsAddingDetailNote(true);
+      
+      // Simular la adición de nota (en una implementación real, esto sería una llamada a la API)
+      console.log('Añadiendo nota al pedido:', selectedOrderForDetails.id, 'Nota:', newDetailNote);
+      
+      // Aquí iría la lógica para enviar la nota al backend
+      // await addNoteToOrder(selectedOrderForDetails.id, newDetailNote);
+      
+      // Actualizar el estado local (añadir a notas generales)
+      setSelectedOrderForDetails(prev => prev ? {
+        ...prev,
+        notes: prev.notes ? `${prev.notes}\n\n${new Date().toLocaleString('es-CR')}: ${newDetailNote}` : `${new Date().toLocaleString('es-CR')}: ${newDetailNote}`
+      } : null);
+      
+      setNewDetailNote('');
+      
+      // Mostrar mensaje de éxito
+      setSuccessMessage('Nota añadida exitosamente');
+      setIsSuccessModalOpen(true);
+      
+    } catch (error) {
+      console.error('Error adding note:', error);
+      setErrorMessage('Error al añadir la nota. Por favor, inténtalo de nuevo.');
+    } finally {
+      setIsAddingDetailNote(false);
+    }
+  };
+
   const handleAddNote = async () => {
     if (!selectedOrderForNotes || !newNote.trim()) return;
     
@@ -793,6 +988,67 @@ export default function MiRutaHoy() {
     }
   };
 
+  // Funciones helper para obtener pedidos filtrados
+  const getCompletedOrders = () => routeData.orders.filter(order => order.status === 'entregado');
+  const getRescheduledOrders = () => routeData.orders.filter(order => order.status === 'reagendado');
+  const getReturnOrders = () => routeData.orders.filter(order => order.status === 'devolucion');
+  const getCashOrders = () => routeData.orders.filter(order => order.status === 'entregado' && order.paymentMethod === 'efectivo');
+  const getSinpeOrders = () => routeData.orders.filter(order => order.status === 'entregado' && order.paymentMethod === 'sinpe');
+
+  // Funciones para datos de gráficos
+  const getPaymentMethodData = () => {
+    const completedOrders = getCompletedOrders();
+    const paymentMethods = completedOrders.reduce((acc, order) => {
+      const method = order.paymentMethod || 'otro';
+      acc[method] = (acc[method] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(paymentMethods).map(([method, count]) => ({
+      name: method.charAt(0).toUpperCase() + method.slice(1),
+      value: count,
+      amount: completedOrders
+        .filter(order => (order.paymentMethod || 'otro') === method)
+        .reduce((sum, order) => sum + (order.totalAmount || 0), 0)
+    }));
+  };
+
+  const getStatusComparisonData = () => {
+    const statusCounts = {
+      'entregado': getCompletedOrders().length,
+      'reagendado': getRescheduledOrders().length,
+      'devolucion': getReturnOrders().length,
+      'en_ruta': routeData.orders.filter(order => order.status === 'en_ruta').length,
+      'pendiente': routeData.orders.filter(order => order.status === 'pendiente').length
+    };
+
+    return Object.entries(statusCounts).map(([status, count]) => ({
+      name: status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' '),
+      value: count,
+      color: getStatusColor(status)
+    }));
+  };
+
+
+  const getRevenueByHourData = () => {
+    const completedOrders = getCompletedOrders();
+    const hourlyRevenue = Array.from({ length: 24 }, (_, hour) => ({
+      hour: `${hour}:00`,
+      revenue: 0,
+      orders: 0
+    }));
+
+    completedOrders.forEach(order => {
+      if (order.deliveryDate) {
+        const hour = new Date(order.deliveryDate).getHours();
+        hourlyRevenue[hour].revenue += order.totalAmount || 0;
+        hourlyRevenue[hour].orders += 1;
+      }
+    });
+
+    return hourlyRevenue.filter(h => h.revenue > 0 || h.orders > 0);
+  };
+
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleString('es-CR', {
@@ -948,103 +1204,209 @@ export default function MiRutaHoy() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="bg-green-50 border-green-200">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-600" />
-              <div>
-                <p className="text-xs text-green-600 font-medium">Completados</p>
-                <p className="text-lg font-bold text-green-700">{routeData.completedOrders}</p>
+      {/* Bento Grid Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Completados - Grande */}
+        <Card 
+          className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+          onClick={() => setIsCompletedModalOpen(true)}
+        >
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-green-500 rounded-lg">
+                    <CheckCircle className="w-6 h-6 text-white" />
+                  </div>
+                  <span className="text-sm font-medium text-green-700">Completados</span>
+                </div>
+                <p className="text-3xl font-bold text-green-800">{routeData.completedOrders}</p>
+                <p className="text-xs text-green-600">Pedidos entregados</p>
+              </div>
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm">→</span>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-blue-50 border-blue-200">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-blue-600" />
-              <div>
-                <p className="text-xs text-blue-600 font-medium">Ingresos</p>
-                <p className="text-lg font-bold text-blue-700">{formatCurrency(routeData.totalRevenue)}</p>
+        {/* Ingresos - Grande */}
+        <Card 
+          className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+          onClick={() => setIsRevenueModalOpen(true)}
+        >
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-blue-500 rounded-lg">
+                    <DollarSign className="w-6 h-6 text-white" />
+                  </div>
+                  <span className="text-sm font-medium text-blue-700">Ingresos</span>
+                </div>
+                <p className="text-2xl font-bold text-blue-800">{formatCurrency(routeData.totalRevenue)}</p>
+                <p className="text-xs text-blue-600">Total del día</p>
+              </div>
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm">→</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Reagendados */}
+        <Card 
+          className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+          onClick={() => setIsRescheduledModalOpen(true)}
+        >
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-orange-500 rounded-lg">
+                    <RotateCcw className="w-5 h-5 text-white" />
+                  </div>
+                  <span className="text-sm font-medium text-orange-700">Reagendados</span>
+                </div>
+                <p className="text-2xl font-bold text-orange-800">{getRescheduledOrders().length}</p>
+                <p className="text-xs text-orange-600">Pendientes</p>
+              </div>
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm">→</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Devoluciones */}
+        <Card 
+          className="bg-gradient-to-br from-red-50 to-red-100 border-red-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+          onClick={() => setIsReturnsModalOpen(true)}
+        >
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-red-500 rounded-lg">
+                    <RotateCcw className="w-5 h-5 text-white" />
+                  </div>
+                  <span className="text-sm font-medium text-red-700">Devoluciones</span>
+                </div>
+                <p className="text-2xl font-bold text-red-800">{getReturnOrders().length}</p>
+                <p className="text-xs text-red-600">Para devolver</p>
+              </div>
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm">→</span>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Métricas de Contabilidad */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Receipt className="w-5 h-5 text-purple-600" />
-            Contabilidad del Día
+      {/* Contabilidad del Día - Bento Style */}
+      <Card className="bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-xl flex items-center gap-3">
+            <div className="p-2 bg-purple-500 rounded-lg">
+              <Receipt className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-purple-800">Contabilidad del Día</span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-3">
-            {/* Total Recaudado en Efectivo */}
-            <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 rounded-full">
-                  <Banknote className="w-5 h-5 text-green-600" />
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Total Efectivo */}
+            <Card 
+              className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+              onClick={() => setIsCashModalOpen(true)}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-green-500 rounded-lg">
+                        <Banknote className="w-5 h-5 text-white" />
+                      </div>
+                      <span className="text-sm font-medium text-green-700">Total Efectivo</span>
+                    </div>
+                    <p className="text-2xl font-bold text-green-800">{formatCurrency(accountingMetrics.totalCash)}</p>
+                    <p className="text-xs text-green-600">Pedidos en efectivo</p>
+                  </div>
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">→</span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-green-800">Total Efectivo</p>
-                  <p className="text-xs text-green-600">Pedidos entregados en efectivo</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-bold text-green-700">
-                  {formatCurrency(accountingMetrics.totalCash)}
-                </p>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
 
-            {/* Total Recaudado en SINPE */}
-            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-full">
-                  <Smartphone className="w-5 h-5 text-blue-600" />
+            {/* Total SINPE */}
+            <Card 
+              className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+              onClick={() => setIsSinpeModalOpen(true)}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-blue-500 rounded-lg">
+                        <Smartphone className="w-5 h-5 text-white" />
+                      </div>
+                      <span className="text-sm font-medium text-blue-700">Total SINPE</span>
+                    </div>
+                    <p className="text-2xl font-bold text-blue-800">{formatCurrency(accountingMetrics.totalSinpe)}</p>
+                    <p className="text-xs text-blue-600">Pedidos con SINPE</p>
+                  </div>
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">→</span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-blue-800">Total SINPE</p>
-                  <p className="text-xs text-blue-600">Pedidos entregados con SINPE</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-bold text-blue-700">
-                  {formatCurrency(accountingMetrics.totalSinpe)}
-                </p>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
 
-            {/* Total Pedidos para Devolver */}
-            <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-red-100 rounded-full">
-                  <RotateCcw className="w-5 h-5 text-red-600" />
+            {/* Reagendados */}
+            <Card 
+              className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+              onClick={() => setIsRescheduledModalOpen(true)}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-orange-500 rounded-lg">
+                        <RotateCcw className="w-5 h-5 text-white" />
+                      </div>
+                      <span className="text-sm font-medium text-orange-700">Reagendados</span>
+                    </div>
+                    <p className="text-2xl font-bold text-orange-800">{getRescheduledOrders().length}</p>
+                    <p className="text-xs text-orange-600">Pendientes</p>
+                  </div>
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">→</span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-red-800">Para Devolver</p>
-                  <p className="text-xs text-red-600">Pedidos marcados como devolución</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-bold text-red-700">
-                  {accountingMetrics.totalReturns}
-                </p>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Resumen Total */}
-          <div className="border-t pt-3">
-            <div className="flex justify-between items-center">
-              <span className="font-semibold text-gray-700">Total Recaudado:</span>
-              <span className="font-bold text-xl text-green-700">
+          {/* Total Recaudado */}
+          <div className="mt-6 pt-4 border-t border-purple-200">
+            <div className="flex items-center justify-between">
+              <span className="text-lg font-semibold text-purple-800">Total Recaudado:</span>
+              <span className="text-3xl font-bold text-green-600">
                 {formatCurrency(accountingMetrics.totalCash + accountingMetrics.totalSinpe)}
               </span>
             </div>
@@ -1374,6 +1736,7 @@ export default function MiRutaHoy() {
             </div>
           </div>
 
+
           {/* Filtros de fecha rápida */}
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-2">
@@ -1505,22 +1868,21 @@ export default function MiRutaHoy() {
               <div className="mb-2 text-xs text-gray-500 text-center">
                 💡 Haz clic en cualquier fila para fijar la columna ID y verla siempre visible
               </div>
-              <Table className="min-w-[1250px]">
+              <Table className="min-w-[1200px]">
                 <TableHeader>
                   <TableRow className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
-                    <TableHead className="min-w-[140px] px-4 py-3">
+                    <TableHead className="min-w-[200px] px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                        <span className="font-bold text-gray-800 text-sm">ID Pedido</span>
+                        <span className="font-bold text-gray-800 text-sm">ID y Cliente</span>
                       </div>
                     </TableHead>
-                    <TableHead className="min-w-[180px] px-4 py-3 font-bold text-gray-800 text-sm">Cliente</TableHead>
-                    <TableHead className="min-w-[280px] px-4 py-3 font-bold text-gray-800 text-sm">Productos</TableHead>
+                    <TableHead className="min-w-[180px] px-4 py-3 font-bold text-gray-800 text-sm">Contacto</TableHead>
+                    <TableHead className="min-w-[320px] px-4 py-3 font-bold text-gray-800 text-sm">Productos</TableHead>
                     <TableHead className="min-w-[300px] px-4 py-3 font-bold text-gray-800 text-sm">Dirección</TableHead>
-                    <TableHead className="min-w-[100px] text-right px-4 py-3 font-bold text-gray-800 text-sm">Monto</TableHead>
                     <TableHead className="min-w-[120px] px-4 py-3 font-bold text-gray-800 text-sm">Pago</TableHead>
                     <TableHead className="min-w-[120px] px-4 py-3 font-bold text-gray-800 text-sm">Estado</TableHead>
-                    <TableHead className="min-w-[140px] px-4 py-3 font-bold text-gray-800 text-sm">Acciones</TableHead>
+                    <TableHead className="min-w-[160px] px-4 py-3 font-bold text-gray-800 text-sm">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1544,17 +1906,17 @@ export default function MiRutaHoy() {
                           <div className={`w-5 h-5 rounded-full ${getStatusIndicatorColor(order.status)} shadow-md border-2 border-white ${
                             selectedRowId === order.id ? 'ring-2 ring-white ring-opacity-50' : ''
                           }`} />
-                          <div className="flex flex-col">
+                          <div className="flex flex-col space-y-1">
                             <span className="font-mono text-sm font-bold text-gray-900">{order.id}</span>
                             <span className="text-xs text-gray-500 font-medium">Pedido</span>
+                            <div className="font-medium text-gray-800">{order.customerName}</div>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell className="px-4 py-3">
                         <div className="space-y-2">
                           <div className="space-y-1">
-                            <div className="font-medium">{order.customerName}</div>
-                            <div className="text-xs text-gray-500">{order.customerPhone}</div>
+                            <div className="text-sm font-medium text-gray-700">{order.customerPhone}</div>
                           </div>
                           
                           {/* Botones de contacto */}
@@ -1604,7 +1966,7 @@ export default function MiRutaHoy() {
                         </div>
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <div className="max-w-[280px] space-y-2">
+                        <div className="max-w-[320px] space-y-2">
                           {/* Tienda */}
                           <div className="flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-purple-500"></div>
@@ -1615,6 +1977,13 @@ export default function MiRutaHoy() {
                           {/* Productos */}
                           <div className="text-sm text-gray-700 leading-relaxed" title={order.productos || 'No especificados'}>
                             {order.productos || 'No especificados'}
+                          </div>
+                          {/* Monto */}
+                          <div className="flex items-center gap-2 pt-1">
+                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                            <span className="text-sm font-bold text-green-700">
+                              {formatCurrency(order.totalAmount)}
+                            </span>
                           </div>
                         </div>
                       </TableCell>
@@ -1653,9 +2022,6 @@ export default function MiRutaHoy() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-semibold px-4 py-3">
-                        {formatCurrency(order.totalAmount)}
-                      </TableCell>
                       <TableCell className="px-4 py-3">
                         <Badge 
                           variant="outline" 
@@ -1671,42 +2037,68 @@ export default function MiRutaHoy() {
                         </Badge>
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <Badge 
-                          variant="outline"
-                          className={`text-xs ${
-                            order.status === 'entregado' ? 'bg-green-50 text-green-700 border-green-200' :
-                            order.status === 'en_ruta' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                            order.status === 'devolucion' ? 'bg-red-50 text-red-700 border-red-200' :
-                            order.status === 'reagendado' ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                            'bg-gray-50 text-gray-700 border-gray-200'
-                          }`}
-                        >
-                          {order.status === 'entregado' ? '✅ Entregado' :
-                           order.status === 'en_ruta' ? '🚚 En Ruta' :
-                           order.status === 'devolucion' ? '❌ Devolución' :
-                           order.status === 'reagendado' ? '📅 Reagendado' :
-                           '📝 Pendiente'}
-                        </Badge>
+                        <div className="flex items-center justify-center">
+                          <Badge 
+                            variant="outline"
+                            className={`text-sm font-semibold px-3 py-2 rounded-lg shadow-sm ${
+                              order.status === 'entregado' ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' :
+                              order.status === 'en_ruta' ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' :
+                              order.status === 'devolucion' ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' :
+                              order.status === 'reagendado' ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100' :
+                              'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">
+                                {order.status === 'entregado' ? '✅' :
+                                 order.status === 'en_ruta' ? '🚚' :
+                                 order.status === 'devolucion' ? '❌' :
+                                 order.status === 'reagendado' ? '📅' :
+                                 '📝'}
+                              </span>
+                              <span>
+                                {order.status === 'entregado' ? 'Entregado' :
+                                 order.status === 'en_ruta' ? 'En Ruta' :
+                                 order.status === 'devolucion' ? 'Devolución' :
+                                 order.status === 'reagendado' ? 'Reagendado' :
+                                 'Pendiente'}
+                              </span>
+                            </div>
+                          </Badge>
+                        </div>
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <div className="flex gap-1">
+                        <div className="flex gap-2">
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewDetails(order);
+                            }}
+                            className="h-10 w-10 p-0 bg-purple-50 border-purple-200 hover:bg-purple-100 text-purple-700 hover:scale-105 transition-transform"
+                            title="Ver Detalles"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setSelectedOrderForUpdate(order);
                               setNewStatus('en_ruta');
                               setPaymentMethod(order.paymentMethod || 'efectivo');
                               setIsUpdateStatusModalOpen(true);
                             }}
-                            className="h-8 w-8 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
+                            className="h-10 w-10 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700 hover:scale-105 transition-transform"
                             disabled={updatingOrder === order.id}
                             title="Actualizar Estado"
                           >
                             {updatingOrder === order.id ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
-                              <Edit3 className="w-3 h-3" />
+                              <Edit3 className="w-4 h-4" />
                             )}
                           </Button>
                         </div>
@@ -2523,6 +2915,774 @@ export default function MiRutaHoy() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+
+      {/* Modal de Detalles del Pedido */}
+      <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold text-gray-900">
+              <FileText className="w-5 h-5 text-purple-600" />
+              Detalles del Pedido {selectedOrderForDetails?.id}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedOrderForDetails && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+              {/* Información del Cliente */}
+              <div className="space-y-4">
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    Información del Cliente
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-600">Nombre:</span>
+                      <span className="text-gray-900">{selectedOrderForDetails.customerName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-600">Teléfono:</span>
+                      <span className="text-gray-900">{selectedOrderForDetails.customerPhone}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-600">Provincia:</span>
+                      <span className="text-gray-900">{selectedOrderForDetails.customerProvince}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-600">Cantón:</span>
+                      <span className="text-gray-900">{selectedOrderForDetails.customerCanton}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-600">Distrito:</span>
+                      <span className="text-gray-900">{selectedOrderForDetails.customerDistrict}</span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium text-gray-600">Dirección:</span>
+                      <span className="text-gray-900 text-xs leading-relaxed">{selectedOrderForDetails.customerAddress}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Información del Pedido */}
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <h3 className="font-semibold text-purple-900 mb-3 flex items-center gap-2">
+                    <Package className="w-4 h-4" />
+                    Información del Pedido
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-600">ID Pedido:</span>
+                      <span className="text-gray-900 font-mono">{selectedOrderForDetails.id}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-600">Tienda:</span>
+                      <span className="text-gray-900">{selectedOrderForDetails.tienda || 'ALL STARS'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-600">Estado:</span>
+                      <Badge 
+                        variant="outline" 
+                        className={`text-xs ${
+                          selectedOrderForDetails.status === 'entregado' ? 'bg-green-50 text-green-700 border-green-200' :
+                          selectedOrderForDetails.status === 'en_ruta' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          selectedOrderForDetails.status === 'devolucion' ? 'bg-red-50 text-red-700 border-red-200' :
+                          selectedOrderForDetails.status === 'reagendado' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                          'bg-gray-50 text-gray-700 border-gray-200'
+                        }`}
+                      >
+                        {selectedOrderForDetails.status === 'entregado' ? '✅ Entregado' :
+                         selectedOrderForDetails.status === 'en_ruta' ? '🚚 En Ruta' :
+                         selectedOrderForDetails.status === 'devolucion' ? '❌ Devolución' :
+                         selectedOrderForDetails.status === 'reagendado' ? '📅 Reagendado' :
+                         '📝 Pendiente'}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-600">Método de Pago:</span>
+                      <Badge 
+                        variant="outline" 
+                        className={`text-xs ${
+                          selectedOrderForDetails.paymentMethod === 'efectivo' ? 'bg-green-50 text-green-700 border-green-200' :
+                          selectedOrderForDetails.paymentMethod === 'sinpe' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          'bg-purple-50 text-purple-700 border-purple-200'
+                        }`}
+                      >
+                        {selectedOrderForDetails.paymentMethod === 'efectivo' ? '💵 Efectivo' :
+                         selectedOrderForDetails.paymentMethod === 'sinpe' ? '📱 SINPE Móvil' :
+                         '💳 Tarjeta'}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-600">Monto Total:</span>
+                      <span className="font-bold text-lg text-green-600">
+                        {formatCurrency(selectedOrderForDetails.totalAmount)}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium text-gray-600">Productos:</span>
+                      <span className="text-gray-900 text-xs leading-relaxed">
+                        {selectedOrderForDetails.productos || 'No especificados'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Información Adicional y Fechas */}
+              <div className="space-y-4">
+                {/* Información de Fechas */}
+                <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                  <h3 className="font-semibold text-orange-900 mb-3 flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Fechas Importantes
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-600">Fecha de Creación:</span>
+                      <span className="text-gray-900">
+                        {selectedOrderForDetails.createdAt ? 
+                          new Date(selectedOrderForDetails.createdAt).toLocaleDateString('es-CR', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          }) : 'No especificada'
+                        }
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-600">Fecha de Entrega:</span>
+                      <span className="text-gray-900">
+                        {selectedOrderForDetails.deliveryDate ? 
+                          new Date(selectedOrderForDetails.deliveryDate).toLocaleDateString('es-CR', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          }) : 'No especificada'
+                        }
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Información de Mensajería */}
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <h3 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
+                    <Truck className="w-4 h-4" />
+                    Información de Entrega
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-600">Mensajero Asignado:</span>
+                      <span className="text-gray-900">
+                        {typeof selectedOrderForDetails.assignedMessenger === 'string' 
+                          ? selectedOrderForDetails.assignedMessenger 
+                          : selectedOrderForDetails.assignedMessenger?.name || 'No asignado'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-600">Orden de Ruta:</span>
+                      <span className="text-gray-900">{selectedOrderForDetails.routeOrder || 'No asignada'}</span>
+                    </div>
+                    {selectedOrderForDetails.customerLocationLink && (
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium text-gray-600">Link de Ubicación:</span>
+                        <a 
+                          href={selectedOrderForDetails.customerLocationLink} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 text-xs underline break-all"
+                        >
+                          {selectedOrderForDetails.customerLocationLink}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Notas Adicionales */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" />
+                    Notas y Comentarios
+                  </h3>
+                  
+                  {/* Notas del Asesor */}
+                  {selectedOrderForDetails.asesorNotes && (
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                        <span className="font-medium text-orange-700">Notas del Asesor:</span>
+                      </div>
+                      <div className="bg-orange-50 p-3 rounded border border-orange-200 text-sm leading-relaxed text-orange-900">
+                        {selectedOrderForDetails.asesorNotes}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Notas Generales */}
+                  {selectedOrderForDetails.notes && (
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <span className="font-medium text-blue-700">Notas Generales:</span>
+                      </div>
+                      <div className="bg-white p-3 rounded border text-xs leading-relaxed text-gray-900 max-h-32 overflow-y-auto">
+                        {selectedOrderForDetails.notes.split('\n').map((line, index) => (
+                          <div key={index} className={line.includes(':') ? 'font-medium text-blue-700' : 'text-gray-700'}>
+                            {line}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Mostrar mensaje si no hay notas */}
+                  {!selectedOrderForDetails.notes && !selectedOrderForDetails.asesorNotes && (
+                    <div className="mb-4 text-center py-4 text-gray-500 text-sm">
+                      <MessageSquare className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      <p>No hay notas registradas para este pedido</p>
+                    </div>
+                  )}
+                  
+                  {/* Formulario para añadir nueva nota */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Añadir nueva nota:
+                      </label>
+                      <textarea
+                        value={newDetailNote}
+                        onChange={(e) => setNewDetailNote(e.target.value)}
+                        placeholder="Añade una nota general sobre este pedido (se guardará en Notas Generales)..."
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                        rows={3}
+                        disabled={isAddingDetailNote}
+                      />
+                    </div>
+                    
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={handleAddDetailNote}
+                        disabled={!newDetailNote.trim() || isAddingDetailNote}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-medium"
+                      >
+                        {isAddingDetailNote ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Añadiendo...
+                          </>
+                        ) : (
+                          <>
+                            <MessageSquare className="w-4 h-4 mr-2" />
+                            Añadir Nota
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end mt-6">
+            <Button
+              variant="outline"
+              onClick={handleCloseDetails}
+              className="w-full md:w-auto"
+            >
+              Cerrar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Completados */}
+      <Dialog open={isCompletedModalOpen} onOpenChange={setIsCompletedModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              Análisis de Pedidos Completados ({getCompletedOrders().length})
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Resumen de Métodos de Pago */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {getPaymentMethodData().map((method, index) => (
+                <Card key={method.name} className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${
+                        index === 0 ? 'bg-green-500' : 
+                        index === 1 ? 'bg-blue-500' : 
+                        index === 2 ? 'bg-purple-500' : 'bg-orange-500'
+                      }`} />
+                      <span className="text-sm font-medium text-green-800">{method.name}</span>
+                    </div>
+                    <p className="text-xl font-bold text-green-700 mt-1">
+                      {method.value}
+                    </p>
+                    <p className="text-xs text-green-600">
+                      {formatCurrency(method.amount)}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Gráficos en Grid Responsive */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Gráfico de Barras */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <BarChart3 className="w-4 h-4 text-green-600" />
+                    Distribución por Método
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={getPaymentMethodData()}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" fontSize={12} />
+                        <YAxis fontSize={12} />
+                        <Tooltip 
+                          formatter={(value, name) => [
+                            name === 'value' ? `${value} pedidos` : formatCurrency(Number(value)),
+                            name === 'value' ? 'Cantidad' : 'Monto'
+                          ]}
+                        />
+                        <Bar dataKey="value" fill="#10b981" name="Pedidos" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Gráfico de Pastel */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <DollarSign className="w-4 h-4 text-blue-600" />
+                    Ingresos por Método
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartsPieChart>
+                        <Pie
+                          data={getPaymentMethodData()}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          outerRadius={60}
+                          fill="#8884d8"
+                          dataKey="amount"
+                        >
+                          {getPaymentMethodData().map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={index === 0 ? '#10b981' : index === 1 ? '#3b82f6' : index === 2 ? '#8b5cf6' : '#f59e0b'} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value, name) => [formatCurrency(Number(value)), 'Monto']} />
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Tabla Detallada */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileText className="w-4 h-4 text-gray-600" />
+                  Lista Detallada de Pedidos
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="max-h-64 overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">ID</TableHead>
+                        <TableHead className="text-xs">Cliente</TableHead>
+                        <TableHead className="text-xs">Monto</TableHead>
+                        <TableHead className="text-xs">Método</TableHead>
+                        <TableHead className="text-xs">Fecha</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {getCompletedOrders().map((order) => (
+                        <TableRow key={order.id}>
+                          <TableCell className="font-mono text-xs">{order.id}</TableCell>
+                          <TableCell className="text-sm">{order.customerName}</TableCell>
+                          <TableCell className="font-semibold text-green-600 text-sm">
+                            {formatCurrency(order.totalAmount)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant="outline" 
+                              className={`capitalize text-xs ${
+                                order.paymentMethod === 'efectivo' ? 'bg-green-50 text-green-700 border-green-200' :
+                                order.paymentMethod === 'sinpe' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                'bg-gray-50 text-gray-700 border-gray-200'
+                              }`}
+                            >
+                              {order.paymentMethod}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-gray-500">
+                            {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString('es-CR') : 'N/A'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Ingresos */}
+      <Dialog open={isRevenueModalOpen} onOpenChange={setIsRevenueModalOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <DollarSign className="w-5 h-5 text-blue-600" />
+              Análisis de Ingresos - {formatCurrency(routeData.totalRevenue)}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Resumen de Métodos de Pago */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Card className="bg-green-50 border-green-200">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2">
+                    <Banknote className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-medium text-green-800">Efectivo</span>
+                  </div>
+                  <p className="text-xl font-bold text-green-700 mt-1">
+                    {formatCurrency(accountingMetrics.totalCash)}
+                  </p>
+                  <p className="text-xs text-green-600">
+                    {getCashOrders().length} pedidos
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="bg-blue-50 border-blue-200">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-800">SINPE</span>
+                  </div>
+                  <p className="text-xl font-bold text-blue-700 mt-1">
+                    {formatCurrency(accountingMetrics.totalSinpe)}
+                  </p>
+                  <p className="text-xs text-blue-600">
+                    {getSinpeOrders().length} pedidos
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="bg-purple-50 border-purple-200">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-purple-600" />
+                    <span className="text-sm font-medium text-purple-800">Total</span>
+                  </div>
+                  <p className="text-xl font-bold text-purple-700 mt-1">
+                    {formatCurrency(accountingMetrics.totalCash + accountingMetrics.totalSinpe)}
+                  </p>
+                  <p className="text-xs text-purple-600">
+                    {getCompletedOrders().length} pedidos
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Gráficos en Grid Responsive */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Gráfico de Barras */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <BarChart3 className="w-4 h-4 text-blue-600" />
+                    Comparación por Método
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={getPaymentMethodData()}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" fontSize={12} />
+                        <YAxis fontSize={12} />
+                        <Tooltip 
+                          formatter={(value, name) => [
+                            name === 'value' ? `${value} pedidos` : formatCurrency(Number(value)),
+                            name === 'value' ? 'Cantidad' : 'Monto'
+                          ]}
+                        />
+                        <Bar dataKey="value" fill="#3b82f6" name="Pedidos" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Gráfico de Pastel */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <PieChart className="w-4 h-4 text-purple-600" />
+                    Distribución por Método
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartsPieChart>
+                        <Pie
+                          data={getPaymentMethodData()}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          outerRadius={60}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {getPaymentMethodData().map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={index === 0 ? '#10b981' : index === 1 ? '#3b82f6' : '#8b5cf6'} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value, name) => [`${value} pedidos`, 'Cantidad']} />
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Gráfico de Ingresos por Hora */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Activity className="w-4 h-4 text-green-600" />
+                  Ingresos por Hora del Día
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={getRevenueByHourData()}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="hour" fontSize={12} />
+                      <YAxis fontSize={12} />
+                      <Tooltip 
+                        formatter={(value, name) => [
+                          name === 'revenue' ? formatCurrency(Number(value)) : value,
+                          name === 'revenue' ? 'Ingresos' : 'Pedidos'
+                        ]}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="revenue" 
+                        stroke="#10b981" 
+                        strokeWidth={2}
+                        dot={{ fill: '#10b981', strokeWidth: 2, r: 3 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Reagendados */}
+      <Dialog open={isRescheduledModalOpen} onOpenChange={setIsRescheduledModalOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="w-5 h-5 text-orange-600" />
+              Pedidos Reagendados ({getRescheduledOrders().length})
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-96 overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Monto</TableHead>
+                  <TableHead>Nueva Fecha</TableHead>
+                  <TableHead>Motivo</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {getRescheduledOrders().map((order) => (
+                  <TableRow key={order.id}>
+                    <TableCell className="font-mono text-sm">{order.id}</TableCell>
+                    <TableCell>{order.customerName}</TableCell>
+                    <TableCell className="font-semibold text-orange-600">
+                      {formatCurrency(order.totalAmount)}
+                    </TableCell>
+                    <TableCell className="text-sm text-gray-500">
+                      {order.scheduledDate ? new Date(order.scheduledDate).toLocaleDateString('es-CR') : 'Pendiente'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                        Reagendado
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Devoluciones */}
+      <Dialog open={isReturnsModalOpen} onOpenChange={setIsReturnsModalOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="w-5 h-5 text-red-600" />
+              Pedidos para Devolver ({getReturnOrders().length})
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-96 overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Monto</TableHead>
+                  <TableHead>Fecha Devolución</TableHead>
+                  <TableHead>Motivo</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {getReturnOrders().map((order) => (
+                  <TableRow key={order.id}>
+                    <TableCell className="font-mono text-sm">{order.id}</TableCell>
+                    <TableCell>{order.customerName}</TableCell>
+                    <TableCell className="font-semibold text-red-600">
+                      {formatCurrency(order.totalAmount)}
+                    </TableCell>
+                    <TableCell className="text-sm text-gray-500">
+                      {order.updatedAt ? new Date(order.updatedAt).toLocaleDateString('es-CR') : 'N/A'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                        Devolución
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Efectivo */}
+      <Dialog open={isCashModalOpen} onOpenChange={setIsCashModalOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Banknote className="w-5 h-5 text-green-600" />
+              Pedidos en Efectivo - {formatCurrency(accountingMetrics.totalCash)}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-96 overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Monto</TableHead>
+                  <TableHead>Fecha Entrega</TableHead>
+                  <TableHead>Estado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {getCashOrders().map((order) => (
+                  <TableRow key={order.id}>
+                    <TableCell className="font-mono text-sm">{order.id}</TableCell>
+                    <TableCell>{order.customerName}</TableCell>
+                    <TableCell className="font-semibold text-green-600">
+                      {formatCurrency(order.totalAmount)}
+                    </TableCell>
+                    <TableCell className="text-sm text-gray-500">
+                      {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString('es-CR') : 'N/A'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                        Entregado
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal SINPE */}
+      <Dialog open={isSinpeModalOpen} onOpenChange={setIsSinpeModalOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Smartphone className="w-5 h-5 text-blue-600" />
+              Pedidos con SINPE - {formatCurrency(accountingMetrics.totalSinpe)}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-96 overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Monto</TableHead>
+                  <TableHead>Fecha Entrega</TableHead>
+                  <TableHead>Estado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {getSinpeOrders().map((order) => (
+                  <TableRow key={order.id}>
+                    <TableCell className="font-mono text-sm">{order.id}</TableCell>
+                    <TableCell>{order.customerName}</TableCell>
+                    <TableCell className="font-semibold text-blue-600">
+                      {formatCurrency(order.totalAmount)}
+                    </TableCell>
+                    <TableCell className="text-sm text-gray-500">
+                      {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString('es-CR') : 'N/A'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                        Entregado
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
