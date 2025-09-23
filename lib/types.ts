@@ -98,6 +98,7 @@ export interface Order {
   status: OrderStatus;
   paymentMethod: PaymentMethod;
   origin: OrderOrigin;
+  numero_sinpe?: string; // Número SINPE de la tienda
   deliveryMethod?: DeliveryMethod;
   createdAt: string;
   updatedAt: string;
@@ -636,6 +637,7 @@ export interface PedidoTest {
   metodo_pago: string | null;
   fecha_entrega: string | null;
   comprobante_sinpe: string | null;
+  numero_sinpe: string | null;
   efectivo_2_pagos: string | null;
   sinpe_2_pagos: string | null;
   mensajero_asignado: string | null;

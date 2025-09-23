@@ -52,7 +52,8 @@ import {
   CheckSquare,
   Square,
   MoreHorizontal,
-  Copy
+  Copy,
+  Clipboard
 } from 'lucide-react';
 import { StatsCard } from '@/components/dashboard/stats-card';
 
@@ -280,6 +281,7 @@ export default function AsesorDashboard() {
         customerLocationLink: pedido.link_ubicacion || undefined,
         notes: pedido.notas || undefined,
         asesorNotes: pedido.nota_asesor || undefined,
+        numero_sinpe: pedido.numero_sinpe || undefined,
         tienda: asesorTienda,
         assignedMessenger: availableMessengers[index % availableMessengers.length],
         asesor: asesores.find(a => a.store === asesorTienda) || asesores[0],
@@ -617,6 +619,26 @@ export default function AsesorDashboard() {
 
   const hasUnsavedChanges = () => {
     return editingOrders.size > 0;
+  };
+
+  // Función para copiar al portapapeles
+  const copyToClipboard = async (text: string, type: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // Mostrar notificación de éxito (puedes usar toast si tienes)
+      console.log(`${type} copiado:`, text);
+      // Aquí podrías añadir un toast de éxito
+    } catch (err) {
+      console.error('Error al copiar:', err);
+      // Fallback para navegadores que no soportan clipboard API
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      console.log(`${type} copiado (fallback):`, text);
+    }
   };
 
   if (loading) {
@@ -1189,9 +1211,20 @@ export default function AsesorDashboard() {
                       <TableCell className="px-6 py-4">
                         <div className="space-y-1">
                           <div className="font-medium text-gray-900">{order.customerName}</div>
-                          <div className="flex items-center gap-1 text-sm text-gray-500">
+                          <div className="flex items-center gap-2 text-sm text-gray-500">
                             <Phone className="w-3 h-3" />
-                            {order.customerPhone || 'Sin teléfono'}
+                            <span>{order.customerPhone || 'Sin teléfono'}</span>
+                            {order.customerPhone && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => copyToClipboard(order.customerPhone!, 'Número de teléfono')}
+                                className="h-6 w-6 p-0 bg-green-50 border-green-200 hover:bg-green-100 text-green-700"
+                                title="Copiar número de teléfono"
+                              >
+                                <Clipboard className="w-3 h-3" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </TableCell>
@@ -1230,6 +1263,24 @@ export default function AsesorDashboard() {
                               {formatCurrency(order.totalAmount)}
                             </span>
                           </div>
+                          {/* Número SINPE */}
+                          {order.numero_sinpe && (
+                            <div className="flex items-center gap-2 pt-1">
+                              <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                              <span className="text-xs text-blue-700 font-mono bg-blue-50 px-2 py-1 rounded border border-blue-200">
+                                SINPE: {order.numero_sinpe}
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => copyToClipboard(order.numero_sinpe!, 'Número SINPE')}
+                                className="h-6 w-6 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
+                                title="Copiar número SINPE"
+                              >
+                                <Clipboard className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </TableCell>
 

@@ -74,7 +74,8 @@ import {
   Map,
   BarChart3,
   PieChart,
-  Activity
+  Activity,
+  Clipboard
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -428,6 +429,7 @@ export default function MiRutaHoy() {
           notes: pedido.notas || '',
           asesorNotes: pedido.nota_asesor || '',
           deliveryNotes: pedido.nota_asesor || '',
+          numero_sinpe: pedido.numero_sinpe || undefined,
           tienda: pedido.tienda || 'ALL STARS',
                assignedMessenger: pedido.mensajero_concretado ? {
                  id: '1',
@@ -1066,6 +1068,24 @@ export default function MiRutaHoy() {
       currency: 'CRC',
       minimumFractionDigits: 0,
     }).format(amount);
+  };
+
+  // Función para copiar al portapapeles
+  const copyToClipboard = async (text: string, type: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      console.log(`${type} copiado:`, text);
+    } catch (err) {
+      console.error('Error al copiar:', err);
+      // Fallback para navegadores que no soportan clipboard API
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      console.log(`${type} copiado (fallback):`, text);
+    }
   };
 
   const formatDate = (date: string) => {
@@ -1916,7 +1936,20 @@ export default function MiRutaHoy() {
                       <TableCell className="px-4 py-3">
                         <div className="space-y-2">
                           <div className="space-y-1">
-                            <div className="text-sm font-medium text-gray-700">{order.customerPhone}</div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-gray-700">{order.customerPhone}</span>
+                              {order.customerPhone && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => copyToClipboard(order.customerPhone!, 'Número de teléfono')}
+                                  className="h-6 w-6 p-0 bg-green-50 border-green-200 hover:bg-green-100 text-green-700"
+                                  title="Copiar número de teléfono"
+                                >
+                                  <Clipboard className="w-3 h-3" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
                           
                           {/* Botones de contacto */}
@@ -1985,6 +2018,24 @@ export default function MiRutaHoy() {
                               {formatCurrency(order.totalAmount)}
                             </span>
                           </div>
+                          {/* Número SINPE */}
+                          {order.numero_sinpe && (
+                            <div className="flex items-center gap-2 pt-1">
+                              <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                              <span className="text-xs text-blue-700 font-mono bg-blue-50 px-2 py-1 rounded border border-blue-200">
+                                SINPE: {order.numero_sinpe}
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => copyToClipboard(order.numero_sinpe!, 'Número SINPE')}
+                                className="h-6 w-6 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
+                                title="Copiar número SINPE"
+                              >
+                                <Clipboard className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="px-4 py-3">
