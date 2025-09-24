@@ -418,6 +418,7 @@ export default function MiRutaHoy() {
             if (metodo === 'sinpe') return 'sinpe' as const;
             if (metodo === 'tarjeta') return 'tarjeta' as const;
             if (metodo === '2pagos' || metodo === '2 pagos') return '2pagos' as const;
+            if (metodo === null || metodo === undefined) return 'efectivo' as const; // Para pedidos sin método de pago definido
             return 'efectivo' as const;
           })(),
           metodoPagoOriginal: pedido.metodo_pago || 'No especificado',
@@ -664,10 +665,15 @@ export default function MiRutaHoy() {
       // Llamar al webhook de actualización de pedidos
       try {
         // Preparar datos de pago
-        let metodoPagoData = paymentMethod || selectedOrderForUpdate.paymentMethod || 'efectivo';
+        let metodoPagoData: string | null = paymentMethod || selectedOrderForUpdate.paymentMethod || 'efectivo';
         let pagosDetalle = null;
         
-        if (paymentMethod === '2pagos') {
+        // Reglas especiales para método de pago
+        if (newStatus === 'devolucion' || newStatus === 'reagendado') {
+          // Al marcar como devolución o reagendado, el método de pago debe ser null
+          metodoPagoData = null;
+          pagosDetalle = null;
+        } else if (paymentMethod === '2pagos') {
           metodoPagoData = '2pagos';
           pagosDetalle = {
             primerPago: {
@@ -728,16 +734,16 @@ export default function MiRutaHoy() {
         
         if (!response.ok) {
           console.error('❌ Error en la respuesta del webhook:', resultado);
+          throw new Error(`Error del servidor: ${resultado.message || 'Error desconocido'}`);
         } else {
           console.log('✅ Webhook ejecutado exitosamente');
         }
       } catch (webhookError) {
         console.error('❌ Error al llamar al webhook:', webhookError);
-        // No interrumpir el flujo principal si falla el webhook
+        throw webhookError; // Re-lanzar el error para que se maneje en el catch principal
       }
       
-      // El webhook ya se ejecutó exitosamente, no necesitamos el mock API
-      // await mockApi.updateOrderStatus(selectedOrderForUpdate.id, newStatus as any, statusComment);
+      // Solo continuar si el webhook fue exitoso
       await loadRouteData();
       
       // Mostrar modal de éxito
@@ -1898,11 +1904,12 @@ export default function MiRutaHoy() {
                       </div>
                     </TableHead>
                     <TableHead className="min-w-[180px] px-4 py-3 font-bold text-gray-800 text-sm">Contacto</TableHead>
-                    <TableHead className="min-w-[320px] px-4 py-3 font-bold text-gray-800 text-sm">Productos</TableHead>
                     <TableHead className="min-w-[300px] px-4 py-3 font-bold text-gray-800 text-sm">Dirección</TableHead>
+                    <TableHead className="min-w-[320px] px-4 py-3 font-bold text-gray-800 text-sm">Productos</TableHead>
+                    <TableHead className="min-w-[160px] px-4 py-3 font-bold text-gray-800 text-sm">Acciones</TableHead>
                     <TableHead className="min-w-[120px] px-4 py-3 font-bold text-gray-800 text-sm">Pago</TableHead>
                     <TableHead className="min-w-[120px] px-4 py-3 font-bold text-gray-800 text-sm">Estado</TableHead>
-                    <TableHead className="min-w-[160px] px-4 py-3 font-bold text-gray-800 text-sm">Acciones</TableHead>
+                    <TableHead className="min-w-[200px] px-4 py-3 font-bold text-gray-800 text-sm">Notas de Asesor</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1999,6 +2006,41 @@ export default function MiRutaHoy() {
                         </div>
                       </TableCell>
                       <TableCell className="px-4 py-3">
+                        <div className="space-y-2">
+                          {/* Dirección principal */}
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium text-gray-900">
+                              {order.customerAddress || 'Dirección no especificada'}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              <span className="font-medium">Provincia:</span> {order.customerProvince || 'No especificada'}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              <span className="font-medium">Cantón:</span> {order.customerCanton || 'No especificado'}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              <span className="font-medium">Distrito:</span> {order.customerDistrict || 'No especificado'}
+                            </div>
+                          </div>
+                          
+                          {/* Botón de Maps */}
+                          {order.customerLocationLink && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                window.open(order.customerLocationLink, '_blank');
+                              }}
+                              className="h-7 px-2 text-xs bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
+                              title="Abrir en Maps"
+                            >
+                              <Navigation className="w-3 h-3 mr-1" />
+                              Maps
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
                         <div className="max-w-[320px] space-y-2">
                           {/* Tienda */}
                           <div className="flex items-center gap-2">
@@ -2039,38 +2081,39 @@ export default function MiRutaHoy() {
                         </div>
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <div className="space-y-2">
-                          {/* Dirección principal */}
-                          <div className="space-y-1">
-                            <div className="text-sm font-medium text-gray-900">
-                              {order.customerAddress || 'Dirección no especificada'}
-                            </div>
-                            <div className="text-xs text-gray-600">
-                              <span className="font-medium">Provincia:</span> {order.customerProvince || 'No especificada'}
-                            </div>
-                            <div className="text-xs text-gray-600">
-                              <span className="font-medium">Cantón:</span> {order.customerCanton || 'No especificado'}
-                            </div>
-                            <div className="text-xs text-gray-600">
-                              <span className="font-medium">Distrito:</span> {order.customerDistrict || 'No especificado'}
-                            </div>
-                          </div>
-                          
-                          {/* Botón de Maps */}
-                          {order.customerLocationLink && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                window.open(order.customerLocationLink, '_blank');
-                              }}
-                              className="h-7 px-2 text-xs bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
-                              title="Abrir en Maps"
-                            >
-                              <Navigation className="w-3 h-3 mr-1" />
-                              Maps
-                            </Button>
-                          )}
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewDetails(order);
+                            }}
+                            className="h-10 w-10 p-0 bg-purple-50 border-purple-200 hover:bg-purple-100 text-purple-700 hover:scale-105 transition-transform"
+                            title="Ver Detalles"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedOrderForUpdate(order);
+                              setNewStatus('en_ruta');
+                              setPaymentMethod(order.paymentMethod || 'efectivo');
+                              setIsUpdateStatusModalOpen(true);
+                            }}
+                            className="h-10 w-10 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700 hover:scale-105 transition-transform"
+                            disabled={updatingOrder === order.id}
+                            title="Actualizar Estado"
+                          >
+                            {updatingOrder === order.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Edit3 className="w-4 h-4" />
+                            )}
+                          </Button>
                         </div>
                       </TableCell>
                       <TableCell className="px-4 py-3">
@@ -2119,39 +2162,21 @@ export default function MiRutaHoy() {
                         </div>
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleViewDetails(order);
-                            }}
-                            className="h-10 w-10 p-0 bg-purple-50 border-purple-200 hover:bg-purple-100 text-purple-700 hover:scale-105 transition-transform"
-                            title="Ver Detalles"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedOrderForUpdate(order);
-                              setNewStatus('en_ruta');
-                              setPaymentMethod(order.paymentMethod || 'efectivo');
-                              setIsUpdateStatusModalOpen(true);
-                            }}
-                            className="h-10 w-10 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700 hover:scale-105 transition-transform"
-                            disabled={updatingOrder === order.id}
-                            title="Actualizar Estado"
-                          >
-                            {updatingOrder === order.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Edit3 className="w-4 h-4" />
-                            )}
-                          </Button>
+                        <div className="max-w-[200px]">
+                          {order.asesorNotes ? (
+                            <div className="space-y-2">
+                              <div className="text-xs text-orange-600 font-medium bg-orange-50 px-2 py-1 rounded border border-orange-200">
+                                Notas del Asesor
+                              </div>
+                              <div className="text-sm text-gray-700 bg-orange-50 p-2 rounded border border-orange-200">
+                                {order.asesorNotes}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-xs text-gray-500 italic">
+                              Sin notas del asesor
+                            </div>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
