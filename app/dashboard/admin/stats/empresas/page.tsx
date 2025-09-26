@@ -114,7 +114,7 @@ export default function CompanyStatsPage() {
       const companies = ['Magic Stars', 'Empresa A', 'Empresa B', 'Empresa C'];
       const stats: CompanyStats[] = companies.map(companyName => {
         const companyOrders = orders.filter(order => 
-          order.assignedMessenger?.company.name === companyName || companyName === 'Magic Stars'
+          (order.assignedMessenger && 'company' in order.assignedMessenger && order.assignedMessenger.company?.name === companyName) || companyName === 'Magic Stars'
         );
         
         const deliveredOrders = companyOrders.filter(o => o.status === 'entregado').length;
