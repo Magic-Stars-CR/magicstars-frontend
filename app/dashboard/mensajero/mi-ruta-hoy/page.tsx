@@ -695,7 +695,7 @@ export default function MiRutaHoy() {
           mensajero: user?.name || 'Mensajero',
           
           // Datos tomados del formulario
-          estadoPedido: newStatus,
+          estadoPedido: newStatus === 'reagendado' ? 'REAGENDO' : newStatus,
           metodoPago: metodoPagoData,
           pagosDetalle: pagosDetalle,
           nota: statusComment || '',
@@ -719,6 +719,28 @@ export default function MiRutaHoy() {
           mimeType: uploadedReceipts.length > 0 || uploadedEvidence ? "image/jpeg" : null
         };
 
+        // Log detallado del cambio de estado
+        console.log('🔄 ===== CAMBIO DE ESTADO DE PEDIDO =====');
+        console.log('📦 PEDIDO COMPLETO:', {
+          id: selectedOrderForUpdate.id,
+          cliente: selectedOrderForUpdate.customerName,
+          telefono: selectedOrderForUpdate.customerPhone,
+          direccion: `${selectedOrderForUpdate.customerAddress}, ${selectedOrderForUpdate.customerDistrict}, ${selectedOrderForUpdate.customerCanton}, ${selectedOrderForUpdate.customerProvince}`,
+          valor: selectedOrderForUpdate.totalAmount,
+          productos: selectedOrderForUpdate.productos || 'No especificados',
+          estadoAnterior: selectedOrderForUpdate.status,
+          estadoNuevo: newStatus,
+          estadoEnviadoAlBackend: newStatus === 'reagendado' ? 'REAGENDO' : newStatus,
+          mensajero: user?.name || 'Mensajero',
+          nota: statusComment || '',
+          fechaReagendado: newStatus === 'reagendado' && reagendadoDate ? reagendadoDate.toISOString().split('T')[0] : null,
+          reagendadoComoCambio: newStatus === 'reagendado' ? isReagendadoAsChange : false,
+          metodoPago: metodoPagoData,
+          tieneEvidencia: uploadedEvidence ? 'Sí' : 'No',
+          tieneComprobante: uploadedReceipts.length > 0 ? 'Sí' : 'No'
+        });
+        console.log('🔄 ======================================');
+
         console.log('🚀 Enviando datos al webhook:', webhookData);
 
         const response = await fetch("https://primary-production-2b25b.up.railway.app/webhook/actualizar-pedido", {
@@ -737,6 +759,15 @@ export default function MiRutaHoy() {
           throw new Error(`Error del servidor: ${resultado.message || 'Error desconocido'}`);
         } else {
           console.log('✅ Webhook ejecutado exitosamente');
+          console.log('🎉 ===== CAMBIO DE ESTADO EXITOSO =====');
+          console.log(`📦 Pedido ${selectedOrderForUpdate.id} actualizado correctamente`);
+          console.log(`🔄 Estado: ${selectedOrderForUpdate.status} → ${newStatus}`);
+          if (newStatus === 'reagendado') {
+            console.log(`📤 Enviado al backend como: REAGENDO`);
+            console.log(`📅 Fecha de reagendación: ${reagendadoDate ? reagendadoDate.toISOString().split('T')[0] : 'No especificada'}`);
+            console.log(`🔄 Reagendado como cambio: ${isReagendadoAsChange ? 'Sí' : 'No'}`);
+          }
+          console.log('🎉 ======================================');
         }
       } catch (webhookError) {
         console.error('❌ Error al llamar al webhook:', webhookError);

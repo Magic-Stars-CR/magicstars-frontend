@@ -328,27 +328,67 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Quick Actions */}
-      <div className="grid md:grid-cols-7 gap-6">
-        {/* Sincronizar Registros - Botón Principal */}
+      {/* Estadísticas Principales - Prioridad */}
+      <div className="grid md:grid-cols-4 gap-6 mb-8">
+        {/* Estadísticas por Empresa */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-100 transition-all duration-300 transform hover:-translate-y-1">
+          <CardContent className="flex items-center justify-center p-6">
+            <Button asChild className="w-full h-20 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <Link href="/dashboard/admin/stats/empresas" className="flex flex-col items-center gap-2">
+                <Building2 className="w-6 h-6" />
+                <span className="text-sm font-bold">Estadísticas por Empresa</span>
+                <span className="text-xs opacity-90">Análisis detallado por empresa</span>
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Estadísticas por Mensajero */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-100 transition-all duration-300 transform hover:-translate-y-1">
+          <CardContent className="flex items-center justify-center p-6">
+            <Button asChild className="w-full h-20 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <Link href="/dashboard/admin/stats/mensajeros" className="flex flex-col items-center gap-2">
+                <UserCheck className="w-6 h-6" />
+                <span className="text-sm font-bold">Estadísticas por Mensajero</span>
+                <span className="text-xs opacity-90">Rendimiento individual</span>
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Estadísticas Generales */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-orange-200 hover:border-orange-400 hover:shadow-lg hover:shadow-orange-100 transition-all duration-300 transform hover:-translate-y-1">
+          <CardContent className="flex items-center justify-center p-6">
+            <Button asChild className="w-full h-20 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <Link href="/dashboard/admin/stats" className="flex flex-col items-center gap-2">
+                <BarChart3 className="w-6 h-6" />
+                <span className="text-sm font-bold">Estadísticas Generales</span>
+                <span className="text-xs opacity-90">Vista completa del negocio</span>
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Sincronizar Registros */}
         <Card className="group relative overflow-hidden bg-gradient-to-br from-cyan-50 to-blue-50 border-2 border-cyan-200 hover:border-cyan-400 hover:shadow-lg hover:shadow-cyan-100 transition-all duration-300 transform hover:-translate-y-1">
           <CardContent className="flex items-center justify-center p-6">
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button 
                   disabled={syncing || !canSync()}
-                  className="w-full h-16 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                  className="w-full h-20 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                   variant="outline"
                 >
-                  <div className="flex flex-col items-center gap-1">
+                  <div className="flex flex-col items-center gap-2">
                     {syncing ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <Loader2 className="w-6 h-6 animate-spin" />
                     ) : (
-                      <RefreshCw className="w-5 h-5" />
+                      <RefreshCw className="w-6 h-6" />
                     )}
-                    <span className="text-xs">
+                    <span className="text-sm font-bold">
                       {syncing ? 'Sincronizando...' : 'Sincronizar Registros'}
                     </span>
+                    <span className="text-xs opacity-90">Actualizar datos</span>
                   </div>
                 </Button>
               </AlertDialogTrigger>
@@ -381,10 +421,13 @@ export default function AdminDashboard() {
             </AlertDialog>
           </CardContent>
         </Card>
+      </div>
 
+      {/* Acciones Rápidas Secundarias */}
+      <div className="grid md:grid-cols-6 gap-4 mb-8">
         {/* Gestionar Pedidos */}
         <Card className="group relative overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-6">
+          <CardContent className="flex items-center justify-center p-4">
             <Button asChild className="w-full h-16 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
               <Link href="/dashboard/admin/pedidos" className="flex flex-col items-center gap-1">
                 <Package className="w-5 h-5" />
@@ -396,7 +439,7 @@ export default function AdminDashboard() {
 
         {/* Gestionar Inventario */}
         <Card className="group relative overflow-hidden bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-200 hover:border-emerald-400 hover:shadow-lg hover:shadow-emerald-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-6">
+          <CardContent className="flex items-center justify-center p-4">
             <Button asChild className="w-full h-16 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
               <Link href="/dashboard/admin/inventory" className="flex flex-col items-center gap-1">
                 <Warehouse className="w-5 h-5" />
@@ -408,7 +451,7 @@ export default function AdminDashboard() {
 
         {/* Asignar Rutas */}
         <Card className="group relative overflow-hidden bg-gradient-to-br from-green-50 to-teal-50 border-2 border-green-200 hover:border-green-400 hover:shadow-lg hover:shadow-green-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-6">
+          <CardContent className="flex items-center justify-center p-4">
             <Button asChild className="w-full h-16 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
               <Link href="/dashboard/admin/routes" className="flex flex-col items-center gap-1">
                 <Truck className="w-5 h-5" />
@@ -420,7 +463,7 @@ export default function AdminDashboard() {
 
         {/* Gestionar Usuarios */}
         <Card className="group relative overflow-hidden bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-6">
+          <CardContent className="flex items-center justify-center p-4">
             <Button asChild className="w-full h-16 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
               <Link href="/dashboard/admin/users" className="flex flex-col items-center gap-1">
                 <Users className="w-5 h-5" />
@@ -432,7 +475,7 @@ export default function AdminDashboard() {
 
         {/* Gestionar Empresas */}
         <Card className="group relative overflow-hidden bg-gradient-to-br from-indigo-50 to-blue-50 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg hover:shadow-indigo-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-6">
+          <CardContent className="flex items-center justify-center p-4">
             <Button asChild className="w-full h-16 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
               <Link href="/dashboard/admin/companies" className="flex flex-col items-center gap-1">
                 <Building2 className="w-5 h-5" />
@@ -442,13 +485,13 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Estadísticas */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-orange-200 hover:border-orange-400 hover:shadow-lg hover:shadow-orange-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-6">
-            <Button asChild className="w-full h-16 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <Link href="/dashboard/admin/stats" className="flex flex-col items-center gap-1">
-                <BarChart3 className="w-5 h-5" />
-                <span className="text-xs">Estadísticas</span>
+        {/* Liquidación */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-200 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-100 transition-all duration-300 transform hover:-translate-y-1">
+          <CardContent className="flex items-center justify-center p-4">
+            <Button asChild className="w-full h-16 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <Link href="/dashboard/admin/liquidation" className="flex flex-col items-center gap-1">
+                <DollarSign className="w-5 h-5" />
+                <span className="text-xs">Liquidación</span>
               </Link>
             </Button>
           </CardContent>
@@ -525,42 +568,79 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Recent Orders */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Pedidos Recientes</CardTitle>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/dashboard/admin/pedidos">Ver Todos</Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentOrders.map((order) => (
-                <div key={order.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-1">
-                      <h3 className="font-semibold text-sm">{order.id}</h3>
+      {/* Tabla de Pedidos */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Package className="w-5 h-5" />
+            Pedidos Recientes
+          </CardTitle>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/dashboard/admin/pedidos">Ver Todos</Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left p-3 font-medium text-sm text-muted-foreground">ID Pedido</th>
+                  <th className="text-left p-3 font-medium text-sm text-muted-foreground">Cliente</th>
+                  <th className="text-left p-3 font-medium text-sm text-muted-foreground">Estado</th>
+                  <th className="text-left p-3 font-medium text-sm text-muted-foreground">Mensajero</th>
+                  <th className="text-left p-3 font-medium text-sm text-muted-foreground">Valor</th>
+                  <th className="text-left p-3 font-medium text-sm text-muted-foreground">Fecha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentOrders.map((order) => (
+                  <tr key={order.id} className="border-b hover:bg-gray-50 transition-colors">
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <Package className="w-4 h-4 text-blue-600" />
+                        <span className="font-medium text-sm">{order.id}</span>
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <div>
+                        <p className="font-medium text-sm">{order.customerName}</p>
+                        <p className="text-xs text-muted-foreground">{order.customerAddress}</p>
+                      </div>
+                    </td>
+                    <td className="p-3">
                       <OrderStatusBadge status={order.status} />
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {order.customerName}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {order.assignedMessenger?.name || 'Sin asignar'}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-sm">{formatCurrency(order.totalAmount)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(order.createdAt).toLocaleDateString('es-CR')}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                    </td>
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        {order.assignedMessenger ? (
+                          <>
+                            <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs">
+                              {order.assignedMessenger.name.charAt(0)}
+                            </div>
+                            <span className="text-sm">{order.assignedMessenger.name}</span>
+                          </>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">Sin asignar</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <span className="font-bold text-sm">{formatCurrency(order.totalAmount)}</span>
+                    </td>
+                    <td className="p-3">
+                      <span className="text-sm text-muted-foreground">
+                        {new Date(order.createdAt).toLocaleDateString('es-CR')}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid lg:grid-cols-1 gap-6">
 
         {/* Team Overview */}
         <Card>

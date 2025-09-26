@@ -35,6 +35,7 @@ const demoUsers = [
   { email: 'michael@magicstars.com', role: 'Mensajero - Michael', password: 'Michael7410' },
   { email: 'pablo@magicstars.com', role: 'Mensajero - Pablo', password: 'Pablo9630' },
   { email: 'pablonocturna@magicstars.com', role: 'Mensajero - PabloNocturna', password: 'PabloNocturna2580' },
+  { email: 'prueba@magicstars.com', role: 'Usuario Prueba', password: 'prueba' },
 ];
 
 export default function LoginPage() {
