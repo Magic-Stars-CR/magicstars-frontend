@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getPedidos } from '@/lib/supabase-pedidos';
+import { getPedidos, getPedidosDelDia } from '@/lib/supabase-pedidos';
+import { mockMessengers } from '@/lib/mock-messengers';
 import { Order, Stats, User, PedidoTest } from '@/lib/types';
 import { StatsCard } from '@/components/dashboard/stats-card';
 import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +39,8 @@ import {
   Building2,
   Warehouse,
   RefreshCw,
+  Phone,
+  Mail,
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -49,6 +53,8 @@ export default function AdminDashboard() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [isShowingTodayOrders, setIsShowingTodayOrders] = useState(true);
 
   useEffect(() => {
     loadData();
@@ -131,26 +137,42 @@ export default function AdminDashboard() {
   const loadData = async () => {
     try {
       setLoading(true);
-      console.log('Cargando datos reales de Supabase para admin...');
+      console.log('Cargando datos del día de hoy para admin...');
       
-      // Cargar pedidos reales de Supabase
-      const pedidosData = await getPedidos();
-      console.log('Pedidos cargados:', pedidosData.length);
+      // Cargar pedidos del día de hoy
+      const today = new Date().toISOString().split('T')[0];
+      const pedidosDelDia = await getPedidosDelDia(today);
+      console.log('Pedidos del día cargados:', pedidosDelDia.length);
       
-      // Convertir pedidos de Supabase a formato Order
-      const orders: Order[] = pedidosData.map((pedido: PedidoTest) => ({
+      // Cargar todos los pedidos para estadísticas generales
+      const pedidosDataResult = await getPedidos(1, 1000); // Obtener muchos pedidos para estadísticas
+      const pedidosData = pedidosDataResult.data;
+      console.log('Total pedidos cargados:', pedidosData.length);
+      
+      // Usar pedidos del día si hay, sino usar los más recientes
+      const pedidosParaMostrar = pedidosDelDia.length > 0 ? pedidosDelDia : pedidosData.slice(0, 10);
+      const hayPedidosHoy = pedidosDelDia.length > 0;
+      setIsShowingTodayOrders(hayPedidosHoy);
+      console.log('Pedidos para mostrar:', pedidosParaMostrar.length, hayPedidosHoy ? '(del día de hoy)' : '(más recientes)');
+      
+      // Convertir pedidos a formato Order para mostrar
+      const orders: Order[] = pedidosParaMostrar.map((pedido: PedidoTest) => ({
         id: pedido.id_pedido,
-        customerName: `Cliente ${pedido.id_pedido}`,
-        customerPhone: '0000-0000',
-        customerAddress: pedido.distrito,
-        customerProvince: 'San José',
-        customerCanton: 'Central',
+        customerName: pedido.cliente_nombre || `Cliente ${pedido.id_pedido}`,
+        customerPhone: pedido.cliente_telefono || 'No disponible',
+        customerAddress: pedido.direccion || pedido.distrito,
+        customerProvince: pedido.provincia || 'San José',
+        customerCanton: pedido.canton || 'Central',
         customerDistrict: pedido.distrito,
         customerLocationLink: pedido.link_ubicacion || undefined,
         items: [],
         totalAmount: pedido.valor_total,
-        status: pedido.mensajero_concretado ? 'entregado' : (pedido.mensajero_asignado ? 'en_ruta' : 'pendiente'),
-        paymentMethod: 'efectivo' as const,
+        status: pedido.estado_pedido === 'entregado' ? 'entregado' : 
+                pedido.estado_pedido === 'devolucion' ? 'devolucion' :
+                pedido.estado_pedido === 'reagendado' ? 'reagendado' :
+                pedido.mensajero_concretado ? 'entregado' : 
+                (pedido.mensajero_asignado ? 'en_ruta' : 'pendiente'),
+        paymentMethod: (pedido.metodo_pago?.toLowerCase() as any) || 'efectivo',
         origin: 'csv' as const,
         assignedMessenger: pedido.mensajero_asignado ? {
           id: `msg-${pedido.mensajero_asignado}`,
@@ -175,8 +197,8 @@ export default function AdminDashboard() {
         } : undefined,
         deliveryNotes: pedido.nota_asesor || undefined,
         notes: pedido.notas || undefined,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: pedido.fecha_creacion,
+        updatedAt: pedido.fecha_creacion,
       }));
 
       // Obtener últimos 8 pedidos
@@ -205,74 +227,9 @@ export default function AdminDashboard() {
 
       setStats(realStats);
 
-      // Obtener usuarios únicos de los pedidos (mensajeros)
-      const uniqueMessengers = Array.from(new Set(pedidosData.map(p => p.mensajero_asignado).filter(Boolean))) as string[];
-      const messengerUsers: User[] = uniqueMessengers.map((name, index) => ({
-        id: `msg-${index + 1}`,
-        name: name!,
-        email: `${name!.toLowerCase()}@magicstars.com`,
-        role: 'mensajero' as const,
-        phone: '+506 0000-0000',
-        company: {
-          id: 'company-1',
-          name: 'Magic Stars',
-          taxId: '123456789',
-          address: 'San José, Costa Rica',
-          phone: '+506 0000-0000',
-          email: 'info@magicstars.com',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        isActive: true,
-        createdAt: new Date().toISOString(),
-      }));
-
-      // Agregar algunos asesores simulados (ya que no están en la tabla de pedidos)
-      const advisorUsers: User[] = [
-        {
-          id: 'adv-1',
-          name: 'Asesor 1',
-          email: 'asesor1@magicstars.com',
-          role: 'asesor' as const,
-          phone: '+506 0000-0001',
-          company: {
-            id: 'company-1',
-            name: 'Magic Stars',
-            taxId: '123456789',
-            address: 'San José, Costa Rica',
-            phone: '+506 0000-0000',
-            email: 'info@magicstars.com',
-            isActive: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'adv-2',
-          name: 'Asesor 2',
-          email: 'asesor2@magicstars.com',
-          role: 'asesor' as const,
-          phone: '+506 0000-0002',
-          company: {
-            id: 'company-1',
-            name: 'Magic Stars',
-            taxId: '123456789',
-            address: 'San José, Costa Rica',
-            phone: '+506 0000-0000',
-            email: 'info@magicstars.com',
-            isActive: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        },
-      ];
-
-      setUsers([...messengerUsers, ...advisorUsers]);
+      // Usar usuarios de los mocks en lugar de generarlos
+      const allUsers = mockMessengers;
+      setUsers(allUsers);
       
     } catch (error) {
       console.error('Error loading data:', error);
@@ -328,42 +285,16 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Estadísticas Principales - Prioridad */}
-      <div className="grid md:grid-cols-4 gap-6 mb-8">
-        {/* Estadísticas por Empresa */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-100 transition-all duration-300 transform hover:-translate-y-1">
+      {/* Gestión de Pedidos - Prioridad Principal */}
+      <div className="grid md:grid-cols-2 gap-6 mb-8">
+        {/* Gestión de Pedidos - PRINCIPAL */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-100 transition-all duration-300 transform hover:-translate-y-1">
           <CardContent className="flex items-center justify-center p-6">
-            <Button asChild className="w-full h-20 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <Link href="/dashboard/admin/stats/empresas" className="flex flex-col items-center gap-2">
-                <Building2 className="w-6 h-6" />
-                <span className="text-sm font-bold">Estadísticas por Empresa</span>
-                <span className="text-xs opacity-90">Análisis detallado por empresa</span>
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Estadísticas por Mensajero */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-6">
-            <Button asChild className="w-full h-20 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <Link href="/dashboard/admin/stats/mensajeros" className="flex flex-col items-center gap-2">
-                <UserCheck className="w-6 h-6" />
-                <span className="text-sm font-bold">Estadísticas por Mensajero</span>
-                <span className="text-xs opacity-90">Rendimiento individual</span>
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Estadísticas Generales */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-orange-200 hover:border-orange-400 hover:shadow-lg hover:shadow-orange-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-6">
-            <Button asChild className="w-full h-20 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <Link href="/dashboard/admin/stats" className="flex flex-col items-center gap-2">
-                <BarChart3 className="w-6 h-6" />
-                <span className="text-sm font-bold">Estadísticas Generales</span>
-                <span className="text-xs opacity-90">Vista completa del negocio</span>
+            <Button asChild className="w-full h-24 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <Link href="/dashboard/admin/pedidos" className="flex flex-col items-center gap-2">
+                <Package className="w-8 h-8" />
+                <span className="text-lg font-bold">Gestión de Pedidos</span>
+                <span className="text-xs opacity-90">Editar, asignar y administrar pedidos</span>
               </Link>
             </Button>
           </CardContent>
@@ -376,19 +307,19 @@ export default function AdminDashboard() {
               <AlertDialogTrigger asChild>
                 <Button 
                   disabled={syncing || !canSync()}
-                  className="w-full h-20 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                  className="w-full h-24 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                   variant="outline"
                 >
                   <div className="flex flex-col items-center gap-2">
                     {syncing ? (
-                      <Loader2 className="w-6 h-6 animate-spin" />
+                      <Loader2 className="w-8 h-8 animate-spin" />
                     ) : (
-                      <RefreshCw className="w-6 h-6" />
+                      <RefreshCw className="w-8 h-8" />
                     )}
-                    <span className="text-sm font-bold">
+                    <span className="text-lg font-bold">
                       {syncing ? 'Sincronizando...' : 'Sincronizar Registros'}
                     </span>
-                    <span className="text-xs opacity-90">Actualizar datos</span>
+                    <span className="text-xs opacity-90">Actualizar datos del sistema</span>
                   </div>
                 </Button>
               </AlertDialogTrigger>
@@ -423,19 +354,50 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
-      {/* Acciones Rápidas Secundarias */}
-      <div className="grid md:grid-cols-6 gap-4 mb-8">
-        {/* Gestionar Pedidos */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-4">
-            <Button asChild className="w-full h-16 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <Link href="/dashboard/admin/pedidos" className="flex flex-col items-center gap-1">
-                <Package className="w-5 h-5" />
-                <span className="text-xs">Gestionar Pedidos</span>
+      {/* Estadísticas Secundarias */}
+      <div className="grid md:grid-cols-3 gap-6 mb-8">
+        {/* Estadísticas por Empresa */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-100 transition-all duration-300 transform hover:-translate-y-1">
+          <CardContent className="flex items-center justify-center p-6">
+            <Button asChild className="w-full h-20 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <Link href="/dashboard/admin/stats/empresas" className="flex flex-col items-center gap-2">
+                <Building2 className="w-6 h-6" />
+                <span className="text-sm font-bold">Estadísticas por Empresa</span>
+                <span className="text-xs opacity-90">Análisis detallado por empresa</span>
               </Link>
             </Button>
           </CardContent>
         </Card>
+
+        {/* Estadísticas por Mensajero */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 hover:border-green-400 hover:shadow-lg hover:shadow-green-100 transition-all duration-300 transform hover:-translate-y-1">
+          <CardContent className="flex items-center justify-center p-6">
+            <Button asChild className="w-full h-20 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <Link href="/dashboard/admin/stats/mensajeros" className="flex flex-col items-center gap-2">
+                <UserCheck className="w-6 h-6" />
+                <span className="text-sm font-bold">Estadísticas por Mensajero</span>
+                <span className="text-xs opacity-90">Rendimiento individual</span>
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Estadísticas Generales */}
+        <Card className="group relative overflow-hidden bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-orange-200 hover:border-orange-400 hover:shadow-lg hover:shadow-orange-100 transition-all duration-300 transform hover:-translate-y-1">
+          <CardContent className="flex items-center justify-center p-6">
+            <Button asChild className="w-full h-20 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <Link href="/dashboard/admin/stats" className="flex flex-col items-center gap-2">
+                <BarChart3 className="w-6 h-6" />
+                <span className="text-sm font-bold">Estadísticas Generales</span>
+                <span className="text-xs opacity-90">Vista completa del negocio</span>
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Acciones Rápidas Secundarias */}
+      <div className="grid md:grid-cols-6 gap-4 mb-8">
 
         {/* Gestionar Inventario */}
         <Card className="group relative overflow-hidden bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-200 hover:border-emerald-400 hover:shadow-lg hover:shadow-emerald-100 transition-all duration-300 transform hover:-translate-y-1">
@@ -568,134 +530,204 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Tabla de Pedidos */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Package className="w-5 h-5" />
-            Pedidos Recientes
-          </CardTitle>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/dashboard/admin/pedidos">Ver Todos</Link>
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left p-3 font-medium text-sm text-muted-foreground">ID Pedido</th>
-                  <th className="text-left p-3 font-medium text-sm text-muted-foreground">Cliente</th>
-                  <th className="text-left p-3 font-medium text-sm text-muted-foreground">Estado</th>
-                  <th className="text-left p-3 font-medium text-sm text-muted-foreground">Mensajero</th>
-                  <th className="text-left p-3 font-medium text-sm text-muted-foreground">Valor</th>
-                  <th className="text-left p-3 font-medium text-sm text-muted-foreground">Fecha</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentOrders.map((order) => (
-                  <tr key={order.id} className="border-b hover:bg-gray-50 transition-colors">
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        <Package className="w-4 h-4 text-blue-600" />
-                        <span className="font-medium text-sm">{order.id}</span>
+      {/* Sistema de Pestañas */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="overview" className="flex items-center gap-2">
+            <Package className="w-4 h-4" />
+            {isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Recientes'}
+          </TabsTrigger>
+          <TabsTrigger value="messengers" className="flex items-center gap-2">
+            <UserCheck className="w-4 h-4" />
+            Mensajeros ({messengers.length})
+          </TabsTrigger>
+          <TabsTrigger value="advisors" className="flex items-center gap-2">
+            <Users className="w-4 h-4" />
+            Asesores ({advisors.length})
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Pestaña de Pedidos de Hoy */}
+        <TabsContent value="overview" className="mt-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CardTitle className="flex items-center gap-2">
+                  <Package className="w-5 h-5" />
+                  {isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Recientes'}
+                </CardTitle>
+                {!isShowingTodayOrders && (
+                  <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
+                    Sin pedidos hoy
+                  </Badge>
+                )}
+              </div>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/dashboard/admin/pedidos">Ver Todos</Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-3 font-medium text-sm text-muted-foreground">ID Pedido</th>
+                      <th className="text-left p-3 font-medium text-sm text-muted-foreground">Cliente</th>
+                      <th className="text-left p-3 font-medium text-sm text-muted-foreground">Estado</th>
+                      <th className="text-left p-3 font-medium text-sm text-muted-foreground">Mensajero</th>
+                      <th className="text-left p-3 font-medium text-sm text-muted-foreground">Valor</th>
+                      <th className="text-left p-3 font-medium text-sm text-muted-foreground">Fecha</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentOrders.map((order) => (
+                      <tr key={order.id} className="border-b hover:bg-gray-50 transition-colors">
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <Package className="w-4 h-4 text-blue-600" />
+                            <span className="font-medium text-sm">{order.id}</span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div>
+                            <p className="font-medium text-sm">{order.customerName}</p>
+                            <p className="text-xs text-muted-foreground">{order.customerAddress}</p>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <OrderStatusBadge status={order.status} />
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            {order.assignedMessenger ? (
+                              <>
+                                <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs">
+                                  {order.assignedMessenger.name.charAt(0)}
+                                </div>
+                                <span className="text-sm">{order.assignedMessenger.name}</span>
+                              </>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">Sin asignar</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <span className="font-bold text-sm">{formatCurrency(order.totalAmount)}</span>
+                        </td>
+                        <td className="p-3">
+                          <span className="text-sm text-muted-foreground">
+                            {new Date(order.createdAt).toLocaleDateString('es-CR')}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Pestaña de Mensajeros */}
+        <TabsContent value="messengers" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserCheck className="w-5 h-5" />
+                Mensajeros Activos ({messengers.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {messengers.map((messenger) => (
+                  <div key={messenger.id} className="p-4 border rounded-lg hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
+                        {messenger.name.charAt(0)}
                       </div>
-                    </td>
-                    <td className="p-3">
                       <div>
-                        <p className="font-medium text-sm">{order.customerName}</p>
-                        <p className="text-xs text-muted-foreground">{order.customerAddress}</p>
+                        <h3 className="font-semibold text-sm">{messenger.name}</h3>
+                        <p className="text-xs text-muted-foreground">{messenger.role}</p>
                       </div>
-                    </td>
-                    <td className="p-3">
-                      <OrderStatusBadge status={order.status} />
-                    </td>
-                    <td className="p-3">
+                    </div>
+                    <div className="space-y-2 text-sm">
                       <div className="flex items-center gap-2">
-                        {order.assignedMessenger ? (
-                          <>
-                            <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs">
-                              {order.assignedMessenger.name.charAt(0)}
-                            </div>
-                            <span className="text-sm">{order.assignedMessenger.name}</span>
-                          </>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">Sin asignar</span>
-                        )}
+                        <Phone className="w-3 h-3 text-muted-foreground" />
+                        <span>{messenger.phone}</span>
                       </div>
-                    </td>
-                    <td className="p-3">
-                      <span className="font-bold text-sm">{formatCurrency(order.totalAmount)}</span>
-                    </td>
-                    <td className="p-3">
-                      <span className="text-sm text-muted-foreground">
-                        {new Date(order.createdAt).toLocaleDateString('es-CR')}
-                      </span>
-                    </td>
-                  </tr>
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-3 h-3 text-muted-foreground" />
+                        <span className="truncate">{messenger.email}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">
+                          Desde: {new Date(messenger.createdAt).toLocaleDateString('es-CR')}
+                        </span>
+                        <Badge variant={messenger.isActive ? "default" : "secondary"} className="text-xs">
+                          {messenger.isActive ? 'Activo' : 'Inactivo'}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid lg:grid-cols-1 gap-6">
-
-        {/* Team Overview */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Equipo de Trabajo</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div>
-                <h4 className="font-medium mb-2 flex items-center gap-2">
-                  <UserCheck className="w-4 h-4" />
-                  Mensajeros ({messengers.length})
-                </h4>
-                <div className="space-y-2">
-                  {messengers.slice(0, 3).map((messenger) => (
-                    <div key={messenger.id} className="flex items-center justify-between p-2 bg-blue-50 rounded">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs">
-                          {messenger.name.charAt(0)}
-                        </div>
-                        <span className="text-sm font-medium">{messenger.name}</span>
-                      </div>
-                      <Badge variant="outline" className="text-xs">
-                        {messenger.isActive ? 'Activo' : 'Inactivo'}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-              <div>
-                <h4 className="font-medium mb-2 flex items-center gap-2">
-                  <Users className="w-4 h-4" />
-                  Asesores ({advisors.length})
-                </h4>
-                <div className="space-y-2">
-                  {advisors.map((advisor) => (
-                    <div key={advisor.id} className="flex items-center justify-between p-2 bg-green-50 rounded">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 bg-green-600 rounded-full flex items-center justify-center text-white text-xs">
-                          {advisor.name.charAt(0)}
-                        </div>
-                        <span className="text-sm font-medium">{advisor.name}</span>
+        {/* Pestaña de Asesores */}
+        <TabsContent value="advisors" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                Asesores Activos ({advisors.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {advisors.map((advisor) => (
+                  <div key={advisor.id} className="p-4 border rounded-lg hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white font-bold">
+                        {advisor.name.charAt(0)}
                       </div>
-                      <Badge variant="outline" className="text-xs">
-                        {advisor.isActive ? 'Activo' : 'Inactivo'}
-                      </Badge>
+                      <div>
+                        <h3 className="font-semibold text-sm">{advisor.name}</h3>
+                        <p className="text-xs text-muted-foreground">{advisor.role}</p>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-3 h-3 text-muted-foreground" />
+                        <span>{advisor.phone}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-3 h-3 text-muted-foreground" />
+                        <span className="truncate">{advisor.email}</span>
+                      </div>
+                      {advisor.company && (
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-3 h-3 text-muted-foreground" />
+                          <span className="truncate">{advisor.company.name}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">
+                          Desde: {new Date(advisor.createdAt).toLocaleDateString('es-CR')}
+                        </span>
+                        <Badge variant={advisor.isActive ? "default" : "secondary"} className="text-xs">
+                          {advisor.isActive ? 'Activo' : 'Inactivo'}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

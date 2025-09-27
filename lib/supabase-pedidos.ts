@@ -4,67 +4,93 @@ import { PedidoTest } from './types';
 // Cliente de Supabase para pedidos (usando la configuración oficial)
 export const supabasePedidos = createClient();
 
-// Función para obtener todos los pedidos
-export const getPedidos = async (limit?: number): Promise<PedidoTest[]> => {
+// Función para obtener pedidos con paginación
+export const getPedidos = async (page: number = 1, pageSize: number = 50): Promise<{ data: PedidoTest[], total: number, page: number, pageSize: number, totalPages: number }> => {
   try {
-    console.log('🔍 Iniciando consulta a Supabase...');
+    console.log(`🔍 Obteniendo página ${page} con ${pageSize} registros por página...`);
     
-    // Si no se especifica límite, usar paginación para obtener todos los registros
-    if (!limit) {
-      let allPedidos: PedidoTest[] = [];
-      let from = 0;
-      const pageLimit = 1000; // Límite por página
-      let hasMore = true;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
-      while (hasMore) {
-        console.log(`📄 Obteniendo página ${Math.floor(from / pageLimit) + 1} (registros ${from} a ${from + pageLimit - 1})...`);
-        
-        const { data, error } = await supabasePedidos
-          .from('pedidos')
-          .select('*')
-          .order('id_pedido', { ascending: false })
-          .range(from, from + pageLimit - 1);
+    // Obtener el conteo total primero
+    const { count, error: countError } = await supabasePedidos
+      .from('pedidos')
+      .select('*', { count: 'exact', head: true });
 
-        if (error) {
-          console.error('❌ Error al obtener pedidos:', error);
-          return allPedidos; // Devolver lo que tengamos hasta ahora
-        }
-
-        if (data && data.length > 0) {
-          allPedidos = [...allPedidos, ...data];
-          from += pageLimit;
-          hasMore = data.length === pageLimit; // Si obtenemos menos registros que el límite, no hay más páginas
-          console.log(`📦 Página obtenida: ${data.length} registros. Total acumulado: ${allPedidos.length}`);
-        } else {
-          hasMore = false;
-        }
-      }
-
-      console.log(`✅ Total de pedidos obtenidos: ${allPedidos.length}`);
-      return allPedidos;
-    } else {
-      // Si se especifica límite, usar la consulta simple
-      const { data, error } = await supabasePedidos
-        .from('pedidos')
-        .select('*')
-        .order('id_pedido', { ascending: false })
-        .limit(limit);
-
-      console.log('📊 Resultado de la consulta:');
-      console.log('Data:', data);
-      console.log('Error:', error);
-      console.log('Cantidad de registros:', data?.length || 0);
-
-      if (error) {
-        console.error('❌ Error al obtener pedidos:', error);
-        throw new Error(`Error de Supabase: ${error.message}`);
-      }
-
-      return data || [];
+    if (countError) {
+      console.error('❌ Error al obtener conteo:', countError);
+      throw new Error(`Error de conteo: ${countError.message}`);
     }
+
+    const total = count || 0;
+    const totalPages = Math.ceil(total / pageSize);
+
+    // Obtener los datos de la página actual
+    const { data, error } = await supabasePedidos
+      .from('pedidos')
+      .select('*')
+      .order('fecha_creacion', { ascending: false }) // Ordenar por fecha más reciente primero
+      .range(from, to);
+
+    if (error) {
+      console.error('❌ Error al obtener pedidos:', error);
+      throw new Error(`Error de Supabase: ${error.message}`);
+    }
+
+    console.log(`✅ Página ${page}/${totalPages} obtenida: ${data?.length || 0} registros de ${total} total`);
+
+    return {
+      data: data || [],
+      total,
+      page,
+      pageSize,
+      totalPages
+    };
   } catch (error) {
     console.error('❌ Error en getPedidos:', error);
     throw error;
+  }
+};
+
+// Función para obtener todos los pedidos (para filtros y estadísticas)
+export const getAllPedidos = async (): Promise<PedidoTest[]> => {
+  try {
+    console.log('🔍 Obteniendo todos los pedidos para filtros...');
+    
+    let allPedidos: PedidoTest[] = [];
+    let from = 0;
+    const pageLimit = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+      console.log(`📄 Obteniendo página ${Math.floor(from / pageLimit) + 1}...`);
+      
+      const { data, error } = await supabasePedidos
+        .from('pedidos')
+        .select('*')
+        .order('fecha_creacion', { ascending: false })
+        .range(from, from + pageLimit - 1);
+
+      if (error) {
+        console.error('❌ Error al obtener pedidos:', error);
+        return allPedidos;
+      }
+
+      if (data && data.length > 0) {
+        allPedidos = [...allPedidos, ...data];
+        from += pageLimit;
+        hasMore = data.length === pageLimit;
+        console.log(`📦 Página obtenida: ${data.length} registros. Total acumulado: ${allPedidos.length}`);
+      } else {
+        hasMore = false;
+      }
+    }
+
+    console.log(`✅ Total de pedidos obtenidos: ${allPedidos.length}`);
+    return allPedidos;
+  } catch (error) {
+    console.error('❌ Error en getAllPedidos:', error);
+    return [];
   }
 };
 
@@ -589,6 +615,183 @@ export const getAllPedidosByTienda = async (tienda: string): Promise<PedidoTest[
     return allPedidos;
   } catch (error) {
     console.error('❌ Error en getAllPedidosByTienda:', error);
+    return [];
+  }
+};
+
+// Función para obtener mensajeros únicos de Supabase
+export const getMensajerosUnicos = async (): Promise<string[]> => {
+  try {
+    console.log('🔍 Obteniendo mensajeros únicos de Supabase...');
+    
+    // Obtener nombres únicos de mensajero_asignado
+    const { data: asignados, error: errorAsignados } = await supabasePedidos
+      .from('pedidos')
+      .select('mensajero_asignado')
+      .not('mensajero_asignado', 'is', null);
+    
+    // Obtener nombres únicos de mensajero_concretado
+    const { data: concretados, error: errorConcretados } = await supabasePedidos
+      .from('pedidos')
+      .select('mensajero_concretado')
+      .not('mensajero_concretado', 'is', null);
+
+    if (errorAsignados) {
+      console.error('❌ Error al obtener mensajeros asignados:', errorAsignados);
+    }
+    
+    if (errorConcretados) {
+      console.error('❌ Error al obtener mensajeros concretados:', errorConcretados);
+    }
+
+    // Combinar y obtener nombres únicos
+    const nombresAsignados = asignados?.map(p => p.mensajero_asignado).filter(Boolean) || [];
+    const nombresConcretados = concretados?.map(p => p.mensajero_concretado).filter(Boolean) || [];
+    
+    const todosLosNombres = [...nombresAsignados, ...nombresConcretados];
+    const nombresUnicos = Array.from(new Set(todosLosNombres));
+    
+    console.log('📋 Mensajeros únicos encontrados:', nombresUnicos);
+    return nombresUnicos;
+  } catch (error) {
+    console.error('❌ Error en getMensajerosUnicos:', error);
+    return [];
+  }
+};
+
+// Función para obtener pedidos del día por mensajero específico
+export const getPedidosDelDiaByMensajeroEspecifico = async (mensajeroName: string, fecha: string): Promise<PedidoTest[]> => {
+  try {
+    console.log(`🔍 Obteniendo pedidos del ${fecha} para mensajero: ${mensajeroName}`);
+    
+    // Obtener todos los pedidos usando paginación
+    let allPedidos: PedidoTest[] = [];
+    let from = 0;
+    const limit = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await supabasePedidos
+        .from('pedidos')
+        .select('*')
+        .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
+        .eq('fecha_creacion', fecha)
+        .range(from, from + limit - 1)
+        .order('id_pedido', { ascending: true });
+
+      if (error) {
+        console.error('❌ Error al obtener pedidos del día:', error);
+        return allPedidos;
+      }
+
+      if (data && data.length > 0) {
+        allPedidos = [...allPedidos, ...data];
+        from += limit;
+        hasMore = data.length === limit;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    console.log(`📦 Pedidos encontrados para ${mensajeroName} el ${fecha}:`, allPedidos.length);
+    return allPedidos;
+  } catch (error) {
+    console.error('❌ Error en getPedidosDelDiaByMensajeroEspecifico:', error);
+    return [];
+  }
+};
+
+// Función para obtener pedidos del día actual
+export const getPedidosDelDia = async (fecha: string = new Date().toISOString().split('T')[0]) => {
+  try {
+    const { data, error } = await supabasePedidos
+      .from('pedidos_tst')
+      .select('*')
+      .gte('fecha_creacion', `${fecha}T00:00:00`)
+      .lt('fecha_creacion', `${fecha}T23:59:59`)
+      .order('fecha_creacion', { ascending: false })
+      .limit(10);
+
+    if (error) {
+      console.error('Error fetching pedidos del día:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('Error in getPedidosDelDia:', error);
+    return [];
+  }
+};
+
+// Función para obtener liquidaciones reales por fecha
+export const getLiquidacionesReales = async (fecha: string): Promise<{
+  mensajero: string;
+  pedidos: PedidoTest[];
+  totalCollected: number;
+  sinpePayments: number;
+  cashPayments: number;
+  totalSpent: number;
+  initialAmount: number;
+  finalAmount: number;
+}[]> => {
+  try {
+    console.log(`🔍 Obteniendo liquidaciones reales para la fecha: ${fecha}`);
+    
+    // Obtener mensajeros únicos
+    const mensajeros = await getMensajerosUnicos();
+    console.log('📋 Mensajeros encontrados:', mensajeros);
+    
+    const liquidaciones = [];
+    
+    for (const mensajero of mensajeros) {
+      // Obtener pedidos del día para este mensajero
+      const pedidos = await getPedidosDelDiaByMensajeroEspecifico(mensajero, fecha);
+      
+      if (pedidos.length > 0) {
+        // Calcular totales
+        const totalCollected = pedidos.reduce((sum, pedido) => {
+          if (pedido.estado_pedido === 'entregado') {
+            return sum + pedido.valor_total;
+          }
+          return sum;
+        }, 0);
+
+        const sinpePayments = pedidos.reduce((sum, pedido) => {
+          if (pedido.estado_pedido === 'entregado' && pedido.metodo_pago === 'sinpe') {
+            return sum + pedido.valor_total;
+          }
+          return sum;
+        }, 0);
+
+        const cashPayments = pedidos.reduce((sum, pedido) => {
+          if (pedido.estado_pedido === 'entregado' && pedido.metodo_pago === 'efectivo') {
+            return sum + pedido.valor_total;
+          }
+          return sum;
+        }, 0);
+
+        const totalSpent = 0; // Gastos del mensajero (por ahora 0)
+        const initialAmount = 50000; // Monto inicial por defecto
+        const finalAmount = initialAmount + totalCollected - totalSpent;
+
+        liquidaciones.push({
+          mensajero,
+          pedidos,
+          totalCollected,
+          sinpePayments,
+          cashPayments,
+          totalSpent,
+          initialAmount,
+          finalAmount
+        });
+      }
+    }
+    
+    console.log(`📊 Liquidaciones calculadas: ${liquidaciones.length}`);
+    return liquidaciones;
+  } catch (error) {
+    console.error('❌ Error en getLiquidacionesReales:', error);
     return [];
   }
 };
