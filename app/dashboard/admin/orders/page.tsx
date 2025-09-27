@@ -44,7 +44,8 @@ export default function AdminOrdersPage() {
       console.log('Cargando pedidos de Supabase para admin orders...');
       
       // Cargar pedidos de Supabase
-      const pedidosData = await getPedidos(200); // Limitar a 200 pedidos
+      const pedidosDataResult = await getPedidos(1, 200); // Página 1, 200 pedidos por página
+      const pedidosData = pedidosDataResult.data;
       console.log('Pedidos cargados:', pedidosData.length);
       
       setOrders(pedidosData);
