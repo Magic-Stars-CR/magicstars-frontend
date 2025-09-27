@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { PedidoTest } from '@/lib/types';
+import { PedidoTest, OrderStatus } from '@/lib/types';
 import { getPedidos, updatePedido } from '@/lib/supabase-pedidos';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -61,7 +61,8 @@ export default function AdminPedidoDetailPage() {
   const loadPedido = async () => {
     try {
       setLoading(true);
-      const pedidosData = await getPedidos(1000); // Cargar más pedidos para encontrar el específico
+      const pedidosDataResult = await getPedidos(1, 1000); // Cargar más pedidos para encontrar el específico
+      const pedidosData = pedidosDataResult.data;
       const foundPedido = pedidosData.find(p => p.id_pedido === params.id);
       
       if (foundPedido) {
@@ -121,7 +122,7 @@ export default function AdminPedidoDetailPage() {
     }
   };
 
-  const getStatusForBadge = (pedido: PedidoTest): string => {
+  const getStatusForBadge = (pedido: PedidoTest): OrderStatus => {
     if (pedido.mensajero_concretado) {
       return 'entregado';
     } else if (pedido.mensajero_asignado) {

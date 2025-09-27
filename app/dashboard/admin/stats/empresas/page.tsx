@@ -63,7 +63,8 @@ export default function CompanyStatsPage() {
       setLoading(true);
       console.log('Cargando datos de empresas...');
       
-      const pedidosData = await getPedidos();
+      const pedidosDataResult = await getPedidos(1, 1000);
+      const pedidosData = pedidosDataResult.data;
       console.log('Pedidos cargados:', pedidosData.length);
       
       // Convertir pedidos de Supabase a formato Order

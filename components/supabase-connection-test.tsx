@@ -24,7 +24,8 @@ export default function SupabaseConnectionTest() {
       console.log('URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
       console.log('Key presente:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
       
-      const pedidosData = await getPedidos();
+      const pedidosDataResult = await getPedidos(1, 100);
+      const pedidosData = pedidosDataResult.data;
       console.log('✅ Conexión exitosa! Pedidos obtenidos:', pedidosData.length);
       
       setPedidos(pedidosData);
