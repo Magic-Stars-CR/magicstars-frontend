@@ -7,7 +7,7 @@ import { useHydration } from '@/hooks/use-hydration';
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<User>;
+  login: (emailOrName: string, password: string) => Promise<User>;
   logout: () => void;
   loading: boolean;
 }
@@ -65,11 +65,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkStoredSession();
   }, [isHydrated]);
 
-  const login = async (email: string, password: string) => {
+  const login = async (emailOrName: string, password: string) => {
     try {
-      console.log('🔐 Intentando login con:', email, 'timestamp:', new Date().toISOString());
+      console.log('🔐 Intentando login con:', emailOrName, 'timestamp:', new Date().toISOString());
       setLoading(true);
-      const user = await mockLogin(email, password);
+      const user = await mockLogin(emailOrName, password);
       console.log('✅ Login exitoso, usuario:', user);
       
       if (user) {

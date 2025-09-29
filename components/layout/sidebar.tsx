@@ -35,7 +35,7 @@ const menuItems = {
     // { icon: Truck, label: 'Rutas', href: '/dashboard/admin/routes' },
     // { icon: Route, label: 'Gestión de Rutas', href: '/dashboard/admin/route-management' },
     { icon: DollarSign, label: 'Liquidación', href: '/dashboard/admin/liquidation' },
-    // { icon: Users, label: 'Usuarios', href: '/dashboard/admin/users' },
+    { icon: Users, label: 'Usuarios', href: '/dashboard/admin/usuarios' },
     // { icon: Building2, label: 'Empresas', href: '/dashboard/admin/companies' },
     { icon: BarChart3, label: 'Estadísticas', href: '/dashboard/admin/stats' },
   ],

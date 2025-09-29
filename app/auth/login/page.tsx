@@ -35,11 +35,13 @@ const demoUsers = [
   { email: 'michael@magicstars.com', role: 'Mensajero - Michael', password: 'Michael7410' },
   { email: 'pablo@magicstars.com', role: 'Mensajero - Pablo', password: 'Pablo9630' },
   { email: 'pablonocturna@magicstars.com', role: 'Mensajero - PabloNocturna', password: 'PabloNocturna2580' },
+  { email: 'jeank@magicstars.com', role: 'Mensajero - JeanK', password: 'JeanK1234' },
+  { email: 'cristopher@magicstars.com', role: 'Mensajero - Cristopher', password: 'Cristopher5678' },
   { email: 'prueba@magicstars.com', role: 'Usuario Prueba', password: 'prueba' },
 ];
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const [emailOrName, setEmailOrName] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -55,7 +57,7 @@ export default function LoginPage() {
 
     try {
       console.log('🔐 Iniciando proceso de login...');
-      const user = await login(email, password);
+      const user = await login(emailOrName, password);
       console.log('✅ Usuario recibido del login:', user);
       
       // Esperar un poco para que el contexto se actualice
@@ -110,13 +112,13 @@ export default function LoginPage() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="emailOrName">Email o Nombre</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="alex@magicstars.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="emailOrName"
+                  type="text"
+                  placeholder="alex@magicstars.com o Alex"
+                  value={emailOrName}
+                  onChange={(e) => setEmailOrName(e.target.value)}
                   required
                   disabled={loading}
                 />
@@ -191,7 +193,7 @@ export default function LoginPage() {
                   variant="outline"
                   className="w-full justify-start text-xs h-auto py-2"
                   onClick={() => {
-                    setEmail(user.email);
+                    setEmailOrName(user.email);
                     setPassword(user.password);
                   }}
                   disabled={loading}

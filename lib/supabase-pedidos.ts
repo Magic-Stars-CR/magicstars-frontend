@@ -272,14 +272,8 @@ export const getPedidosDelDiaByTienda = async (tienda: string, fecha?: string): 
 // Función para obtener pedidos del día actual por mensajero (tanto asignado como concretado)
 export const getPedidosDelDiaByMensajero = async (mensajeroName: string, fecha?: string): Promise<PedidoTest[]> => {
   try {
-    console.log('🔍 Buscando pedidos del día para mensajero:', mensajeroName);
-    
     // Usar la fecha proporcionada o la fecha actual en zona horaria de Costa Rica
     const targetDate = fecha || getCostaRicaDateISO();
-    console.log('📅 Fecha objetivo:', targetDate);
-    console.log('📅 Fecha actual UTC:', new Date().toISOString());
-    console.log('📅 Fecha actual Costa Rica:', getCostaRicaDate().toISOString());
-    console.log('📅 Fecha ISO Costa Rica:', getCostaRicaDateISO());
     
     // Obtener todos los pedidos usando paginación para evitar el límite de 1000
     let allPedidos: PedidoTest[] = [];
@@ -288,13 +282,12 @@ export const getPedidosDelDiaByMensajero = async (mensajeroName: string, fecha?:
     let hasMore = true;
 
     while (hasMore) {
-      console.log(`📄 Obteniendo página ${Math.floor(from / limit) + 1} (registros ${from} a ${from + limit - 1})...`);
-      
       const { data, error } = await supabasePedidos
         .from('pedidos')
         .select('*')
         .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
-        .eq('fecha_creacion', targetDate)
+        .gte('fecha_creacion', `${targetDate}T00:00:00`)
+        .lt('fecha_creacion', `${targetDate}T23:59:59`)
         .range(from, from + limit - 1)
         .order('id_pedido', { ascending: true });
 
@@ -307,13 +300,11 @@ export const getPedidosDelDiaByMensajero = async (mensajeroName: string, fecha?:
         allPedidos = [...allPedidos, ...data];
         from += limit;
         hasMore = data.length === limit; // Si obtenemos menos registros que el límite, no hay más páginas
-        console.log(`📦 Página obtenida: ${data.length} registros. Total acumulado: ${allPedidos.length}`);
       } else {
         hasMore = false;
       }
     }
 
-    console.log(`✅ Pedidos encontrados para mensajero ${mensajeroName}:`, allPedidos.length);
     return allPedidos;
   } catch (error) {
     console.error('❌ Error en getPedidosDelDiaByMensajero:', error);
@@ -490,9 +481,17 @@ export const getPedidosCountByTienda = async (tienda: string, fecha?: string): P
 // Función para actualizar un pedido
 export const updatePedido = async (id: string, updates: Partial<PedidoTest>): Promise<boolean> => {
   try {
+    // Añadir timestamp de actualización
+    const updatesWithTimestamp = {
+      ...updates,
+      fecha_actualizacion: new Date().toISOString()
+    };
+
+    console.log(`🔄 Actualizando pedido ${id} con datos:`, updatesWithTimestamp);
+
     const { error } = await supabasePedidos
       .from('pedidos')
-      .update(updates)
+      .update(updatesWithTimestamp)
       .eq('id_pedido', id);
 
     if (error) {
@@ -500,6 +499,7 @@ export const updatePedido = async (id: string, updates: Partial<PedidoTest>): Pr
       return false;
     }
 
+    console.log(`✅ Pedido ${id} actualizado exitosamente por: ${(updates as any).usuario || 'Usuario desconocido'}`);
     return true;
   } catch (error) {
     console.error('Error en updatePedido:', error);
@@ -624,6 +624,15 @@ export const getMensajerosUnicos = async (): Promise<string[]> => {
   try {
     console.log('🔍 Obteniendo mensajeros únicos de Supabase...');
     
+    // Primero verificar si hay datos en la tabla
+    const { data: totalPedidos, error: errorTotal } = await supabasePedidos
+      .from('pedidos')
+      .select('id_pedido, mensajero_asignado, mensajero_concretado, fecha_creacion')
+      .limit(5);
+    
+    console.log('📊 Muestra de pedidos en la tabla:', totalPedidos);
+    console.log('📊 Total de pedidos en muestra:', totalPedidos?.length || 0);
+    
     // Obtener nombres únicos de mensajero_asignado
     const { data: asignados, error: errorAsignados } = await supabasePedidos
       .from('pedidos')
@@ -648,10 +657,14 @@ export const getMensajerosUnicos = async (): Promise<string[]> => {
     const nombresAsignados = asignados?.map(p => p.mensajero_asignado).filter(Boolean) || [];
     const nombresConcretados = concretados?.map(p => p.mensajero_concretado).filter(Boolean) || [];
     
+    console.log('📋 Nombres asignados encontrados:', nombresAsignados);
+    console.log('📋 Nombres concretados encontrados:', nombresConcretados);
+    
     const todosLosNombres = [...nombresAsignados, ...nombresConcretados];
     const nombresUnicos = Array.from(new Set(todosLosNombres));
     
     console.log('📋 Mensajeros únicos encontrados:', nombresUnicos);
+    console.log('📋 Total de mensajeros únicos:', nombresUnicos.length);
     return nombresUnicos;
   } catch (error) {
     console.error('❌ Error en getMensajerosUnicos:', error);
@@ -662,7 +675,32 @@ export const getMensajerosUnicos = async (): Promise<string[]> => {
 // Función para obtener pedidos del día por mensajero específico
 export const getPedidosDelDiaByMensajeroEspecifico = async (mensajeroName: string, fecha: string): Promise<PedidoTest[]> => {
   try {
-    console.log(`🔍 Obteniendo pedidos del ${fecha} para mensajero: ${mensajeroName}`);
+    console.log(`🔍 DEBUGGING getPedidosDelDiaByMensajeroEspecifico:`);
+    console.log(`📋 Mensajero: ${mensajeroName}`);
+    console.log(`📅 Fecha: ${fecha}`);
+    console.log(`📅 Rango de búsqueda: ${fecha}T00:00:00 a ${fecha}T23:59:59`);
+    
+    // Primero verificar si hay pedidos en general para este mensajero
+    const { data: pedidosGenerales, error: errorGeneral } = await supabasePedidos
+      .from('pedidos')
+      .select('id_pedido, fecha_creacion, mensajero_asignado, mensajero_concretado, estado_pedido')
+      .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
+      .limit(5);
+    
+    console.log(`📦 Pedidos generales para ${mensajeroName}:`, pedidosGenerales);
+    console.log(`❌ Error en consulta general:`, errorGeneral);
+    
+    // Verificar pedidos para la fecha específica
+    const { data: pedidosFecha, error: errorFecha } = await supabasePedidos
+      .from('pedidos')
+      .select('id_pedido, fecha_creacion, mensajero_asignado, mensajero_concretado, estado_pedido')
+      .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
+      .gte('fecha_creacion', `${fecha}T00:00:00`)
+      .lt('fecha_creacion', `${fecha}T23:59:59`)
+      .limit(5);
+    
+    console.log(`📦 Pedidos para fecha ${fecha}:`, pedidosFecha);
+    console.log(`❌ Error en consulta de fecha:`, errorFecha);
     
     // Obtener todos los pedidos usando paginación
     let allPedidos: PedidoTest[] = [];
@@ -671,17 +709,31 @@ export const getPedidosDelDiaByMensajeroEspecifico = async (mensajeroName: strin
     let hasMore = true;
 
     while (hasMore) {
+      console.log(`🔄 Consultando página ${Math.floor(from / limit) + 1} para ${mensajeroName}...`);
+      
       const { data, error } = await supabasePedidos
         .from('pedidos')
         .select('*')
         .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
-        .eq('fecha_creacion', fecha)
+        .gte('fecha_creacion', `${fecha}T00:00:00`)
+        .lt('fecha_creacion', `${fecha}T23:59:59`)
         .range(from, from + limit - 1)
         .order('id_pedido', { ascending: true });
 
       if (error) {
         console.error('❌ Error al obtener pedidos del día:', error);
         return allPedidos;
+      }
+
+      console.log(`📊 Datos obtenidos en página ${Math.floor(from / limit) + 1}:`, data?.length || 0);
+      if (data && data.length > 0) {
+        console.log(`📋 Muestra de pedidos:`, data.slice(0, 2).map(p => ({
+          id: p.id_pedido,
+          fecha: p.fecha_creacion,
+          estado: p.estado_pedido,
+          asignado: p.mensajero_asignado,
+          concretado: p.mensajero_concretado
+        })));
       }
 
       if (data && data.length > 0) {
@@ -693,7 +745,7 @@ export const getPedidosDelDiaByMensajeroEspecifico = async (mensajeroName: strin
       }
     }
 
-    console.log(`📦 Pedidos encontrados para ${mensajeroName} el ${fecha}:`, allPedidos.length);
+    console.log(`✅ Total de pedidos encontrados para ${mensajeroName} el ${fecha}:`, allPedidos.length);
     return allPedidos;
   } catch (error) {
     console.error('❌ Error en getPedidosDelDiaByMensajeroEspecifico:', error);
@@ -705,7 +757,7 @@ export const getPedidosDelDiaByMensajeroEspecifico = async (mensajeroName: strin
 export const getPedidosDelDia = async (fecha: string = new Date().toISOString().split('T')[0]) => {
   try {
     const { data, error } = await supabasePedidos
-      .from('pedidos_tst')
+      .from('pedidos')
       .select('*')
       .gte('fecha_creacion', `${fecha}T00:00:00`)
       .lt('fecha_creacion', `${fecha}T23:59:59`)
@@ -736,11 +788,8 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
   finalAmount: number;
 }[]> => {
   try {
-    console.log(`🔍 Obteniendo liquidaciones reales para la fecha: ${fecha}`);
-    
     // Obtener mensajeros únicos
     const mensajeros = await getMensajerosUnicos();
-    console.log('📋 Mensajeros encontrados:', mensajeros);
     
     const liquidaciones = [];
     
@@ -788,10 +837,114 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
       }
     }
     
-    console.log(`📊 Liquidaciones calculadas: ${liquidaciones.length}`);
     return liquidaciones;
   } catch (error) {
     console.error('❌ Error en getLiquidacionesReales:', error);
     return [];
+  }
+};
+
+// Función para probar múltiples fechas y encontrar datos
+export const debugFechasConDatos = async () => {
+  try {
+    console.log('🔍 DEBUGGING: Buscando fechas con datos...');
+    
+    // Obtener todas las fechas únicas en la tabla
+    const { data: fechasUnicas, error: errorFechas } = await supabasePedidos
+      .from('pedidos')
+      .select('fecha_creacion')
+      .not('fecha_creacion', 'is', null)
+      .order('fecha_creacion', { ascending: false })
+      .limit(20);
+    
+    if (errorFechas) {
+      console.error('❌ Error al obtener fechas:', errorFechas);
+      return;
+    }
+    
+    console.log('📅 Fechas encontradas en la tabla:', fechasUnicas);
+    
+    // Extraer fechas únicas (solo la parte de fecha, sin hora)
+    const fechas = [...new Set(fechasUnicas?.map(p => p.fecha_creacion?.split('T')[0]) || [])];
+    console.log('📅 Fechas únicas:', fechas);
+    
+    // Probar las primeras 5 fechas
+    for (const fecha of fechas.slice(0, 5)) {
+      console.log(`\n🔍 Probando fecha: ${fecha}`);
+      
+      const { data: pedidosFecha, error: errorPedidos } = await supabasePedidos
+        .from('pedidos')
+        .select('id_pedido, fecha_creacion, mensajero_asignado, mensajero_concretado, estado_pedido, valor_total')
+        .gte('fecha_creacion', `${fecha}T00:00:00`)
+        .lt('fecha_creacion', `${fecha}T23:59:59`)
+        .limit(5);
+      
+      if (errorPedidos) {
+        console.error(`❌ Error para fecha ${fecha}:`, errorPedidos);
+      } else {
+        console.log(`📦 Pedidos para ${fecha}:`, pedidosFecha?.length || 0);
+        if (pedidosFecha && pedidosFecha.length > 0) {
+          console.log(`📋 Muestra de pedidos:`, pedidosFecha.map(p => ({
+            id: p.id_pedido,
+            fecha: p.fecha_creacion,
+            estado: p.estado_pedido,
+            valor: p.valor_total,
+            asignado: p.mensajero_asignado,
+            concretado: p.mensajero_concretado
+          })));
+        }
+      }
+    }
+    
+  } catch (error) {
+    console.error('❌ Error en debugFechasConDatos:', error);
+  }
+};
+
+// Función de debugging para verificar datos de la tabla
+export const debugTablaPedidos = async (fecha: string) => {
+  try {
+    console.log(`🔍 DEBUGGING: Verificando datos de la tabla para fecha ${fecha}`);
+    
+    // Verificar total de pedidos en la tabla
+    const { data: totalPedidos, error: errorTotal } = await supabasePedidos
+      .from('pedidos')
+      .select('id_pedido, mensajero_asignado, mensajero_concretado, fecha_creacion, estado_pedido, valor_total, metodo_pago')
+      .limit(10);
+    
+    console.log('📊 Total de pedidos en la tabla (muestra):', totalPedidos?.length || 0);
+    console.log('📊 Muestra de pedidos:', totalPedidos);
+    
+    // Verificar pedidos para la fecha específica
+    const { data: pedidosFecha, error: errorFecha } = await supabasePedidos
+      .from('pedidos')
+      .select('id_pedido, mensajero_asignado, mensajero_concretado, fecha_creacion, estado_pedido, valor_total, metodo_pago')
+      .eq('fecha_creacion', fecha)
+      .limit(10);
+    
+    console.log(`📊 Pedidos para fecha ${fecha}:`, pedidosFecha?.length || 0);
+    console.log('📊 Pedidos de la fecha:', pedidosFecha);
+    
+    // Verificar mensajeros únicos en la fecha
+    const { data: mensajerosFecha, error: errorMensajeros } = await supabasePedidos
+      .from('pedidos')
+      .select('mensajero_asignado, mensajero_concretado')
+      .eq('fecha_creacion', fecha)
+      .not('mensajero_asignado', 'is', null);
+    
+    console.log(`📊 Mensajeros en fecha ${fecha}:`, mensajerosFecha?.length || 0);
+    console.log('📊 Mensajeros de la fecha:', mensajerosFecha);
+    
+    return {
+      totalPedidos: totalPedidos?.length || 0,
+      pedidosFecha: pedidosFecha?.length || 0,
+      mensajerosFecha: mensajerosFecha?.length || 0,
+      muestra: totalPedidos,
+      pedidosFechaMuestra: pedidosFecha,
+      mensajerosFechaMuestra: mensajerosFecha
+    };
+  } catch (error) {
+    console.error('❌ Error en debugTablaPedidos:', error);
+    return null;
   }
 };

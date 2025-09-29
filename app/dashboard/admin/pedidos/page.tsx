@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { PedidoTest, OrderStatus } from '@/lib/types';
 import { getPedidos, getAllPedidos, updatePedido } from '@/lib/supabase-pedidos';
+import { mockMessengers } from '@/lib/mock-messengers';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -58,6 +59,23 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import Link from 'next/link';
 
+// Función auxiliar para manejar fechas de Costa Rica
+const getCostaRicaDate = (date: Date) => {
+  return new Date(date.toLocaleString('en-US', { timeZone: 'America/Costa_Rica' }));
+};
+
+const formatCostaRicaDate = (date: Date) => {
+  return date.toLocaleString('es-CR', { 
+    timeZone: 'America/Costa_Rica',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+};
+
 export default function AdminPedidosPage() {
   const { user } = useAuth();
   const [pedidos, setPedidos] = useState<PedidoTest[]>([]);
@@ -104,6 +122,9 @@ export default function AdminPedidosPage() {
   const [dualPaymentAmounts, setDualPaymentAmounts] = useState({ efectivo: '', sinpe: '' });
   const [statusNotes, setStatusNotes] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  
+  // Estados para modal de discrepancias
+  const [isDiscrepancyModalOpen, setIsDiscrepancyModalOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -156,50 +177,134 @@ export default function AdminPedidosPage() {
             const orderDate = new Date(pedido.fecha_creacion);
             const today = new Date();
             
+            // Console log para debug de fechas
+            console.log('🔍 Filtro de fecha activo:', {
+              dateFilter,
+              specificDate,
+              dateRange,
+              orderDate: orderDate.toISOString(),
+              orderDateCR: formatCostaRicaDate(orderDate),
+              today: today.toISOString(),
+              todayCR: formatCostaRicaDate(today)
+            });
+            
             switch (dateFilter) {
               case 'today':
-                matchesDate = orderDate.toDateString() === today.toDateString();
+                const todayCR = getCostaRicaDate(today);
+                const orderDateCR = getCostaRicaDate(orderDate);
+                matchesDate = orderDateCR.toDateString() === todayCR.toDateString();
+                console.log('📅 Filtro HOY:', {
+                  orderDateCR: orderDateCR.toDateString(),
+                  todayCR: todayCR.toDateString(),
+                  matches: matchesDate
+                });
                 break;
               case 'yesterday':
                 const yesterday = new Date(today);
                 yesterday.setDate(yesterday.getDate() - 1);
-                matchesDate = orderDate.toDateString() === yesterday.toDateString();
+                const yesterdayCR = getCostaRicaDate(yesterday);
+                const orderDateCRYesterday = getCostaRicaDate(orderDate);
+                matchesDate = orderDateCRYesterday.toDateString() === yesterdayCR.toDateString();
+                console.log('📅 Filtro AYER:', {
+                  orderDateCR: orderDateCRYesterday.toDateString(),
+                  yesterdayCR: yesterdayCR.toDateString(),
+                  matches: matchesDate
+                });
                 break;
               case 'week':
                 const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-                matchesDate = orderDate >= weekAgo;
+                const weekAgoCR = getCostaRicaDate(weekAgo);
+                const orderDateCRWeek = getCostaRicaDate(orderDate);
+                matchesDate = orderDateCRWeek >= weekAgoCR;
+                console.log('📅 Filtro SEMANA:', {
+                  orderDateCR: orderDateCRWeek.toDateString(),
+                  weekAgoCR: weekAgoCR.toDateString(),
+                  matches: matchesDate
+                });
                 break;
               case 'month':
                 const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-                matchesDate = orderDate >= monthAgo;
+                const monthAgoCR = getCostaRicaDate(monthAgo);
+                const orderDateCRMonth = getCostaRicaDate(orderDate);
+                matchesDate = orderDateCRMonth >= monthAgoCR;
+                console.log('📅 Filtro MES:', {
+                  orderDateCR: orderDateCRMonth.toDateString(),
+                  monthAgoCR: monthAgoCR.toDateString(),
+                  matches: matchesDate
+                });
                 break;
               case 'specific':
                 if (specificDate) {
-                  const selectedDate = new Date(specificDate);
-                  matchesDate = orderDate.toDateString() === selectedDate.toDateString();
+                  const selectedDate = new Date(specificDate + 'T00:00:00-06:00'); // Costa Rica UTC-6
+                  const selectedDateCR = getCostaRicaDate(selectedDate);
+                  const orderDateCRSpecific = getCostaRicaDate(orderDate);
+                  matchesDate = orderDateCRSpecific.toDateString() === selectedDateCR.toDateString();
+                  console.log('📅 Filtro FECHA ESPECÍFICA:', {
+                    specificDate,
+                    selectedDateCR: selectedDateCR.toDateString(),
+                    orderDateCR: orderDateCRSpecific.toDateString(),
+                    matches: matchesDate
+                  });
                 }
                 break;
               case 'range':
                 if (dateRange.start && dateRange.end) {
-                  const startDate = new Date(dateRange.start);
-                  const endDate = new Date(dateRange.end);
-                  endDate.setHours(23, 59, 59, 999); // Incluir todo el día final
-                  matchesDate = orderDate >= startDate && orderDate <= endDate;
+                  const startDate = new Date(dateRange.start + 'T00:00:00-06:00'); // Costa Rica UTC-6
+                  const endDate = new Date(dateRange.end + 'T23:59:59-06:00'); // Costa Rica UTC-6
+                  const startDateCR = getCostaRicaDate(startDate);
+                  const endDateCR = getCostaRicaDate(endDate);
+                  const orderDateCRRange = getCostaRicaDate(orderDate);
+                  matchesDate = orderDateCRRange >= startDateCR && orderDateCRRange <= endDateCR;
+                  console.log('📅 Filtro RANGO:', {
+                    dateRange,
+                    startDateCR: startDateCR.toDateString(),
+                    endDateCR: endDateCR.toDateString(),
+                    orderDateCR: orderDateCRRange.toDateString(),
+                    matches: matchesDate
+                  });
                 }
                 break;
               case 'last_month':
                 const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
                 const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-                matchesDate = orderDate >= lastMonthStart && orderDate <= lastMonthEnd;
+                const lastMonthStartCR = getCostaRicaDate(lastMonthStart);
+                const lastMonthEndCR = getCostaRicaDate(lastMonthEnd);
+                const orderDateCRLastMonth = getCostaRicaDate(orderDate);
+                matchesDate = orderDateCRLastMonth >= lastMonthStartCR && orderDateCRLastMonth <= lastMonthEndCR;
+                console.log('📅 Filtro MES PASADO:', {
+                  orderDateCR: orderDateCRLastMonth.toDateString(),
+                  lastMonthStartCR: lastMonthStartCR.toDateString(),
+                  lastMonthEndCR: lastMonthEndCR.toDateString(),
+                  matches: matchesDate
+                });
                 break;
               case 'year':
                 const yearAgo = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
-                matchesDate = orderDate >= yearAgo;
+                const yearAgoCR = getCostaRicaDate(yearAgo);
+                const orderDateCRYear = getCostaRicaDate(orderDate);
+                matchesDate = orderDateCRYear >= yearAgoCR;
+                console.log('📅 Filtro AÑO:', {
+                  orderDateCR: orderDateCRYear.toDateString(),
+                  yearAgoCR: yearAgoCR.toDateString(),
+                  matches: matchesDate
+                });
                 break;
             }
           }
 
           return matchesStatus && matchesDistrito && matchesMensajero && matchesDate && matchesTienda && matchesMetodoPago;
+        });
+
+        // Console log del resumen de filtrado
+        console.log('📊 Resumen de filtrado por fecha:', {
+          filtroActivo: dateFilter,
+          fechaEspecifica: specificDate,
+          rangoFechas: dateRange,
+          totalPedidosCargados: allPedidos.length,
+          pedidosFiltrados: filtered.length,
+          pedidosMostrados: Math.min(pageSize, filtered.length),
+          paginaActual: currentPage,
+          totalPaginas: Math.ceil(filtered.length / pageSize)
         });
 
         // Aplicar paginación a los datos filtrados
@@ -349,6 +454,9 @@ export default function AdminPedidosPage() {
         updates.mensajero_concretado = selectedPedidoForStatus.mensajero_asignado || 'Admin';
       }
 
+      // Añadir usuario que realiza la acción
+      updates.usuario = user?.name || 'Admin';
+
       const success = await updatePedido(selectedPedidoForStatus.id_pedido, updates);
       if (success) {
         // Actualizar la lista local
@@ -456,6 +564,17 @@ export default function AdminPedidosPage() {
     // Usar allPedidos si está disponible, sino usar pedidos de la página actual
     const dataSource = allPedidos.length > 0 ? allPedidos : pedidos;
     console.log('📊 Fuente de datos para estadísticas:', dataSource === allPedidos ? 'allPedidos' : 'pedidos', 'Longitud:', dataSource.length);
+    console.log('🔍 Filtros activos para estadísticas:', {
+      dateFilter,
+      specificDate,
+      dateRange,
+      statusFilter,
+      distritoFilter,
+      mensajeroFilter,
+      tiendaFilter,
+      metodoPagoFilter,
+      searchTerm
+    });
     
     // Si no hay filtros activos, usar todos los datos disponibles
     if (!hasServerSideFilters && !searchTerm) {
@@ -538,7 +657,7 @@ export default function AdminPedidosPage() {
       return matchesSearch && matchesStatus && matchesDistrito && matchesMensajero && matchesDate && matchesTienda && matchesMetodoPago;
     });
 
-    return {
+    const stats = {
       total: filtered.length,
       asignados: filtered.filter(p => p.mensajero_asignado && !p.mensajero_concretado).length,
       entregados: filtered.filter(p => p.mensajero_concretado).length,
@@ -551,6 +670,17 @@ export default function AdminPedidosPage() {
       tarjeta: filtered.filter(p => p.metodo_pago && p.metodo_pago.toLowerCase() === 'tarjeta').length,
       dosPagos: filtered.filter(p => p.metodo_pago && (p.metodo_pago.toLowerCase() === '2pagos' || p.metodo_pago.toLowerCase() === '2 pagos')).length
     };
+
+    console.log('📈 Estadísticas calculadas:', {
+      ...stats,
+      filtroFecha: dateFilter,
+      fechaEspecifica: specificDate,
+      rangoFechas: dateRange,
+      pedidosFiltrados: filtered.length,
+      pedidosOriginales: dataSource.length
+    });
+
+    return stats;
   };
 
   const stats = getFilteredStats();
@@ -573,7 +703,15 @@ export default function AdminPedidosPage() {
 
   // Obtener listas únicas para filtros
   const distritos = Array.from(new Set(allPedidos.map(p => p.distrito).filter(Boolean))).sort() as string[];
-  const mensajeros = Array.from(new Set(allPedidos.map(p => p.mensajero_asignado).filter(Boolean))).sort() as string[];
+  
+  // Obtener todos los mensajeros disponibles (no solo los asignados)
+  const mensajerosAsignados = Array.from(new Set(allPedidos.map(p => p.mensajero_asignado).filter(Boolean))).sort() as string[];
+  const todosLosMensajeros = mockMessengers
+    .filter(u => u.role === 'mensajero')
+    .map(u => u.name)
+    .sort() as string[];
+  const mensajeros = Array.from(new Set([...mensajerosAsignados, ...todosLosMensajeros])).sort() as string[];
+  
   const tiendas = Array.from(new Set(allPedidos.map(p => p.tienda).filter(Boolean))).sort() as string[];
   const metodosPago = Array.from(new Set(allPedidos.map(p => p.metodo_pago).filter(Boolean))).sort() as string[];
 
@@ -642,6 +780,66 @@ export default function AdminPedidosPage() {
     mensajeroFilter !== 'all' || dateFilter !== 'all' || specificDate !== '' || 
     (dateRange.start !== '' && dateRange.end !== '') || tiendaFilter !== 'all' || metodoPagoFilter !== 'all';
 
+  // Función para detectar discrepancias en mensajeros asignados
+  const getDiscrepancies = () => {
+    const discrepancies = [];
+    
+    // 1. Pedidos asignados pero no concretados por el mismo mensajero
+    const assignedNotConcreted = allPedidos.filter(p => 
+      p.mensajero_asignado && 
+      !p.mensajero_concretado && 
+      p.estado_pedido === 'entregado'
+    );
+    
+    if (assignedNotConcreted.length > 0) {
+      discrepancies.push({
+        type: 'asignado_no_concretado',
+        title: 'Pedidos asignados pero no concretados',
+        count: assignedNotConcreted.length,
+        description: 'Pedidos marcados como entregados pero no concretados por el mensajero asignado',
+        items: assignedNotConcreted
+      });
+    }
+    
+    // 2. Pedidos concretados por mensajero diferente al asignado
+    const differentMessenger = allPedidos.filter(p => 
+      p.mensajero_asignado && 
+      p.mensajero_concretado && 
+      p.mensajero_asignado !== p.mensajero_concretado
+    );
+    
+    if (differentMessenger.length > 0) {
+      discrepancies.push({
+        type: 'mensajero_diferente',
+        title: 'Pedidos concretados por mensajero diferente',
+        count: differentMessenger.length,
+        description: 'Pedidos entregados por un mensajero diferente al asignado',
+        items: differentMessenger
+      });
+    }
+    
+    // 3. Pedidos sin asignar por más de 24 horas
+    const unassignedOld = allPedidos.filter(p => {
+      if (p.mensajero_asignado) return false;
+      const createdAt = new Date(p.fecha_creacion);
+      const now = new Date();
+      const hoursDiff = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+      return hoursDiff > 24;
+    });
+    
+    if (unassignedOld.length > 0) {
+      discrepancies.push({
+        type: 'sin_asignar_antiguo',
+        title: 'Pedidos sin asignar por más de 24 horas',
+        count: unassignedOld.length,
+        description: 'Pedidos que llevan más de 24 horas sin ser asignados a un mensajero',
+        items: unassignedOld
+      });
+    }
+    
+    return discrepancies;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -672,17 +870,25 @@ export default function AdminPedidosPage() {
             <RefreshCw className="w-4 h-4 mr-2" />
               Actualizar
             </Button>
+            <Button 
+              variant="outline" 
+              className="bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100"
+              onClick={() => setIsDiscrepancyModalOpen(true)}
+            >
+              <AlertCircle className="w-4 h-4 mr-2" />
+              Revisar discrepancias
+            </Button>
           <Button>
             <Download className="w-4 h-4 mr-2" />
             Exportar
-          </Button>
+            </Button>
           </div>
         </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 overflow-x-auto">
         <Card className="border-l-4 border-l-blue-500">
-          <CardContent className="p-4">
+            <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -702,13 +908,13 @@ export default function AdminPedidosPage() {
                   <span className="text-sm font-medium">+12%</span>
                 </div>
                 <p className="text-xs text-muted-foreground">vs mes anterior</p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
           
         <Card className="border-l-4 border-l-green-500">
-          <CardContent className="p-4">
+            <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
@@ -728,13 +934,13 @@ export default function AdminPedidosPage() {
                   <span className="text-sm font-medium">+5%</span>
                 </div>
                 <p className="text-xs text-muted-foreground">vs mes anterior</p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        
+            </CardContent>
+          </Card>
+          
         <Card className="border-l-4 border-l-yellow-500">
-          <CardContent className="p-4">
+            <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
@@ -754,11 +960,11 @@ export default function AdminPedidosPage() {
                 <p className="text-xs text-muted-foreground">
                   {stats.total > 0 ? `${Math.round((stats.sinAsignar / stats.total) * 100)}% del total` : '0%'}
                 </p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        
+            </CardContent>
+          </Card>
+          
         <Card className="border-l-4 border-l-purple-500">
           <CardContent className="p-3">
             <div className="space-y-2">
@@ -858,7 +1064,7 @@ export default function AdminPedidosPage() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Tarjeta</p>
                   <p className="text-lg font-bold">{stats.tarjeta.toLocaleString()}</p>
-                </div>
+        </div>
               </div>
               <div className="text-right">
                 <p className="text-xs text-purple-600 font-medium">
@@ -1200,7 +1406,7 @@ export default function AdminPedidosPage() {
                     Fecha específica
                   </Button>
                   {dateFilter === 'specific' && (
-                    <Input
+                  <Input
                       type="date"
                       value={specificDate}
                       onChange={(e) => setSpecificDate(e.target.value)}
@@ -1245,11 +1451,11 @@ export default function AdminPedidosPage() {
                     </div>
                   )}
                 </div>
+                </div>
               </div>
-            </div>
-
+              
             {/* Filtros por Método de Pago */}
-            <div>
+              <div>
               <Label className="text-sm font-medium text-muted-foreground mb-2 block">Método de Pago</Label>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -1298,8 +1504,8 @@ export default function AdminPedidosPage() {
                   2 Pagos ({stats.dosPagos.toLocaleString()})
                 </Button>
               </div>
-            </div>
-
+              </div>
+              
             {/* Filtros Avanzados */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t">
                 <div className="relative">
@@ -1603,13 +1809,13 @@ export default function AdminPedidosPage() {
                       
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
+                        <Button
+                          variant="outline"
+                          size="sm"
                             onClick={() => handleViewPedidoDetail(pedido)}
                           >
                             <Eye className="w-4 h-4" />
-                          </Button>
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
@@ -1933,7 +2139,7 @@ export default function AdminPedidosPage() {
                       <div className="space-y-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
                         <Label className="text-sm font-semibold">Detalles de 2 Pagos</Label>
                         <div className="grid grid-cols-2 gap-3">
-                <div>
+                  <div>
                             <Label htmlFor="efectivo-amount" className="text-xs">Efectivo (₡)</Label>
                             <Input
                               id="efectivo-amount"
@@ -1943,7 +2149,7 @@ export default function AdminPedidosPage() {
                               placeholder="0"
                               className="h-8 text-xs"
                             />
-                </div>
+                  </div>
                   <div>
                             <Label htmlFor="sinpe-amount" className="text-xs">SINPE (₡)</Label>
                             <Input
@@ -1954,9 +2160,9 @@ export default function AdminPedidosPage() {
                               placeholder="0"
                               className="h-8 text-xs"
                             />
+                    </div>
                   </div>
-                        </div>
-                  </div>
+                </div>
                 )}
                   </div>
                 )}
@@ -1971,7 +2177,7 @@ export default function AdminPedidosPage() {
                     placeholder="Añade notas sobre el cambio de estado..."
                     className="min-h-[80px] text-sm"
                   />
-                  </div>
+                </div>
                   </div>
             )}
                 
@@ -2112,8 +2318,8 @@ export default function AdminPedidosPage() {
                                 Ver en Mapa
                               </a>
                             </Button>
-                          </div>
-                        )}
+                  </div>
+                )}
                       </div>
                     </CardContent>
                   </Card>
@@ -2130,7 +2336,7 @@ export default function AdminPedidosPage() {
                             <Banknote className="w-4 h-4 text-green-600" />
                             <span className="font-medium">Efectivo:</span>
                             <span className="font-bold text-green-600">{formatCurrency(Number(selectedPedidoForDetail.efectivo_2_pagos || 0))}</span>
-                          </div>
+                  </div>
                           <div className="flex items-center gap-2">
                             <CreditCard className="w-4 h-4 text-blue-600" />
                             <span className="font-medium">SINPE:</span>
@@ -2150,7 +2356,7 @@ export default function AdminPedidosPage() {
                       <CardContent>
                         <div className="bg-gray-50 p-3 rounded-md">
                           <pre className="text-sm whitespace-pre-wrap">{selectedPedidoForDetail.productos}</pre>
-                        </div>
+                  </div>
                       </CardContent>
                     </Card>
                   )}
@@ -2163,20 +2369,20 @@ export default function AdminPedidosPage() {
                       </CardHeader>
                       <CardContent className="space-y-3">
                         {selectedPedidoForDetail.nota_asesor && (
-                          <div>
+                  <div>
                             <h4 className="font-medium text-sm text-muted-foreground mb-1">Nota del Asesor:</h4>
                             <div className="bg-blue-50 p-3 rounded-md">
                               <p className="text-sm">{selectedPedidoForDetail.nota_asesor}</p>
-                            </div>
+                  </div>
                           </div>
                         )}
                         {selectedPedidoForDetail.notas && (
-                          <div>
+                  <div>
                             <h4 className="font-medium text-sm text-muted-foreground mb-1">Notas Generales:</h4>
                             <div className="bg-green-50 p-3 rounded-md">
                               <p className="text-sm">{selectedPedidoForDetail.notas}</p>
-                            </div>
-                          </div>
+                  </div>
+                </div>
                         )}
                       </CardContent>
                     </Card>
@@ -2215,13 +2421,13 @@ export default function AdminPedidosPage() {
             
             <div className="flex-shrink-0 p-6 pt-4 border-t">
               <div className="flex gap-3">
-                <Button 
-                  variant="outline" 
+                  <Button 
+                    variant="outline" 
                   onClick={() => setShowDetailModal(false)}
                   className="flex-1"
-                >
-                  Cerrar
-                </Button>
+                  >
+                    Cerrar
+                  </Button>
                 {selectedPedidoForDetail && (
                   <Button
                     onClick={() => {
@@ -2234,11 +2440,75 @@ export default function AdminPedidosPage() {
                     Actualizar Estado
                   </Button>
                 )}
+                </div>
               </div>
-            </div>
           </div>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Discrepancias */}
+        <Dialog open={isDiscrepancyModalOpen} onOpenChange={setIsDiscrepancyModalOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-lg">
+                <AlertCircle className="w-5 h-5 text-orange-600" />
+                Revisar Discrepancias - Mensajeros Asignados
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {getDiscrepancies().length === 0 ? (
+                <div className="text-center py-8">
+                  <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-green-700 mb-2">¡No hay discrepancias!</h3>
+                  <p className="text-gray-600">Todos los pedidos están correctamente asignados y gestionados.</p>
+                </div>
+              ) : (
+                getDiscrepancies().map((discrepancy, index) => (
+                  <Card key={index} className="border-l-4 border-l-orange-500">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg text-orange-700">
+                          {discrepancy.title}
+                        </CardTitle>
+                        <Badge variant="destructive" className="bg-orange-100 text-orange-800">
+                          {discrepancy.count} pedidos
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-gray-600">{discrepancy.description}</p>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {discrepancy.items.slice(0, 10).map((pedido, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                            <div className="flex-1">
+                              <p className="font-medium text-sm">{pedido.id_pedido}</p>
+                              <p className="text-xs text-gray-600">{pedido.cliente_nombre}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs text-gray-500">
+                                Asignado: {pedido.mensajero_asignado || 'Sin asignar'}
+                              </p>
+                              {pedido.mensajero_concretado && (
+                                <p className="text-xs text-gray-500">
+                                  Concretado: {pedido.mensajero_concretado}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        {discrepancy.items.length > 10 && (
+                          <p className="text-xs text-gray-500 text-center py-2">
+                            ... y {discrepancy.items.length - 10} pedidos más
+                          </p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
     </div>
   );
 }

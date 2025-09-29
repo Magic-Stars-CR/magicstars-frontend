@@ -564,6 +564,26 @@ export const mockMessengers: User[] = [
     createdAt: '2024-01-15T08:00:00Z',
   },
   {
+    id: 'msg-032',
+    email: 'johan@magicstars.com',
+    name: 'Johan',
+    role: 'mensajero',
+    phone: '+506 8888-0032',
+    company: {
+      id: 'company-1',
+      name: 'Magic Stars',
+      taxId: '123456789',
+      address: 'San José, Costa Rica',
+      phone: '+506 0000-0000',
+      email: 'info@magicstars.com',
+      isActive: true,
+      createdAt: '2024-01-01T08:00:00Z',
+      updatedAt: '2024-01-01T08:00:00Z',
+    },
+    isActive: true,
+    createdAt: '2024-12-19T08:00:00Z',
+  },
+  {
     id: 'msg-028',
     email: 'loria@magicstars.com',
     name: 'Loria',
@@ -765,20 +785,64 @@ export const mockMessengers: User[] = [
     isActive: true,
     createdAt: '2024-12-19T08:00:00Z',
   },
+  // Nuevos usuarios añadidos
+  {
+    id: 'msg-020',
+    email: 'jeank@magicstars.com',
+    name: 'JeanK',
+    role: 'mensajero',
+    phone: '+506 8888-0020',
+    company: {
+      id: 'company-1',
+      name: 'Magic Stars',
+      taxId: '123456789',
+      address: 'San José, Costa Rica',
+      phone: '+506 0000-0000',
+      email: 'info@magicstars.com',
+      isActive: true,
+      createdAt: '2024-01-01T08:00:00Z',
+      updatedAt: '2024-01-01T08:00:00Z',
+    },
+    isActive: true,
+    createdAt: '2024-12-19T08:00:00Z',
+  },
+  {
+    id: 'msg-021',
+    email: 'cristopher@magicstars.com',
+    name: 'Cristopher',
+    role: 'mensajero',
+    phone: '+506 8888-0021',
+    company: {
+      id: 'company-1',
+      name: 'Magic Stars',
+      taxId: '123456789',
+      address: 'San José, Costa Rica',
+      phone: '+506 0000-0000',
+      email: 'info@magicstars.com',
+      isActive: true,
+      createdAt: '2024-01-01T08:00:00Z',
+      updatedAt: '2024-01-01T08:00:00Z',
+    },
+    isActive: true,
+    createdAt: '2024-12-19T08:00:00Z',
+  },
 ];
 
 // Funciones de autenticación simuladas
-export const mockLogin = async (email: string, password: string): Promise<User | null> => {
+export const mockLogin = async (emailOrName: string, password: string): Promise<User | null> => {
   // Simular delay de red
   await new Promise(resolve => setTimeout(resolve, 1000));
   
   console.log('=== INICIO DE AUTENTICACIÓN ===');
-  console.log('Email recibido:', email);
+  console.log('Email o nombre recibido:', emailOrName);
   console.log('Contraseña recibida:', password ? 'Sí' : 'No');
   console.log('Total de usuarios disponibles:', mockMessengers.length);
   
-  // Buscar usuario por email
-  const user = mockMessengers.find(u => u.email === email);
+  // Buscar usuario por email o nombre (insensible a mayúsculas)
+  const user = mockMessengers.find(u => 
+    u.email.toLowerCase() === emailOrName.toLowerCase() || 
+    u.name.toLowerCase() === emailOrName.toLowerCase()
+  );
   
   console.log('Usuario encontrado:', user ? 'Sí' : 'No');
   if (user) {

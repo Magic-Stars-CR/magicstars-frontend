@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react';
 import { mockApi } from '@/lib/mock-api';
 import { RouteLiquidation, RouteLiquidationStats, RouteLiquidationFilters, PedidoTest } from '@/lib/types';
-import { getLiquidacionesReales, getMensajerosUnicos } from '@/lib/supabase-pedidos';
+import { getLiquidacionesReales, getMensajerosUnicos, debugTablaPedidos, debugFechasConDatos } from '@/lib/supabase-pedidos';
+import { supabasePedidos } from '@/lib/supabase-pedidos';
+import { ProgressLoader, useProgressLoader } from '@/components/ui/progress-loader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -89,6 +91,19 @@ export default function AdminLiquidationPage() {
   const [orderPaymentFilter, setOrderPaymentFilter] = useState('all');
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [selectedOrderNotes, setSelectedOrderNotes] = useState<PedidoTest | null>(null);
+  const [hasRealData, setHasRealData] = useState(false);
+  
+  // Progress loader
+  const {
+    isVisible: isLoaderVisible,
+    steps: loaderSteps,
+    currentStep: loaderCurrentStep,
+    overallProgress: loaderProgress,
+    startLoader,
+    setStepStatus,
+    setProgress,
+    closeLoader
+  } = useProgressLoader();
 
   useEffect(() => {
     loadData();
@@ -113,32 +128,156 @@ export default function AdminLiquidationPage() {
 
   const loadCalculations = async () => {
     try {
-      console.log('🔍 Cargando liquidaciones reales de Supabase para fecha:', selectedDate);
+      console.log('🚀 Iniciando loadCalculations para fecha:', selectedDate);
       
-      // Obtener liquidaciones reales de Supabase
+      // Iniciar loader
+      startLoader('Procesando Liquidaciones', [
+        { id: 'debug', label: 'Verificando datos de la tabla', status: 'pending' },
+        { id: 'mensajeros', label: 'Obteniendo mensajeros únicos', status: 'pending' },
+        { id: 'pedidos', label: 'Cargando pedidos del día', status: 'pending' },
+        { id: 'calculations', label: 'Calculando liquidaciones', status: 'pending' },
+        { id: 'finalization', label: 'Finalizando proceso', status: 'pending' }
+      ]);
+      
+      // Paso 1: Debugging
+      setStepStatus('debug', 'loading', 'Analizando estructura de datos...');
+      console.log('🔍 Ejecutando debugTablaPedidos...');
+      const debugInfo = await debugTablaPedidos(selectedDate);
+      console.log('✅ Debug info obtenida:', debugInfo);
+      setStepStatus('debug', 'completed', 'Datos verificados correctamente');
+      setProgress(20);
+      
+      // Paso 2: Obtener mensajeros
+      setStepStatus('mensajeros', 'loading', 'Buscando mensajeros en la base de datos...');
+      console.log('🔍 Ejecutando getLiquidacionesReales para fecha:', selectedDate);
+      console.log('🔍 Tipo de fecha:', typeof selectedDate);
+      console.log('🔍 Fecha formateada:', selectedDate);
+      
       const liquidacionesReales = await getLiquidacionesReales(selectedDate);
-      console.log('📊 Liquidaciones reales obtenidas:', liquidacionesReales);
+      console.log('✅ Liquidaciones reales obtenidas:', liquidacionesReales);
+      console.log('📊 Cantidad de liquidaciones:', liquidacionesReales.length);
+      
+      if (liquidacionesReales.length === 0) {
+        console.log('⚠️ No se encontraron liquidaciones para la fecha:', selectedDate);
+        console.log('🔍 Verificando si hay pedidos en la base de datos...');
+        
+        // Verificar si hay pedidos en general
+        const { data: todosLosPedidos, error: errorTodos } = await supabasePedidos
+          .from('pedidos')
+          .select('id_pedido, fecha_creacion, mensajero_asignado, mensajero_concretado')
+          .limit(5);
+        
+        console.log('📦 Muestra de todos los pedidos:', todosLosPedidos);
+        console.log('📦 Error al obtener pedidos:', errorTodos);
+        
+        // Verificar pedidos para la fecha específica
+        const { data: pedidosFecha, error: errorFecha } = await supabasePedidos
+          .from('pedidos')
+          .select('id_pedido, fecha_creacion, mensajero_asignado, mensajero_concretado')
+          .gte('fecha_creacion', `${selectedDate}T00:00:00`)
+          .lt('fecha_creacion', `${selectedDate}T23:59:59`)
+          .limit(5);
+        
+        console.log('📦 Pedidos para fecha específica:', pedidosFecha);
+        console.log('📦 Error al obtener pedidos de fecha:', errorFecha);
+      }
+      
+      setStepStatus('mensajeros', 'completed', `${liquidacionesReales.length} mensajeros encontrados`);
+      setProgress(60);
+      
+      // Paso 3: Procesar pedidos
+      setStepStatus('pedidos', 'loading', 'Recopilando pedidos por mensajero...');
+      setStepStatus('pedidos', 'completed', 'Pedidos cargados correctamente');
+      setProgress(80);
+      
+      // Paso 4: Calcular liquidaciones
+      setStepStatus('calculations', 'loading', 'Procesando totales y montos...');
+      console.log('🔍 Convirtiendo liquidaciones a formato LiquidationCalculation...');
       
       // Convertir a formato LiquidationCalculation
-      const calculations: LiquidationCalculation[] = liquidacionesReales.map((liquidation, index) => ({
-        messengerId: `msg-${index + 1}`,
-        messengerName: liquidation.mensajero,
-        routeDate: selectedDate,
-        initialAmount: liquidation.initialAmount,
-        totalCollected: liquidation.totalCollected,
-        totalSpent: liquidation.totalSpent,
-        sinpePayments: liquidation.sinpePayments,
-        cashPayments: liquidation.cashPayments,
-        finalAmount: liquidation.finalAmount,
-        orders: liquidation.pedidos,
-        isLiquidated: false, // Por defecto no liquidado
-        canEdit: true
-      }));
+      let calculations: LiquidationCalculation[];
       
-      console.log('📋 Cálculos de liquidación generados:', calculations);
+      if (liquidacionesReales.length === 0) {
+        console.log('⚠️ No hay liquidaciones reales, creando datos de ejemplo...');
+        setHasRealData(false);
+        
+        // Buscar fechas con datos para debugging
+        console.log('🔍 Buscando fechas con datos para debugging...');
+        await debugFechasConDatos();
+        
+        // Obtener mensajeros únicos para crear datos de ejemplo
+        const mensajeros = await getMensajerosUnicos();
+        console.log('📋 Mensajeros para datos de ejemplo:', mensajeros);
+        
+        calculations = mensajeros.slice(0, 5).map((mensajero, index) => ({
+          messengerId: `msg-${index + 1}`,
+          messengerName: mensajero,
+          routeDate: selectedDate,
+          initialAmount: 50000,
+          totalCollected: 0,
+          totalSpent: 0,
+          sinpePayments: 0,
+          cashPayments: 0,
+          finalAmount: 50000,
+          orders: [],
+          isLiquidated: false,
+          canEdit: true
+        }));
+        
+        console.log('📊 Datos de ejemplo creados:', calculations);
+      } else {
+        setHasRealData(true);
+        calculations = liquidacionesReales.map((liquidation, index) => ({
+          messengerId: `msg-${index + 1}`,
+          messengerName: liquidation.mensajero,
+          routeDate: selectedDate,
+          initialAmount: liquidation.initialAmount,
+          totalCollected: liquidation.totalCollected,
+          totalSpent: liquidation.totalSpent,
+          sinpePayments: liquidation.sinpePayments,
+          cashPayments: liquidation.cashPayments,
+          finalAmount: liquidation.finalAmount,
+          orders: liquidation.pedidos,
+          isLiquidated: false, // Por defecto no liquidado
+          canEdit: true
+        }));
+      }
+      
+      console.log('✅ Calculations generadas:', calculations);
+      setStepStatus('calculations', 'completed', 'Liquidaciones calculadas correctamente');
+      setProgress(90);
+      
+      // Paso 5: Finalizar
+      setStepStatus('finalization', 'loading', 'Preparando datos para mostrar...');
+      console.log('🔍 Estableciendo calculations en el estado...');
       setCalculations(calculations);
+      console.log('✅ Calculations establecidas en el estado');
+      
+      if (liquidacionesReales.length === 0) {
+        setStepStatus('finalization', 'completed', 'Mostrando mensajeros sin liquidaciones');
+      } else {
+        setStepStatus('finalization', 'completed', 'Proceso completado');
+      }
+      setProgress(100);
+      
+      // Cerrar loader después de un breve delay
+      console.log('⏰ Cerrando loader en 1 segundo...');
+      setTimeout(() => {
+        console.log('🔚 Cerrando loader');
+        closeLoader();
+      }, 1000);
+      
     } catch (error) {
       console.error('❌ Error loading calculations:', error);
+      
+      // Marcar pasos como error
+      setStepStatus('calculations', 'error', 'Error en el cálculo');
+      setStepStatus('finalization', 'error', 'Proceso falló');
+      
+      // Cerrar loader después de mostrar el error
+      setTimeout(() => {
+        closeLoader();
+      }, 3000);
       
       // Fallback a datos mock si hay error
       const mockCalculations: LiquidationCalculation[] = [
@@ -347,6 +486,43 @@ export default function AdminLiquidationPage() {
             onChange={(e) => setSelectedDate(e.target.value)}
             className="w-40"
           />
+          <Button 
+            variant="outline"
+            onClick={() => {
+              console.log('🧪 Probando loader...');
+              startLoader('Procesando Liquidaciones', [
+                { id: 'debug', label: 'Verificando datos de la tabla', status: 'pending' },
+                { id: 'mensajeros', label: 'Obteniendo mensajeros únicos', status: 'pending' },
+                { id: 'pedidos', label: 'Cargando pedidos del día', status: 'pending' },
+                { id: 'calculations', label: 'Calculando liquidaciones', status: 'pending' },
+                { id: 'finalization', label: 'Finalizando proceso', status: 'pending' }
+              ]);
+            }}
+          >
+            <Truck className="w-4 h-4 mr-2" />
+            Probar Loader
+          </Button>
+          <Button 
+            variant="outline"
+            onClick={async () => {
+              console.log('🔍 Buscando fechas con datos...');
+              await debugFechasConDatos();
+            }}
+          >
+            <Search className="w-4 h-4 mr-2" />
+            Buscar Fechas
+          </Button>
+          <Button 
+            variant="outline"
+            onClick={() => {
+              const today = new Date().toISOString().split('T')[0];
+              console.log('📅 Cambiando a fecha actual:', today);
+              setSelectedDate(today);
+            }}
+          >
+            <Calendar className="w-4 h-4 mr-2" />
+            Hoy
+          </Button>
           <Button asChild>
             <Link href="/dashboard/admin">
               <Truck className="w-4 h-4 mr-2" />
@@ -362,6 +538,18 @@ export default function AdminLiquidationPage() {
           <Lock className="w-4 h-4 text-orange-600" />
           <AlertDescription className="text-orange-800">
             <strong>Edición restringida:</strong> Los pedidos no pueden ser editados una vez que el día ha sido liquidado o ha pasado al día siguiente.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Mensaje informativo cuando no hay datos reales */}
+      {!hasRealData && calculations.length > 0 && (
+        <Alert className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Sin liquidaciones para esta fecha:</strong> No se encontraron pedidos entregados para el {selectedDate}. 
+            Se muestran los mensajeros disponibles con liquidaciones en cero. 
+            Verifica que la fecha seleccionada tenga pedidos con estado "entregado".
           </AlertDescription>
         </Alert>
       )}
@@ -1365,6 +1553,16 @@ export default function AdminLiquidationPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Progress Loader */}
+      <ProgressLoader
+        isVisible={isLoaderVisible}
+        title="Procesando Liquidaciones"
+        steps={loaderSteps}
+        currentStep={loaderCurrentStep}
+        overallProgress={loaderProgress}
+        onClose={closeLoader}
+      />
     </div>
   );
 }

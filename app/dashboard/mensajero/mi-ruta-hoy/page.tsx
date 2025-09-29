@@ -215,23 +215,13 @@ export default function MiRutaHoy() {
   // Función helper para obtener la fecha actual en zona horaria de Costa Rica
   const getCostaRicaDate = () => {
     const now = new Date();
-    console.log('🔍 Fecha del sistema:', now);
-    console.log('🔍 Año del sistema:', now.getFullYear());
-    console.log('🔍 Zona horaria del sistema:', Intl.DateTimeFormat().resolvedOptions().timeZone);
     
     // Costa Rica está en GMT-6 (UTC-6)
     const costaRicaOffset = -6 * 60; // -6 horas en minutos
     const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
     const costaRicaTime = new Date(utc + (costaRicaOffset * 60000));
     
-    // Crear una fecha que muestre correctamente GMT-6
-    const costaRicaDate = new Date(costaRicaTime.getTime());
-    
-    console.log('📅 Fecha para Costa Rica (GMT-6):', costaRicaDate);
-    console.log('📅 Año para Costa Rica:', costaRicaDate.getFullYear());
-    console.log('📅 Zona horaria aplicada: GMT-6 (Costa Rica)');
-    
-    return costaRicaDate;
+    return costaRicaTime;
   };
 
   // Función helper para obtener la fecha ISO en zona horaria de Costa Rica
@@ -242,7 +232,6 @@ export default function MiRutaHoy() {
     const day = String(costaRicaDate.getDate()).padStart(2, '0');
     const isoDate = `${year}-${month}-${day}`;
     
-    console.log('📅 Fecha ISO para Costa Rica:', isoDate);
     return isoDate;
   };
 
@@ -254,15 +243,8 @@ export default function MiRutaHoy() {
       let targetDateISO: string;
       let targetDateString: string;
       
-      console.log('🔍 DEBUGGING FECHA:');
-      console.log('selectedDate:', selectedDate);
-      console.log('dateFilter:', dateFilter);
-      
       const now = new Date();
       const costaRicaNow = getCostaRicaDate();
-      console.log('📅 Fecha UTC:', now);
-      console.log('📅 Fecha Costa Rica:', costaRicaNow);
-      console.log('📅 Zona horaria detectada:', Intl.DateTimeFormat().resolvedOptions().timeZone);
       
       if (selectedDate) {
         // Si hay una fecha específica seleccionada, usar esa pero con zona horaria de Costa Rica
@@ -271,87 +253,42 @@ export default function MiRutaHoy() {
         const day = String(selectedDate.getDate()).padStart(2, '0');
         targetDateISO = `${year}-${month}-${day}`;
         targetDateString = selectedDate.toDateString();
-        console.log('📅 Usando selectedDate (Costa Rica):', { targetDateISO, targetDateString });
       } else {
         // Usar el filtro de período por defecto con zona horaria de Costa Rica
         switch (dateFilter) {
           case 'today':
             targetDateISO = getCostaRicaDateISO();
             targetDateString = costaRicaNow.toDateString();
-            console.log('📅 Filtro TODAY (Costa Rica):', { targetDateISO, targetDateString });
             break;
           case 'yesterday':
             const yesterday = new Date(costaRicaNow);
             yesterday.setDate(yesterday.getDate() - 1);
             targetDateISO = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
             targetDateString = yesterday.toDateString();
-            console.log('📅 Filtro YESTERDAY (Costa Rica):', { targetDateISO, targetDateString });
             break;
           case 'thisWeek':
             // Para esta semana, usar hoy por defecto
             targetDateISO = getCostaRicaDateISO();
             targetDateString = costaRicaNow.toDateString();
-            console.log('📅 Filtro THIS WEEK (Costa Rica):', { targetDateISO, targetDateString });
             break;
           case 'thisMonth':
             // Para este mes, usar hoy por defecto
             targetDateISO = getCostaRicaDateISO();
             targetDateString = costaRicaNow.toDateString();
-            console.log('📅 Filtro THIS MONTH (Costa Rica):', { targetDateISO, targetDateString });
             break;
           default:
             targetDateISO = getCostaRicaDateISO();
             targetDateString = costaRicaNow.toDateString();
-            console.log('📅 Filtro DEFAULT (Costa Rica):', { targetDateISO, targetDateString });
         }
       }
-      
-      console.log('📅 Fecha objetivo (formato completo):', targetDateString);
-      console.log('📅 Fecha objetivo (ISO):', targetDateISO);
-      console.log('📅 Filtro activo:', dateFilter);
       
       // Obtener pedidos de Supabase filtrados por mensajero Y fecha objetivo
       const pedidosSupabase = await getPedidosDelDiaByMensajero(user?.name || '', targetDateISO);
-      console.log('=== LOG DE PEDIDOS EN MI RUTA HOY ===');
-      console.log('Usuario autenticado:', user?.name, '(', user?.email, ')');
-      console.log('Rol del usuario:', user?.role);
-      console.log('Fecha de consulta:', targetDateISO);
-      console.log('Total de pedidos del día cargados:', pedidosSupabase.length);
-      console.log('Pedidos completos:', pedidosSupabase);
-      console.log('=== FIN DEL LOG DE PEDIDOS ===');
       
-      // Si no hay pedidos para la fecha objetivo y es el filtro de "hoy", 
-      // buscar en todas las fechas disponibles para mostrar algo
-      let pedidosDelDia = pedidosSupabase.filter(pedido => {
-        if (!pedido.fecha_creacion) return false;
-        const pedidoDate = new Date(pedido.fecha_creacion).toISOString().split('T')[0];
-        return pedidoDate === targetDateISO;
-      });
-
-      // Si no hay pedidos para hoy y es el filtro de "hoy", buscar en todas las fechas
-      if (pedidosDelDia.length === 0 && dateFilter === 'today') {
-        console.log('🔍 No hay pedidos para hoy, buscando en todas las fechas...');
-        const { data: allPedidos, error: allError } = await supabasePedidos
-          .from('pedidos')
-          .select('*')
-          .or(`mensajero_asignado.ilike.${user?.name || ''},mensajero_concretado.ilike.${user?.name || ''}`);
-        
-        if (!allError && allPedidos) {
-          console.log('📊 Pedidos encontrados en todas las fechas:', allPedidos.length);
-          // Mostrar los pedidos más recientes (últimos 10)
-          pedidosDelDia = allPedidos
-            .sort((a, b) => new Date(b.fecha_creacion || '').getTime() - new Date(a.fecha_creacion || '').getTime())
-            .slice(0, 10);
-          console.log('📊 Mostrando los 10 pedidos más recientes:', pedidosDelDia.length);
-        }
-      }
-      
-      console.log('🔍 Filtrado adicional por fecha:');
-      console.log('Pedidos antes del filtro:', pedidosSupabase.length);
-      console.log('Pedidos después del filtro:', pedidosDelDia.length);
+      // Usar directamente los pedidos obtenidos de Supabase (ya filtrados por fecha)
+      const pedidosDelDia = pedidosSupabase;
       
       // Convertir pedidos de Supabase al formato de la aplicación
-      console.log('🔄 Iniciando conversión de pedidos en Mi Ruta Hoy...');
       const orders: Order[] = pedidosDelDia.map((pedido, index) => {
         try {
           // Determinar el estado del pedido basado en los campos disponibles
@@ -466,14 +403,16 @@ export default function MiRutaHoy() {
         }
       });
       
-      console.log('✅ Conversión completada en Mi Ruta Hoy. Pedidos convertidos:', orders.length);
 
       // Gastos vacíos - se conectará al backend esta semana
       const mockExpenses: Expense[] = [];
 
       const totalExpenses = 0;
-      const totalRevenue = orders.reduce((sum, order) => sum + order.totalAmount, 0);
       const completedOrders = orders.filter(order => order.status === 'entregado').length;
+      // Solo contar pedidos entregados para el total del día
+      const totalRevenue = orders
+        .filter(order => order.status === 'entregado')
+        .reduce((sum, order) => sum + order.totalAmount, 0);
 
       // Calcular métricas de contabilidad
       const totalCash = orders
@@ -693,6 +632,7 @@ export default function MiRutaHoy() {
           // Datos ya conocidos desde antes
           idPedido: selectedOrderForUpdate.id,
           mensajero: user?.name || 'Mensajero',
+          usuario: user?.name || 'Mensajero', // Usuario que realiza la acción
           
           // Datos tomados del formulario
           estadoPedido: newStatus === 'reagendado' ? 'REAGENDO' : newStatus,
@@ -1214,18 +1154,18 @@ export default function MiRutaHoy() {
   }
 
   return (
-    <div className="space-y-4 p-4 max-w-md mx-auto">
+    <div className="space-y-6 p-4 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-700 text-white p-4 rounded-xl shadow-lg">
+      <div className="bg-gradient-to-r from-blue-600 to-purple-700 text-white p-6 rounded-xl shadow-lg">
         <div className="space-y-3">
           <div className="flex items-center gap-3">
-            <div className="bg-white/20 p-2 rounded-full shadow-inner">
-              <Route className="w-6 h-6" />
+            <div className="bg-white/20 p-3 rounded-full shadow-inner">
+              <Route className="w-8 h-8" />
             </div>
             <div className="flex-1">
-              <h1 className="text-xl font-bold">Mi Ruta de Hoy</h1>
-              <div className="flex items-center gap-2 text-sm opacity-90">
-                <Calendar className="w-4 h-4" />
+              <h1 className="text-3xl font-bold">Mi Ruta de Hoy</h1>
+              <div className="flex items-center gap-2 text-lg opacity-90">
+                <Calendar className="w-5 h-5" />
                 <span className="font-medium">
                   {selectedDate ? 
                     selectedDate.toLocaleDateString('es-CR', { 
@@ -1261,80 +1201,106 @@ export default function MiRutaHoy() {
         </div>
       </div>
 
-      {/* Bento Grid Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Completados - Grande */}
+      {/* Bento Grid Unificado - Todas las Métricas */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        {/* Completados */}
         <Card 
           className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
           onClick={() => setIsCompletedModalOpen(true)}
         >
-          <CardContent className="p-6">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <div className="p-2 bg-green-500 rounded-lg">
-                    <CheckCircle className="w-6 h-6 text-white" />
+                    <CheckCircle className="w-5 h-5 text-white" />
                   </div>
                   <span className="text-sm font-medium text-green-700">Completados</span>
                 </div>
-                <p className="text-3xl font-bold text-green-800">{routeData.completedOrders}</p>
-                <p className="text-xs text-green-600">Pedidos entregados</p>
+                <p className="text-2xl font-bold text-green-800">{routeData.completedOrders}</p>
+                <p className="text-xs text-green-600">Entregados</p>
               </div>
               <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm">→</span>
+                <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs">→</span>
                 </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Ingresos - Grande */}
+        {/* Ingresos */}
         <Card 
           className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
           onClick={() => setIsRevenueModalOpen(true)}
         >
-          <CardContent className="p-6">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <div className="p-2 bg-blue-500 rounded-lg">
-                    <DollarSign className="w-6 h-6 text-white" />
+                    <DollarSign className="w-5 h-5 text-white" />
                   </div>
                   <span className="text-sm font-medium text-blue-700">Ingresos</span>
                 </div>
-                <p className="text-2xl font-bold text-blue-800">{formatCurrency(routeData.totalRevenue)}</p>
+                <p className="text-xl font-bold text-blue-800">{formatCurrency(routeData.totalRevenue)}</p>
                 <p className="text-xs text-blue-600">Total del día</p>
               </div>
               <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm">→</span>
+                <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs">→</span>
                 </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Reagendados */}
+        {/* Total Efectivo */}
         <Card 
-          className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-          onClick={() => setIsRescheduledModalOpen(true)}
+          className="bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+          onClick={() => setIsCashModalOpen(true)}
         >
-          <CardContent className="p-6">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 bg-orange-500 rounded-lg">
-                    <RotateCcw className="w-5 h-5 text-white" />
+                  <div className="p-2 bg-emerald-500 rounded-lg">
+                    <Banknote className="w-5 h-5 text-white" />
                   </div>
-                  <span className="text-sm font-medium text-orange-700">Reagendados</span>
+                  <span className="text-sm font-medium text-emerald-700">Efectivo</span>
                 </div>
-                <p className="text-2xl font-bold text-orange-800">{getRescheduledOrders().length}</p>
-                <p className="text-xs text-orange-600">Pendientes</p>
+                <p className="text-xl font-bold text-emerald-800">{formatCurrency(accountingMetrics.totalCash)}</p>
+                <p className="text-xs text-emerald-600">En efectivo</p>
               </div>
               <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm">→</span>
+                <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs">→</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Total SINPE */}
+        <Card 
+          className="bg-gradient-to-br from-cyan-50 to-cyan-100 border-cyan-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+          onClick={() => setIsSinpeModalOpen(true)}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-cyan-500 rounded-lg">
+                    <Smartphone className="w-5 h-5 text-white" />
+                  </div>
+                  <span className="text-sm font-medium text-cyan-700">SINPE</span>
+                </div>
+                <p className="text-xl font-bold text-cyan-800">{formatCurrency(accountingMetrics.totalSinpe)}</p>
+                <p className="text-xs text-cyan-600">Con SINPE</p>
+              </div>
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="w-6 h-6 bg-cyan-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs">→</span>
                 </div>
               </div>
             </div>
@@ -1346,7 +1312,7 @@ export default function MiRutaHoy() {
           className="bg-gradient-to-br from-red-50 to-red-100 border-red-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
           onClick={() => setIsReturnsModalOpen(true)}
         >
-          <CardContent className="p-6">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -1359,8 +1325,34 @@ export default function MiRutaHoy() {
                 <p className="text-xs text-red-600">Para devolver</p>
               </div>
               <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm">→</span>
+                <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs">→</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Reagendados */}
+        <Card 
+          className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+          onClick={() => setIsRescheduledModalOpen(true)}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-orange-500 rounded-lg">
+                    <Calendar className="w-5 h-5 text-white" />
+                  </div>
+                  <span className="text-sm font-medium text-orange-700">Reagendados</span>
+                </div>
+                <p className="text-2xl font-bold text-orange-800">{getRescheduledOrders().length}</p>
+                <p className="text-xs text-orange-600">Pendientes</p>
+              </div>
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs">→</span>
                 </div>
               </div>
             </div>
@@ -1368,104 +1360,23 @@ export default function MiRutaHoy() {
         </Card>
       </div>
 
-      {/* Contabilidad del Día - Bento Style */}
-      <Card className="bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-xl flex items-center gap-3">
-            <div className="p-2 bg-purple-500 rounded-lg">
-              <Receipt className="w-6 h-6 text-white" />
+      {/* Total Recaudado - Destacado */}
+      <Card className="bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200 mt-4">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-purple-500 rounded-lg">
+                <Receipt className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-purple-800">Total Recaudado</h3>
+                <p className="text-sm text-purple-600">Suma de efectivo y SINPE</p>
+              </div>
             </div>
-            <span className="text-purple-800">Contabilidad del Día</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Total Efectivo */}
-            <Card 
-              className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-              onClick={() => setIsCashModalOpen(true)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 bg-green-500 rounded-lg">
-                        <Banknote className="w-5 h-5 text-white" />
-                      </div>
-                      <span className="text-sm font-medium text-green-700">Total Efectivo</span>
-                    </div>
-                    <p className="text-2xl font-bold text-green-800">{formatCurrency(accountingMetrics.totalCash)}</p>
-                    <p className="text-xs text-green-600">Pedidos en efectivo</p>
-                  </div>
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs">→</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Total SINPE */}
-            <Card 
-              className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-              onClick={() => setIsSinpeModalOpen(true)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 bg-blue-500 rounded-lg">
-                        <Smartphone className="w-5 h-5 text-white" />
-                      </div>
-                      <span className="text-sm font-medium text-blue-700">Total SINPE</span>
-                    </div>
-                    <p className="text-2xl font-bold text-blue-800">{formatCurrency(accountingMetrics.totalSinpe)}</p>
-                    <p className="text-xs text-blue-600">Pedidos con SINPE</p>
-                  </div>
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs">→</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Reagendados */}
-            <Card 
-              className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-              onClick={() => setIsRescheduledModalOpen(true)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 bg-orange-500 rounded-lg">
-                        <RotateCcw className="w-5 h-5 text-white" />
-                      </div>
-                      <span className="text-sm font-medium text-orange-700">Reagendados</span>
-                    </div>
-                    <p className="text-2xl font-bold text-orange-800">{getRescheduledOrders().length}</p>
-                    <p className="text-xs text-orange-600">Pendientes</p>
-                  </div>
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs">→</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Total Recaudado */}
-          <div className="mt-6 pt-4 border-t border-purple-200">
-            <div className="flex items-center justify-between">
-              <span className="text-lg font-semibold text-purple-800">Total Recaudado:</span>
-              <span className="text-3xl font-bold text-green-600">
+            <div className="text-right">
+              <p className="text-3xl font-bold text-green-600">
                 {formatCurrency(accountingMetrics.totalCash + accountingMetrics.totalSinpe)}
-              </span>
+              </p>
             </div>
           </div>
         </CardContent>
@@ -1925,7 +1836,7 @@ export default function MiRutaHoy() {
               <div className="mb-2 text-xs text-gray-500 text-center">
                 💡 Haz clic en cualquier fila para fijar la columna ID y verla siempre visible
               </div>
-              <Table className="min-w-[1200px]">
+              <Table className="min-w-[1600px]">
                 <TableHeader>
                   <TableRow className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
                     <TableHead className="min-w-[200px] px-4 py-3">
@@ -1937,6 +1848,8 @@ export default function MiRutaHoy() {
                     <TableHead className="min-w-[180px] px-4 py-3 font-bold text-gray-800 text-sm">Contacto</TableHead>
                     <TableHead className="min-w-[300px] px-4 py-3 font-bold text-gray-800 text-sm">Dirección</TableHead>
                     <TableHead className="min-w-[320px] px-4 py-3 font-bold text-gray-800 text-sm">Productos</TableHead>
+                    <TableHead className="min-w-[120px] px-4 py-3 font-bold text-gray-800 text-sm">Fecha Creación</TableHead>
+                    <TableHead className="min-w-[120px] px-4 py-3 font-bold text-gray-800 text-sm">Fecha Entrega</TableHead>
                     <TableHead className="min-w-[160px] px-4 py-3 font-bold text-gray-800 text-sm">Acciones</TableHead>
                     <TableHead className="min-w-[120px] px-4 py-3 font-bold text-gray-800 text-sm">Pago</TableHead>
                     <TableHead className="min-w-[120px] px-4 py-3 font-bold text-gray-800 text-sm">Estado</TableHead>
@@ -2109,6 +2022,42 @@ export default function MiRutaHoy() {
                               </Button>
                             </div>
                           )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <div className="space-y-1">
+                          <div className="text-xs text-gray-500 font-medium">Creación</div>
+                          <div className="text-sm font-semibold text-gray-800">
+                            {order.createdAt ? new Date(order.createdAt).toLocaleDateString('es-CR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric'
+                            }) : 'N/A'}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {order.createdAt ? new Date(order.createdAt).toLocaleTimeString('es-CR', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            }) : ''}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <div className="space-y-1">
+                          <div className="text-xs text-gray-500 font-medium">Entrega</div>
+                          <div className="text-sm font-semibold text-gray-800">
+                            {order.updatedAt ? new Date(order.updatedAt).toLocaleDateString('es-CR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric'
+                            }) : 'N/A'}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {order.updatedAt ? new Date(order.updatedAt).toLocaleTimeString('es-CR', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            }) : ''}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell className="px-4 py-3">

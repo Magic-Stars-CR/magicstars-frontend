@@ -101,6 +101,9 @@ export default function AdminOrdersPage() {
         updates.mensajero_asignado = 'Mensajero Admin';
       }
       
+      // Añadir usuario que realiza la acción
+      updates.usuario = 'Admin';
+      
       const success = await updatePedido(orderId, updates);
       
       if (success) {

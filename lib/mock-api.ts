@@ -1445,7 +1445,7 @@ export const mockApi = {
     return filteredOrders;
   },
 
-  updateOrderStatus: async (orderId: string, status: OrderStatus, notes?: string): Promise<Order> => {
+  updateOrderStatus: async (orderId: string, status: OrderStatus, notes?: string, usuario?: string): Promise<Order> => {
     await new Promise(resolve => setTimeout(resolve, 400));
     const order = mockOrders.find(o => o.id === orderId);
     if (!order) {
@@ -1455,6 +1455,10 @@ export const mockApi = {
     order.updatedAt = new Date().toISOString();
     if (notes) order.deliveryNotes = notes;
     if (status === 'entregado') order.deliveryDate = new Date().toISOString();
+    
+    // Log del usuario que realiza la acción
+    console.log(`🔄 Pedido ${orderId} actualizado por: ${usuario || 'Usuario desconocido'}`);
+    
     return order;
   },
 

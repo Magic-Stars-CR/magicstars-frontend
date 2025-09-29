@@ -61,7 +61,8 @@ export default function UpdateOrderPage() {
     setSuccess('');
     
     try {
-      await mockApi.updateOrderStatus(order.id, newStatus, notes);
+      // Incluir usuario en la actualización
+      await mockApi.updateOrderStatus(order.id, newStatus, notes, 'Mensajero');
       setSuccess('Pedido actualizado exitosamente');
       // Update local order state
       setOrder({ ...order, status: newStatus, deliveryNotes: notes });
