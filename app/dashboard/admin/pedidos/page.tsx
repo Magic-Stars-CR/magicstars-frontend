@@ -1500,7 +1500,7 @@ export default function AdminPedidosPage() {
                         <div className="flex items-center gap-2">
                           {getStatusIcon(getStatusForBadge(pedido))}
                           <OrderStatusBadge status={getStatusForBadge(pedido)} />
-                      <Button
+                      <Button disabled
                         variant="outline"
                         size="sm"
                             onClick={() => handleQuickStatusUpdate(pedido)}
