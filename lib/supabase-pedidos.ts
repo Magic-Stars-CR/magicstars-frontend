@@ -733,65 +733,26 @@ export const getMensajerosUnicos = async (): Promise<string[]> => {
 // Función para obtener pedidos del día por mensajero específico
 export const getPedidosDelDiaByMensajeroEspecifico = async (mensajeroName: string, fecha: string): Promise<PedidoTest[]> => {
   try {
-    console.log(`🔍 DEBUGGING getPedidosDelDiaByMensajeroEspecifico:`);
-    console.log(`📋 Mensajero: ${mensajeroName}`);
-    console.log(`📅 Fecha: ${fecha}`);
-    console.log(`📅 Rango de búsqueda: ${fecha}T00:00:00 a ${fecha}T23:59:59`);
+    console.log(`🔍 Obteniendo pedidos para ${mensajeroName} el ${fecha}`);
     
-    // Primero verificar si hay pedidos en general para este mensajero
-    const { data: pedidosGenerales, error: errorGeneral } = await supabasePedidos
-      .from('pedidos')
-      .select('id_pedido, fecha_creacion, mensajero_asignado, mensajero_concretado, estado_pedido')
-      .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
-      .limit(5);
-    
-    console.log(`📦 Pedidos generales para ${mensajeroName}:`, pedidosGenerales);
-    console.log(`❌ Error en consulta general:`, errorGeneral);
-    
-    // Verificar pedidos para la fecha específica
-    const { data: pedidosFecha, error: errorFecha } = await supabasePedidos
-      .from('pedidos')
-      .select('id_pedido, fecha_creacion, mensajero_asignado, mensajero_concretado, estado_pedido')
-      .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
-      .gte('fecha_creacion', `${fecha}T00:00:00`)
-      .lt('fecha_creacion', `${fecha}T23:59:59`)
-      .limit(5);
-    
-    console.log(`📦 Pedidos para fecha ${fecha}:`, pedidosFecha);
-    console.log(`❌ Error en consulta de fecha:`, errorFecha);
-    
-    // Obtener todos los pedidos usando paginación
+    // Obtener todos los pedidos usando paginación con fecha simple (sin hora)
     let allPedidos: PedidoTest[] = [];
     let from = 0;
     const limit = 1000;
     let hasMore = true;
 
     while (hasMore) {
-      console.log(`🔄 Consultando página ${Math.floor(from / limit) + 1} para ${mensajeroName}...`);
-      
       const { data, error } = await supabasePedidos
         .from('pedidos')
         .select('*')
         .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
-        .gte('fecha_creacion', `${fecha}T00:00:00`)
-        .lt('fecha_creacion', `${fecha}T23:59:59`)
+        .eq('fecha_creacion', fecha) // Usar eq en lugar de gte/lt
         .range(from, from + limit - 1)
         .order('id_pedido', { ascending: true });
 
       if (error) {
         console.error('❌ Error al obtener pedidos del día:', error);
         return allPedidos;
-      }
-
-      console.log(`📊 Datos obtenidos en página ${Math.floor(from / limit) + 1}:`, data?.length || 0);
-      if (data && data.length > 0) {
-        console.log(`📋 Muestra de pedidos:`, data.slice(0, 2).map(p => ({
-          id: p.id_pedido,
-          fecha: p.fecha_creacion,
-          estado: p.estado_pedido,
-          asignado: p.mensajero_asignado,
-          concretado: p.mensajero_concretado
-        })));
       }
 
       if (data && data.length > 0) {
@@ -803,7 +764,7 @@ export const getPedidosDelDiaByMensajeroEspecifico = async (mensajeroName: strin
       }
     }
 
-    console.log(`✅ Total de pedidos encontrados para ${mensajeroName} el ${fecha}:`, allPedidos.length);
+    console.log(`✅ Encontrados ${allPedidos.length} pedidos para ${mensajeroName} el ${fecha}`);
     return allPedidos;
   } catch (error) {
     console.error('❌ Error en getPedidosDelDiaByMensajeroEspecifico:', error);
@@ -846,55 +807,61 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
   finalAmount: number;
 }[]> => {
   try {
+    console.log(`🔍 Obteniendo liquidaciones para fecha: ${fecha}`);
+    
     // Obtener mensajeros únicos
     const mensajeros = await getMensajerosUnicos();
+    console.log(`📋 Mensajeros encontrados: ${mensajeros.length}`, mensajeros);
     
     const liquidaciones = [];
     
+    // Procesar todos los mensajeros, incluso si no tienen pedidos
     for (const mensajero of mensajeros) {
+      console.log(`🔄 Procesando mensajero: ${mensajero}`);
+      
       // Obtener pedidos del día para este mensajero
       const pedidos = await getPedidosDelDiaByMensajeroEspecifico(mensajero, fecha);
+      console.log(`📦 Pedidos para ${mensajero}: ${pedidos.length}`);
       
-      if (pedidos.length > 0) {
-        // Calcular totales
-        const totalCollected = pedidos.reduce((sum, pedido) => {
-          if (pedido.estado_pedido === 'entregado') {
-            return sum + pedido.valor_total;
-          }
-          return sum;
-        }, 0);
+      // Calcular totales (incluso si no hay pedidos)
+      const totalCollected = pedidos.reduce((sum, pedido) => {
+        if (pedido.estado_pedido === 'entregado') {
+          return sum + pedido.valor_total;
+        }
+        return sum;
+      }, 0);
 
-        const sinpePayments = pedidos.reduce((sum, pedido) => {
-          if (pedido.estado_pedido === 'entregado' && pedido.metodo_pago === 'sinpe') {
-            return sum + pedido.valor_total;
-          }
-          return sum;
-        }, 0);
+      const sinpePayments = pedidos.reduce((sum, pedido) => {
+        if (pedido.estado_pedido === 'entregado' && pedido.metodo_pago === 'sinpe') {
+          return sum + pedido.valor_total;
+        }
+        return sum;
+      }, 0);
 
-        const cashPayments = pedidos.reduce((sum, pedido) => {
-          if (pedido.estado_pedido === 'entregado' && pedido.metodo_pago === 'efectivo') {
-            return sum + pedido.valor_total;
-          }
-          return sum;
-        }, 0);
+      const cashPayments = pedidos.reduce((sum, pedido) => {
+        if (pedido.estado_pedido === 'entregado' && pedido.metodo_pago === 'efectivo') {
+          return sum + pedido.valor_total;
+        }
+        return sum;
+      }, 0);
 
-        const totalSpent = 0; // Gastos del mensajero (por ahora 0)
-        const initialAmount = 50000; // Monto inicial por defecto
-        const finalAmount = initialAmount + totalCollected - totalSpent;
+      const totalSpent = 0; // Gastos del mensajero (por ahora 0)
+      const initialAmount = 50000; // Monto inicial por defecto
+      const finalAmount = initialAmount + totalCollected - totalSpent;
 
-        liquidaciones.push({
-          mensajero,
-          pedidos,
-          totalCollected,
-          sinpePayments,
-          cashPayments,
-          totalSpent,
-          initialAmount,
-          finalAmount
-        });
-      }
+      liquidaciones.push({
+        mensajero,
+        pedidos,
+        totalCollected,
+        sinpePayments,
+        cashPayments,
+        totalSpent,
+        initialAmount,
+        finalAmount
+      });
     }
     
+    console.log(`✅ Liquidaciones generadas: ${liquidaciones.length}`);
     return liquidaciones;
   } catch (error) {
     console.error('❌ Error en getLiquidacionesReales:', error);

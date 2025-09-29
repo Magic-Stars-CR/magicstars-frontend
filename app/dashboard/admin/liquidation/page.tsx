@@ -92,6 +92,9 @@ export default function AdminLiquidationPage() {
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [selectedOrderNotes, setSelectedOrderNotes] = useState<PedidoTest | null>(null);
   const [hasRealData, setHasRealData] = useState(false);
+  const [showViewAndLiquidateModal, setShowViewAndLiquidateModal] = useState(false);
+  const [selectedViewAndLiquidate, setSelectedViewAndLiquidate] = useState<LiquidationCalculation | null>(null);
+  const [initialAmountInput, setInitialAmountInput] = useState('');
   
   // Progress loader
   const {
@@ -132,138 +135,56 @@ export default function AdminLiquidationPage() {
       
       // Iniciar loader
       startLoader('Procesando Liquidaciones', [
-        { id: 'debug', label: 'Verificando datos de la tabla', status: 'pending' },
         { id: 'mensajeros', label: 'Obteniendo mensajeros únicos', status: 'pending' },
         { id: 'pedidos', label: 'Cargando pedidos del día', status: 'pending' },
         { id: 'calculations', label: 'Calculando liquidaciones', status: 'pending' },
         { id: 'finalization', label: 'Finalizando proceso', status: 'pending' }
       ]);
       
-      // Paso 1: Debugging
-      setStepStatus('debug', 'loading', 'Analizando estructura de datos...');
-      console.log('🔍 Ejecutando debugTablaPedidos...');
-      const debugInfo = await debugTablaPedidos(selectedDate);
-      console.log('✅ Debug info obtenida:', debugInfo);
-      setStepStatus('debug', 'completed', 'Datos verificados correctamente');
-      setProgress(20);
-      
-      // Paso 2: Obtener mensajeros
+      // Paso 1: Obtener liquidaciones reales
       setStepStatus('mensajeros', 'loading', 'Buscando mensajeros en la base de datos...');
-      console.log('🔍 Ejecutando getLiquidacionesReales para fecha:', selectedDate);
-      console.log('🔍 Tipo de fecha:', typeof selectedDate);
-      console.log('🔍 Fecha formateada:', selectedDate);
-      
       const liquidacionesReales = await getLiquidacionesReales(selectedDate);
-      console.log('✅ Liquidaciones reales obtenidas:', liquidacionesReales);
-      console.log('📊 Cantidad de liquidaciones:', liquidacionesReales.length);
-      
-      if (liquidacionesReales.length === 0) {
-        console.log('⚠️ No se encontraron liquidaciones para la fecha:', selectedDate);
-        console.log('🔍 Verificando si hay pedidos en la base de datos...');
-        
-        // Verificar si hay pedidos en general
-        const { data: todosLosPedidos, error: errorTodos } = await supabasePedidos
-          .from('pedidos')
-          .select('id_pedido, fecha_creacion, mensajero_asignado, mensajero_concretado')
-          .limit(5);
-        
-        console.log('📦 Muestra de todos los pedidos:', todosLosPedidos);
-        console.log('📦 Error al obtener pedidos:', errorTodos);
-        
-        // Verificar pedidos para la fecha específica
-        const { data: pedidosFecha, error: errorFecha } = await supabasePedidos
-          .from('pedidos')
-          .select('id_pedido, fecha_creacion, mensajero_asignado, mensajero_concretado')
-          .gte('fecha_creacion', `${selectedDate}T00:00:00`)
-          .lt('fecha_creacion', `${selectedDate}T23:59:59`)
-          .limit(5);
-        
-        console.log('📦 Pedidos para fecha específica:', pedidosFecha);
-        console.log('📦 Error al obtener pedidos de fecha:', errorFecha);
-      }
-      
+      console.log('✅ Liquidaciones reales obtenidas:', liquidacionesReales.length);
       setStepStatus('mensajeros', 'completed', `${liquidacionesReales.length} mensajeros encontrados`);
-      setProgress(60);
+      setProgress(30);
       
-      // Paso 3: Procesar pedidos
+      // Paso 2: Procesar pedidos
       setStepStatus('pedidos', 'loading', 'Recopilando pedidos por mensajero...');
       setStepStatus('pedidos', 'completed', 'Pedidos cargados correctamente');
-      setProgress(80);
+      setProgress(60);
       
-      // Paso 4: Calcular liquidaciones
+      // Paso 3: Calcular liquidaciones
       setStepStatus('calculations', 'loading', 'Procesando totales y montos...');
-      console.log('🔍 Convirtiendo liquidaciones a formato LiquidationCalculation...');
       
       // Convertir a formato LiquidationCalculation
-      let calculations: LiquidationCalculation[];
+      const calculations: LiquidationCalculation[] = liquidacionesReales.map((liquidation, index) => ({
+        messengerId: `msg-${index + 1}`,
+        messengerName: liquidation.mensajero,
+        routeDate: selectedDate,
+        initialAmount: liquidation.initialAmount,
+        totalCollected: liquidation.totalCollected,
+        totalSpent: liquidation.totalSpent,
+        sinpePayments: liquidation.sinpePayments,
+        cashPayments: liquidation.cashPayments,
+        finalAmount: liquidation.finalAmount,
+        orders: liquidation.pedidos,
+        isLiquidated: false,
+        canEdit: true
+      }));
       
-      if (liquidacionesReales.length === 0) {
-        console.log('⚠️ No hay liquidaciones reales, creando datos de ejemplo...');
-        setHasRealData(false);
-        
-        // Buscar fechas con datos para debugging
-        console.log('🔍 Buscando fechas con datos para debugging...');
-        await debugFechasConDatos();
-        
-        // Obtener mensajeros únicos para crear datos de ejemplo
-        const mensajeros = await getMensajerosUnicos();
-        console.log('📋 Mensajeros para datos de ejemplo:', mensajeros);
-        
-        calculations = mensajeros.slice(0, 5).map((mensajero, index) => ({
-          messengerId: `msg-${index + 1}`,
-          messengerName: mensajero,
-          routeDate: selectedDate,
-          initialAmount: 50000,
-          totalCollected: 0,
-          totalSpent: 0,
-          sinpePayments: 0,
-          cashPayments: 0,
-          finalAmount: 50000,
-          orders: [],
-          isLiquidated: false,
-          canEdit: true
-        }));
-        
-        console.log('📊 Datos de ejemplo creados:', calculations);
-      } else {
-        setHasRealData(true);
-        calculations = liquidacionesReales.map((liquidation, index) => ({
-          messengerId: `msg-${index + 1}`,
-          messengerName: liquidation.mensajero,
-          routeDate: selectedDate,
-          initialAmount: liquidation.initialAmount,
-          totalCollected: liquidation.totalCollected,
-          totalSpent: liquidation.totalSpent,
-          sinpePayments: liquidation.sinpePayments,
-          cashPayments: liquidation.cashPayments,
-          finalAmount: liquidation.finalAmount,
-          orders: liquidation.pedidos,
-          isLiquidated: false, // Por defecto no liquidado
-          canEdit: true
-        }));
-      }
-      
-      console.log('✅ Calculations generadas:', calculations);
+      console.log('✅ Calculations generadas:', calculations.length);
       setStepStatus('calculations', 'completed', 'Liquidaciones calculadas correctamente');
       setProgress(90);
       
-      // Paso 5: Finalizar
+      // Paso 4: Finalizar
       setStepStatus('finalization', 'loading', 'Preparando datos para mostrar...');
-      console.log('🔍 Estableciendo calculations en el estado...');
       setCalculations(calculations);
-      console.log('✅ Calculations establecidas en el estado');
-      
-      if (liquidacionesReales.length === 0) {
-        setStepStatus('finalization', 'completed', 'Mostrando mensajeros sin liquidaciones');
-      } else {
-        setStepStatus('finalization', 'completed', 'Proceso completado');
-      }
+      setHasRealData(calculations.some(c => c.orders.length > 0));
+      setStepStatus('finalization', 'completed', 'Proceso completado');
       setProgress(100);
       
-      // Cerrar loader después de un breve delay
-      console.log('⏰ Cerrando loader en 1 segundo...');
+      // Cerrar loader
       setTimeout(() => {
-        console.log('🔚 Cerrando loader');
         closeLoader();
       }, 1000);
       
@@ -279,25 +200,8 @@ export default function AdminLiquidationPage() {
         closeLoader();
       }, 3000);
       
-      // Fallback a datos mock si hay error
-      const mockCalculations: LiquidationCalculation[] = [
-        {
-          messengerId: '1',
-          messengerName: 'Sin datos',
-          routeDate: selectedDate,
-          initialAmount: 50000,
-          totalCollected: 0,
-          totalSpent: 0,
-          sinpePayments: 0,
-          cashPayments: 0,
-          finalAmount: 0,
-          orders: [],
-          isLiquidated: false,
-          canEdit: true
-        }
-      ];
-      
-      setCalculations(mockCalculations);
+      // Fallback a datos vacíos si hay error
+      setCalculations([]);
     }
   };
 
@@ -389,6 +293,12 @@ export default function AdminLiquidationPage() {
     setShowRouteDetailModal(true);
   };
 
+  const handleViewAndLiquidate = (calculation: LiquidationCalculation) => {
+    setSelectedViewAndLiquidate(calculation);
+    setInitialAmountInput(calculation.initialAmount.toString());
+    setShowViewAndLiquidateModal(true);
+  };
+
   const handleViewNotes = (pedido: PedidoTest) => {
     setSelectedOrderNotes(pedido);
     setShowNotesModal(true);
@@ -403,13 +313,40 @@ export default function AdminLiquidationPage() {
     alert(`Ver comprobante: ${comprobante}`);
   };
 
-  const confirmLiquidation = async (calculation: LiquidationCalculation) => {
+  const confirmLiquidation = async (calculation: LiquidationCalculation, initialAmount?: number) => {
     try {
+      const finalAmount = initialAmount ? initialAmount + calculation.totalCollected - calculation.totalSpent : calculation.finalAmount;
+      
+      // Enviar al endpoint de liquidación
+      const response = await fetch('https://primary-production-2b25b.up.railway.app/webhook/add-liquidacion', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fecha: selectedDate,
+          mensajero: calculation.messengerName,
+          plata_inicial: initialAmount || calculation.initialAmount,
+          total_recaudado: calculation.totalCollected,
+          pagos_sinpe: calculation.sinpePayments,
+          pagos_efectivo: calculation.cashPayments,
+          gastos: calculation.totalSpent,
+          monto_final: finalAmount
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error al enviar liquidación: ${response.status}`);
+      }
+
+      const responseData = await response.json();
+      console.log('✅ Liquidación enviada exitosamente:', responseData);
+
       // Marcar como liquidado
       setCalculations(prev => 
         prev.map(calc => 
           calc.messengerId === calculation.messengerId 
-            ? { ...calc, isLiquidated: true, canEdit: false }
+            ? { ...calc, isLiquidated: true, canEdit: false, initialAmount: initialAmount || calculation.initialAmount }
             : calc
         )
       );
@@ -418,10 +355,11 @@ export default function AdminLiquidationPage() {
       setIsEditingRestricted(true);
       
       setShowLiquidationModal(false);
+      setShowViewAndLiquidateModal(false);
       alert(`Liquidación completada para ${calculation.messengerName}`);
     } catch (error) {
       console.error('Error confirming liquidation:', error);
-      alert('Error al confirmar la liquidación');
+      alert('Error al confirmar la liquidación: ' + (error instanceof Error ? error.message : 'Error desconocido'));
     }
   };
 
@@ -437,9 +375,7 @@ export default function AdminLiquidationPage() {
     return new Date(date).toLocaleDateString('es-CR', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      day: 'numeric'
     });
   };
 
@@ -489,34 +425,7 @@ export default function AdminLiquidationPage() {
           <Button 
             variant="outline"
             onClick={() => {
-              console.log('🧪 Probando loader...');
-              startLoader('Procesando Liquidaciones', [
-                { id: 'debug', label: 'Verificando datos de la tabla', status: 'pending' },
-                { id: 'mensajeros', label: 'Obteniendo mensajeros únicos', status: 'pending' },
-                { id: 'pedidos', label: 'Cargando pedidos del día', status: 'pending' },
-                { id: 'calculations', label: 'Calculando liquidaciones', status: 'pending' },
-                { id: 'finalization', label: 'Finalizando proceso', status: 'pending' }
-              ]);
-            }}
-          >
-            <Truck className="w-4 h-4 mr-2" />
-            Probar Loader
-          </Button>
-          <Button 
-            variant="outline"
-            onClick={async () => {
-              console.log('🔍 Buscando fechas con datos...');
-              await debugFechasConDatos();
-            }}
-          >
-            <Search className="w-4 h-4 mr-2" />
-            Buscar Fechas
-          </Button>
-          <Button 
-            variant="outline"
-            onClick={() => {
               const today = new Date().toISOString().split('T')[0];
-              console.log('📅 Cambiando a fecha actual:', today);
               setSelectedDate(today);
             }}
           >
@@ -735,7 +644,6 @@ export default function AdminLiquidationPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Mensajero</TableHead>
-                <TableHead>Plata Inicial</TableHead>
                 <TableHead>Total Recaudado</TableHead>
                 <TableHead>Pagos SINPE</TableHead>
                 <TableHead>Pagos Efectivo</TableHead>
@@ -759,53 +667,6 @@ export default function AdminLiquidationPage() {
                             {calculated.orders.length} pedidos
                           </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {editingInitialAmount === calculation.messengerId ? (
-                          <div className="flex items-center gap-1">
-                            <Input
-                              type="number"
-                              value={newInitialAmount}
-                              onChange={(e) => setNewInitialAmount(e.target.value)}
-                              className="w-24 h-8"
-                              placeholder="0"
-                            />
-                            <Button
-                              size="sm"
-                              onClick={() => handleSaveInitialAmount(calculation.messengerId)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Save className="w-3 h-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={handleCancelEdit}
-                              className="h-8 w-8 p-0"
-                            >
-                              <X className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-green-600">
-                              {formatCurrency(calculated.initialAmount)}
-                            </span>
-                            {calculated.canEdit && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleEditInitialAmount(calculation.messengerId, calculated.initialAmount)}
-                                className="h-6 w-6 p-0"
-                              >
-                                <Edit3 className="w-3 h-3" />
-                              </Button>
-                            )}
-                          </div>
-                        )}
                       </div>
                     </TableCell>
                     
@@ -860,28 +721,30 @@ export default function AdminLiquidationPage() {
                     
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleViewRouteDetail(calculated)}
-                          className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                        >
-                          <Eye className="w-4 h-4 mr-1" />
-                          Ver
-                        </Button>
                         {!calculated.isLiquidated ? (
                           <Button
                             size="sm"
-                            onClick={() => handleLiquidateMessenger(calculated)}
-                            className="bg-green-600 hover:bg-green-700"
+                            onClick={() => handleViewAndLiquidate(calculated)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
                           >
-                            <CheckCircle2 className="w-4 h-4 mr-1" />
-                            Liquidar
+                            <Eye className="w-4 h-4 mr-1" />
+                            Ver y Liquidar
                           </Button>
                         ) : (
-                          <div className="flex items-center gap-1 text-green-600">
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span className="text-sm">Completado</span>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewRouteDetail(calculated)}
+                              className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              Ver Detalles
+                            </Button>
+                            <div className="flex items-center gap-1 text-green-600">
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span className="text-sm">Liquidado</span>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1547,6 +1410,135 @@ export default function AdminLiquidationPage() {
                   onClick={() => setShowNotesModal(false)}
                 >
                   Cerrar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Ver y Liquidar */}
+      <Dialog open={showViewAndLiquidateModal} onOpenChange={setShowViewAndLiquidateModal}>
+        <DialogContent className="sm:max-w-[800px]">
+          <DialogHeader>
+            <DialogTitle>Ver y Liquidar - {selectedViewAndLiquidate?.messengerName}</DialogTitle>
+          </DialogHeader>
+          {selectedViewAndLiquidate && (
+            <div className="space-y-6">
+              {/* Resumen de Liquidación */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold mb-3">Resumen de Liquidación</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Total recaudado:</span>
+                    <span className="font-bold text-green-600 ml-2">
+                      {formatCurrency(selectedViewAndLiquidate.totalCollected)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Pagos SINPE:</span>
+                    <span className="font-bold text-blue-600 ml-2">
+                      {formatCurrency(selectedViewAndLiquidate.sinpePayments)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Pagos Efectivo:</span>
+                    <span className="font-bold text-green-600 ml-2">
+                      {formatCurrency(selectedViewAndLiquidate.cashPayments)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Gastos:</span>
+                    <span className="font-bold text-red-600 ml-2">
+                      {formatCurrency(selectedViewAndLiquidate.totalSpent)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Input para Plata Inicial */}
+              <div>
+                <Label htmlFor="initial-amount">Plata Inicial (₡)</Label>
+                <Input
+                  id="initial-amount"
+                  type="number"
+                  value={initialAmountInput}
+                  onChange={(e) => setInitialAmountInput(e.target.value)}
+                  placeholder="50000"
+                  className="mt-1"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Monto entregado al mensajero en la mañana
+                </p>
+              </div>
+
+              {/* Cálculo del Monto Final */}
+              <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                <h4 className="font-semibold text-purple-800 mb-2">Cálculo del Monto Final</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Plata inicial:</span>
+                    <span className="font-bold text-green-600">
+                      {formatCurrency(parseFloat(initialAmountInput) || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>+ Total recaudado:</span>
+                    <span className="font-bold text-green-600">
+                      {formatCurrency(selectedViewAndLiquidate.totalCollected)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>- Gastos:</span>
+                    <span className="font-bold text-red-600">
+                      {formatCurrency(selectedViewAndLiquidate.totalSpent)}
+                    </span>
+                  </div>
+                  <div className="border-t pt-2 flex justify-between font-bold text-lg">
+                    <span>Monto final a entregar:</span>
+                    <span className="text-purple-600">
+                      {formatCurrency((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.totalCollected - selectedViewAndLiquidate.totalSpent)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lista de Pedidos */}
+              <div>
+                <h4 className="font-semibold mb-3">Pedidos ({selectedViewAndLiquidate.orders.length})</h4>
+                <div className="max-h-60 overflow-y-auto space-y-2">
+                  {selectedViewAndLiquidate.orders.map((pedido) => (
+                    <div key={pedido.id_pedido} className="bg-white border rounded-lg p-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="font-medium">{pedido.id_pedido}</span>
+                          <p className="text-sm text-gray-600">{pedido.cliente_nombre}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-bold text-green-600">
+                            {formatCurrency(pedido.valor_total)}
+                          </span>
+                          <p className="text-xs text-gray-500">{pedido.metodo_pago}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowViewAndLiquidateModal(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={() => confirmLiquidation(selectedViewAndLiquidate, parseFloat(initialAmountInput))}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Confirmar Liquidación
                 </Button>
               </div>
             </div>

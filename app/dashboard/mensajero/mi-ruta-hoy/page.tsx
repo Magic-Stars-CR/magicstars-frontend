@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { mockApi } from '@/lib/mock-api';
 import { Order, PedidoTest, OrderStatus } from '@/lib/types';
-import { getPedidosByMensajero, getPedidosDelDiaByMensajero, updatePedido, debugMensajeroQueries } from '@/lib/supabase-pedidos';
+import { getPedidosByMensajero, getPedidosDelDiaByMensajero, updatePedido } from '@/lib/supabase-pedidos';
 import { supabasePedidos } from '@/lib/supabase-pedidos';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -138,9 +138,8 @@ export default function MiRutaHoy() {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [newExpense, setNewExpense] = useState({
-    type: 'fuel' as 'fuel' | 'food' | 'maintenance' | 'other',
+    type: 'fuel' as 'fuel' | 'maintenance' | 'other',
     amount: '',
-    description: '',
     receipt: null as File | null,
     customType: ''
   });
@@ -586,17 +585,57 @@ export default function MiRutaHoy() {
     }
   };
 
+  // Función para convertir archivo a base64
+  const convertFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        // Remover el prefijo data:image/...;base64,
+        const base64Data = base64.split(',')[1];
+        resolve(base64Data);
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleAddExpense = async () => {
-    if (!newExpense.amount || !newExpense.description || !newExpense.receipt) return;
+    if (!newExpense.amount || !newExpense.receipt) return;
     if (newExpense.type === 'other' && !newExpense.customType.trim()) return;
 
     setIsAddingExpense(true);
     try {
+      // Convertir imagen a base64
+      const base64Image = await convertFileToBase64(newExpense.receipt);
+      
+      // Enviar al endpoint
+      const response = await fetch('https://primary-production-2b25b.up.railway.app/webhook/add-gasto-mensajero', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mensajero: user?.name || '',
+          comprobante_base64: base64Image,
+          monto: parseFloat(newExpense.amount),
+          tipo_gasto: newExpense.type === 'other' ? newExpense.customType : newExpense.type
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Error al enviar gasto al servidor: ${response.status} - ${errorText}`);
+      }
+
+      const responseData = await response.json();
+      console.log('✅ Gasto enviado exitosamente:', responseData);
+
       const expense: Expense = {
         id: Date.now().toString(),
         type: newExpense.type,
         amount: parseFloat(newExpense.amount),
-        description: newExpense.description,
+        description: newExpense.type === 'other' ? newExpense.customType : newExpense.type,
         receipt: uploadedReceiptImage || '',
         customType: newExpense.type === 'other' ? newExpense.customType : undefined,
         createdAt: new Date().toISOString()
@@ -611,7 +650,6 @@ export default function MiRutaHoy() {
       setNewExpense({
         type: 'fuel',
         amount: '',
-        description: '',
         receipt: null,
         customType: ''
       });
@@ -619,6 +657,7 @@ export default function MiRutaHoy() {
       setIsExpenseModalOpen(false);
     } catch (error) {
       console.error('Error adding expense:', error);
+      alert(`Error al añadir gasto: ${error instanceof Error ? error.message : 'Error desconocido'}`);
     } finally {
       setIsAddingExpense(false);
     }
@@ -1471,11 +1510,10 @@ export default function MiRutaHoy() {
                     <select
                       id="type"
                       value={newExpense.type}
-                      onChange={(e) => setNewExpense(prev => ({ ...prev, type: e.target.value as 'fuel' | 'food' | 'maintenance' | 'other', customType: '' }))}
+                      onChange={(e) => setNewExpense(prev => ({ ...prev, type: e.target.value as 'fuel' | 'maintenance' | 'other', customType: '' }))}
                       className="w-full p-2 border rounded-md"
                     >
                       <option value="fuel">Combustible</option>
-                      <option value="food">Alimentación</option>
                       <option value="maintenance">Mantenimiento</option>
                       <option value="other">Otro</option>
                     </select>
@@ -1503,15 +1541,15 @@ export default function MiRutaHoy() {
                       onChange={(e) => setNewExpense(prev => ({ ...prev, amount: e.target.value }))}
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="description">Descripción</Label>
-                    <Textarea
-                      id="description"
-                      placeholder="Describe el gasto..."
-                      value={newExpense.description}
-                      onChange={(e) => setNewExpense(prev => ({ ...prev, description: e.target.value }))}
-                      rows={2}
-                    />
+                  {/* Badge informativo */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div className="text-sm text-amber-800">
+                        <p className="font-medium">⚠️ Cuidado con los gastos añadidos</p>
+                        <p className="text-xs mt-1">Los gastos no pueden ser eliminados del reporte de liquidación del día una vez añadidos.</p>
+                      </div>
+                    </div>
                   </div>
                   
                   <div>
@@ -1566,13 +1604,12 @@ export default function MiRutaHoy() {
                       onClick={() => {
                         setIsExpenseModalOpen(false);
                         setUploadedReceiptImage(null);
-      setNewExpense({
-        type: 'fuel',
-        amount: '',
-        description: '',
-        receipt: null,
-        customType: ''
-      });
+                        setNewExpense({
+                          type: 'fuel',
+                          amount: '',
+                          receipt: null,
+                          customType: ''
+                        });
                       }}
                       className="flex-1"
                     >
@@ -1582,7 +1619,6 @@ export default function MiRutaHoy() {
                       onClick={handleAddExpense}
                       disabled={
                         !newExpense.amount || 
-                        !newExpense.description || 
                         !newExpense.receipt || 
                         isAddingExpense ||
                         (newExpense.type === 'other' && !newExpense.customType.trim())
@@ -1837,20 +1873,6 @@ export default function MiRutaHoy() {
               </Button>
             </div>
             
-            {/* Botón de debugging */}
-            <div className="mt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  console.log('🔍 Iniciando debugging para mensajero:', user?.name);
-                  debugMensajeroQueries(user?.name || '');
-                }}
-                className="w-full text-xs"
-              >
-                🔍 Debug Consultas
-              </Button>
-            </div>
           </div>
           
           {/* Resumen de resultados */}
