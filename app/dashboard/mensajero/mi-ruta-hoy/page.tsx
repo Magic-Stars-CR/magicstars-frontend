@@ -250,6 +250,10 @@ export default function MiRutaHoy() {
   };
 
   const loadRouteData = async () => {
+    // Declarar variables fuera del try para que estén disponibles en catch
+    let targetDateISO: string = '';
+    let targetDateString: string = '';
+    
     try {
       console.log('🚀 INICIANDO loadRouteData');
       console.log('👤 Usuario actual:', user?.name);
@@ -259,8 +263,6 @@ export default function MiRutaHoy() {
       setLoading(true);
       
       // Determinar la fecha objetivo basada en el filtro activo
-      let targetDateISO: string;
-      let targetDateString: string;
       
       const now = new Date();
       const costaRicaNow = getCostaRicaDate();
