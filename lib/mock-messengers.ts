@@ -859,8 +859,16 @@ export const mockLogin = async (emailOrName: string, password: string): Promise<
   console.log('Contraseña recibida:', password ? 'Sí' : 'No');
   console.log('Total de usuarios disponibles:', mockMessengers.length);
   
+  // Filtrar usuarios demo (ocultos por defecto)
+  const visibleUsers = mockMessengers.filter(u => 
+    !u.email.toLowerCase().includes('demo') && 
+    !u.name.toLowerCase().includes('demo')
+  );
+  
+  console.log('Usuarios visibles (sin demo):', visibleUsers.length);
+  
   // Buscar usuario por email o nombre (insensible a mayúsculas)
-  const user = mockMessengers.find(u => 
+  const user = visibleUsers.find(u => 
     u.email.toLowerCase() === emailOrName.toLowerCase() || 
     u.name.toLowerCase() === emailOrName.toLowerCase()
   );
@@ -874,6 +882,8 @@ export const mockLogin = async (emailOrName: string, password: string): Promise<
     console.log('- Rol:', user.role);
     console.log('- Activo:', user.isActive);
   }
+  
+  // Los usuarios demo están ocultos definitivamente
   
   // Aceptar cualquier contraseña no vacía para simplificar el testing
   if (user && password && password.trim() !== '') {

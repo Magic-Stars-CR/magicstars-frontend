@@ -197,6 +197,14 @@ export default function UsuariosPage() {
             <Download className="w-4 h-4" />
             Exportar CSV
           </Button>
+          <Button 
+            onClick={() => window.open('/usuarios-login.csv', '_blank')} 
+            className="flex items-center gap-2"
+            variant="outline"
+          >
+            <Eye className="w-4 h-4" />
+            Ver CSV de Contraseñas
+          </Button>
         </div>
       </div>
 

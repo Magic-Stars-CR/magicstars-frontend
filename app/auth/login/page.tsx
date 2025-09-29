@@ -177,7 +177,8 @@ export default function LoginPage() {
           </CardContent>
         </Card>
 
-        {/* Demo Users */}
+        {/* Demo Users - DESACTIVADO */}
+        {/* 
         {isHydrated && (
           <Card className="shadow-lg border-0 bg-white/60 backdrop-blur">
             <CardHeader className="pb-3">
@@ -207,6 +208,7 @@ export default function LoginPage() {
             </CardContent>
           </Card>
         )}
+        */}
       </div>
     </div>
   );
