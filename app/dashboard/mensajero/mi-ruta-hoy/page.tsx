@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { mockApi } from '@/lib/mock-api';
 import { Order, PedidoTest, OrderStatus } from '@/lib/types';
-import { getPedidosByMensajero, getPedidosDelDiaByMensajero, updatePedido } from '@/lib/supabase-pedidos';
+import { getPedidosByMensajero, getPedidosDelDiaByMensajero, updatePedido, getGastosMensajeros } from '@/lib/supabase-pedidos';
 import { supabasePedidos } from '@/lib/supabase-pedidos';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -75,7 +75,8 @@ import {
   BarChart3,
   PieChart,
   Activity,
-  Clipboard
+  Clipboard,
+  ExternalLink
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -123,6 +124,17 @@ export default function MiRutaHoy() {
     completedOrders: 0,
     totalRevenue: 0
   });
+  const [gastosReales, setGastosReales] = useState<{
+    mensajero: string;
+    gastos: {
+      id: string;
+      monto: number;
+      tipo_gasto: string;
+      comprobante_link: string;
+      fecha: string;
+    }[];
+    totalGastos: number;
+  }[]>([]);
   const [accountingMetrics, setAccountingMetrics] = useState({
     totalCash: 0,
     totalSinpe: 0,
@@ -138,7 +150,7 @@ export default function MiRutaHoy() {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [newExpense, setNewExpense] = useState({
-    type: 'fuel' as 'fuel' | 'maintenance' | 'other',
+    type: 'fuel' as 'fuel' | 'maintenance' | 'peaje' | 'other',
     amount: '',
     receipt: null as File | null,
     customType: ''
@@ -193,6 +205,7 @@ export default function MiRutaHoy() {
   useEffect(() => {
     if (user) {
       loadRouteData();
+      loadGastosReales();
     }
   }, [user, selectedDate, dateFilter]);
 
@@ -573,9 +586,66 @@ export default function MiRutaHoy() {
     }
   };
 
+  // Función para cargar gastos reales desde Supabase
+  const loadGastosReales = async () => {
+    try {
+      const targetDate = getCostaRicaDate();
+      const targetDateString = targetDate.toISOString().split('T')[0];
+      
+      console.log('🔄 Cargando gastos reales para:', targetDateString);
+      console.log('👤 Usuario actual:', user?.name);
+      
+      const gastos = await getGastosMensajeros(targetDateString);
+      console.log('💰 Gastos reales obtenidos:', gastos);
+      console.log('📊 Total de mensajeros con gastos:', gastos.length);
+      
+      setGastosReales(gastos);
+      
+      // Actualizar total de gastos con los datos reales
+      const gastosDelMensajero = gastos.find(g => g.mensajero === user?.name);
+      console.log('🔍 Gastos del mensajero actual:', gastosDelMensajero);
+      
+      if (gastosDelMensajero) {
+        console.log('💰 Total de gastos del mensajero:', gastosDelMensajero.totalGastos);
+        setRouteData(prev => ({
+          ...prev,
+          totalExpenses: gastosDelMensajero.totalGastos
+        }));
+        console.log('✅ RouteData actualizado con gastos reales');
+      } else {
+        console.log('ℹ️ No se encontraron gastos para el mensajero actual');
+        setRouteData(prev => ({
+          ...prev,
+          totalExpenses: 0
+        }));
+      }
+      
+    } catch (error) {
+      console.error('❌ Error cargando gastos reales:', error);
+    }
+  };
+
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      // Validar que sea una imagen
+      if (!file.type.startsWith('image/')) {
+        alert('Por favor selecciona un archivo de imagen válido');
+        return;
+      }
+      
+      // Validar tamaño (máximo 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        alert('El archivo es demasiado grande. Máximo 10MB');
+        return;
+      }
+      
+      console.log('📁 Archivo seleccionado:', {
+        nombre: file.name,
+        tamaño: file.size,
+        tipo: file.type
+      });
+      
       const reader = new FileReader();
       reader.onload = (e) => {
         setUploadedReceiptImage(e.target?.result as string);
@@ -585,17 +655,113 @@ export default function MiRutaHoy() {
     }
   };
 
-  // Función para convertir archivo a base64
+  // Función para convertir archivo a base64 (MEJORADA)
   const convertFileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
+      // Validar archivo
+      if (!file) {
+        reject(new Error('No se proporcionó archivo'));
+        return;
+      }
+      
+      // Validar tipo de archivo
+      if (!file.type.startsWith('image/')) {
+        reject(new Error('El archivo debe ser una imagen'));
+        return;
+      }
+      
+      // Validar tamaño (máximo 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        reject(new Error('El archivo es demasiado grande (máximo 10MB)'));
+        return;
+      }
+      
+      console.log('🔄 Iniciando conversión de archivo a Base64:', {
+        nombre: file.name,
+        tamaño: file.size,
+        tipo: file.type
+      });
+      
       const reader = new FileReader();
+      
       reader.onload = () => {
-        const base64 = reader.result as string;
-        // Remover el prefijo data:image/...;base64,
-        const base64Data = base64.split(',')[1];
-        resolve(base64Data);
+        try {
+          const base64 = reader.result as string;
+          console.log('🔍 Base64 completo generado:', {
+            longitud: base64.length,
+            prefijo: base64.substring(0, 50),
+            tieneComa: base64.includes(','),
+            esValido: base64.length > 100
+          });
+          
+          // Verificar que el resultado es válido
+          if (!base64 || typeof base64 !== 'string') {
+            throw new Error('FileReader no devolvió un resultado válido');
+          }
+          
+          if (!base64.includes(',')) {
+            throw new Error('Base64 no contiene el separador esperado');
+          }
+          
+          if (base64.length < 100) {
+            throw new Error('Base64 demasiado corto, posible archivo corrupto');
+          }
+          
+          // Verificar que el Base64 contiene la secuencia típica de inicio
+          if (!base64.includes(',/9j/') && !base64.includes(',iVBORw0KGgo') && !base64.includes(',UklGR')) {
+            console.warn('⚠️ Base64 no contiene secuencias típicas de imagen:', {
+              tieneComa: base64.includes(','),
+              tiene9j: base64.includes('/9j/'),
+              tieneiVBOR: base64.includes('iVBORw0KGgo'),
+              tieneUklGR: base64.includes('UklGR'),
+              prefijo: base64.substring(0, 100)
+            });
+          }
+          
+          // ENVIAR CON PREFIJO (data:image/...;base64,)
+          console.log('🔍 Base64 con prefijo:', {
+            longitud: base64.length,
+            muestra: base64.substring(0, 50) + '...',
+            esValido: base64.length > 100,
+            tieneComa: base64.includes(','),
+            tiene9j: base64.includes('/9j/'),
+            tieneiVBOR: base64.includes('iVBORw0KGgo'),
+            tieneUklGR: base64.includes('UklGR')
+          });
+          
+          // Log detallado del inicio y final del Base64
+          console.log('🔍 Inicio del Base64:', base64.substring(0, 100));
+          console.log('🔍 Final del Base64:', base64.substring(base64.length - 50));
+          
+          // Verificar que el Base64 no esté vacío
+          if (!base64 || base64.length === 0) {
+            throw new Error('Base64 vacío');
+          }
+          
+          if (base64.length < 100) {
+            throw new Error('Base64 demasiado corto');
+          }
+          
+          console.log('✅ Base64 con prefijo generado exitosamente para gasto');
+          resolve(base64);
+          
+        } catch (error) {
+          console.error('❌ Error procesando Base64:', error);
+          reject(error);
+        }
       };
-      reader.onerror = () => reject(reader.error);
+      
+      reader.onerror = (error) => {
+        console.error('❌ Error en FileReader:', error);
+        reject(new Error(`Error al leer archivo: ${error}`));
+      };
+      
+      reader.onabort = () => {
+        console.error('❌ FileReader abortado');
+        reject(new Error('Lectura de archivo abortada'));
+      };
+      
+      // Leer archivo como Data URL
       reader.readAsDataURL(file);
     });
   };
@@ -604,10 +770,52 @@ export default function MiRutaHoy() {
     if (!newExpense.amount || !newExpense.receipt) return;
     if (newExpense.type === 'other' && !newExpense.customType.trim()) return;
 
+    console.log('🚀 Iniciando proceso de gasto...');
+    console.log('📋 Datos del gasto:', {
+      mensajero: user?.name,
+      monto: newExpense.amount,
+      tipo: newExpense.type,
+      customType: newExpense.customType,
+      archivo: newExpense.receipt?.name,
+      tamaño: newExpense.receipt?.size
+    });
+
     setIsAddingExpense(true);
     try {
       // Convertir imagen a base64
+      console.log('🔄 Convirtiendo imagen a Base64...');
       const base64Image = await convertFileToBase64(newExpense.receipt);
+      console.log('✅ Base64 generado exitosamente, longitud:', base64Image.length);
+      
+      // Mapear tipos a español
+      const tipoGastoMap: { [key: string]: string } = {
+        'fuel': 'Combustible',
+        'maintenance': 'Mantenimiento',
+        'peaje': 'Peaje',
+        'other': newExpense.customType || 'Otro'
+      };
+
+      // Preparar datos para envío
+      const requestData = {
+        mensajero: user?.name || '',
+        comprobante_base64: base64Image,
+        monto: parseFloat(newExpense.amount),
+        tipo_gasto: tipoGastoMap[newExpense.type] || newExpense.type
+      };
+      
+      console.log('📤 Enviando datos al endpoint:', {
+        mensajero: requestData.mensajero,
+        comprobante_base64: base64Image, // BASE64 COMPLETO
+        monto: requestData.monto,
+        tipo_gasto: requestData.tipo_gasto
+      });
+      
+      // Log adicional con información de longitud
+      console.log('📏 Información del Base64 enviado:', {
+        longitud: base64Image.length,
+        tipo: newExpense.receipt?.type || 'image/jpeg',
+        tamañoArchivo: newExpense.receipt?.size || 0
+      });
       
       // Enviar al endpoint
       const response = await fetch('https://primary-production-2b25b.up.railway.app/webhook/add-gasto-mensajero', {
@@ -615,46 +823,51 @@ export default function MiRutaHoy() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          mensajero: user?.name || '',
-          comprobante_base64: base64Image,
-          monto: parseFloat(newExpense.amount),
-          tipo_gasto: newExpense.type === 'other' ? newExpense.customType : newExpense.type
-        })
+        body: JSON.stringify(requestData)
+      });
+
+      console.log('📡 Respuesta del servidor:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
       });
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('❌ Error del servidor:', errorText);
         throw new Error(`Error al enviar gasto al servidor: ${response.status} - ${errorText}`);
       }
 
-      const responseData = await response.json();
-      console.log('✅ Gasto enviado exitosamente:', responseData);
+        const responseData = await response.json();
+        console.log('✅ Gasto enviado exitosamente:', responseData);
 
-      const expense: Expense = {
-        id: Date.now().toString(),
-        type: newExpense.type,
-        amount: parseFloat(newExpense.amount),
-        description: newExpense.type === 'other' ? newExpense.customType : newExpense.type,
-        receipt: uploadedReceiptImage || '',
-        customType: newExpense.type === 'other' ? newExpense.customType : undefined,
-        createdAt: new Date().toISOString()
-      };
+        // LOG COMPLETO DEL BASE64 PARA TESTING
+        console.log('🔍 ===== BASE64 COMPLETO PARA TESTING =====');
+        console.log('📋 INFORMACIÓN DEL ARCHIVO:');
+        console.log('   Nombre:', newExpense.receipt?.name);
+        console.log('   Tamaño:', newExpense.receipt?.size, 'bytes');
+        console.log('   Tipo:', newExpense.receipt?.type);
+        console.log('📋 BASE64 CON PREFIJO (enviado al endpoint):');
+        console.log(base64Image);
+        console.log('📋 LONGITUD DEL BASE64:', base64Image.length);
+        console.log('🔍 ===========================================');
 
-      setRouteData(prev => ({
-        ...prev,
-        expenses: [...prev.expenses, expense],
-        totalExpenses: prev.totalExpenses + expense.amount
-      }));
+        // Pequeño delay para asegurar que el servidor procesó el gasto
+        console.log('⏳ Esperando 2 segundos para que el servidor procese el gasto...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Recargar gastos reales desde Supabase
+        console.log('🔄 Recargando gastos desde Supabase...');
+        await loadGastosReales();
 
-      setNewExpense({
-        type: 'fuel',
-        amount: '',
-        receipt: null,
-        customType: ''
-      });
-      setUploadedReceiptImage(null);
-      setIsExpenseModalOpen(false);
+        setNewExpense({
+          type: 'fuel',
+          amount: '',
+          receipt: null,
+          customType: ''
+        });
+        setUploadedReceiptImage(null);
+        setIsExpenseModalOpen(false);
     } catch (error) {
       console.error('Error adding expense:', error);
       alert(`Error al añadir gasto: ${error instanceof Error ? error.message : 'Error desconocido'}`);
@@ -752,7 +965,7 @@ export default function MiRutaHoy() {
           valorTotal: selectedOrderForUpdate.totalAmount,
           productos: selectedOrderForUpdate.productos || 'No especificados',
           
-          // Ejemplo adicional de base64 para imagen (si aplica)
+          // Base64 para imagen (CON prefijo data:image/...;base64,)
           imagenBase64: uploadedReceipts.length > 0 ? uploadedReceipts[0] : uploadedEvidence || null,
           mimeType: uploadedReceipts.length > 0 || uploadedEvidence ? "image/jpeg" : null
         };
@@ -777,9 +990,38 @@ export default function MiRutaHoy() {
           tieneEvidencia: uploadedEvidence ? 'Sí' : 'No',
           tieneComprobante: uploadedReceipts.length > 0 ? 'Sí' : 'No'
         });
+        
+        // Log específico para comprobantes de pagos duales
+        if (pagosDetalle) {
+          console.log('💰 PAGOS DUALES DETALLE:');
+          console.log('🔍 Primer pago comprobante:', {
+            tieneComprobante: !!pagosDetalle.primerPago.comprobante,
+            longitud: pagosDetalle.primerPago.comprobante?.length || 0,
+            prefijo: pagosDetalle.primerPago.comprobante?.substring(0, 30) || 'N/A'
+          });
+          console.log('🔍 Segundo pago comprobante:', {
+            tieneComprobante: !!pagosDetalle.segundoPago.comprobante,
+            longitud: pagosDetalle.segundoPago.comprobante?.length || 0,
+            prefijo: pagosDetalle.segundoPago.comprobante?.substring(0, 30) || 'N/A'
+          });
+        }
+        
         console.log('🔄 ======================================');
 
-        console.log('🚀 Enviando datos al webhook:', webhookData);
+        // Log del Base64 para debugging
+        if (webhookData.imagenBase64) {
+          console.log('🔍 Base64 con prefijo para webhook:');
+          console.log('📏 Longitud del Base64 completo:', webhookData.imagenBase64.length);
+          console.log('🔍 Muestra del Base64:', webhookData.imagenBase64.substring(0, 100) + '...');
+          console.log('✅ Enviando CON prefijo data:image/...;base64,');
+        } else {
+          console.log('ℹ️ No hay imagen Base64 para enviar');
+        }
+        
+        console.log('🚀 Enviando datos al webhook:', {
+          ...webhookData,
+          imagenBase64: webhookData.imagenBase64 ? `[${webhookData.imagenBase64.length} caracteres]` : null
+        });
 
         const response = await fetch("https://primary-production-2b25b.up.railway.app/webhook/actualizar-pedido", {
           method: "POST",
@@ -1226,19 +1468,25 @@ export default function MiRutaHoy() {
   };
 
   const getExpenseIcon = (type: string) => {
-    switch (type) {
+    switch (type.toLowerCase()) {
+      case 'combustible': return <Fuel className="w-4 h-4" />;
+      case 'mantenimiento': return <Wrench className="w-4 h-4" />;
+      case 'peaje': return <Car className="w-4 h-4" />;
       case 'fuel': return <Fuel className="w-4 h-4" />;
-      case 'food': return <Coffee className="w-4 h-4" />;
       case 'maintenance': return <Wrench className="w-4 h-4" />;
+      case 'peaje': return <Car className="w-4 h-4" />;
       default: return <DollarSign className="w-4 h-4" />;
     }
   };
 
   const getExpenseColor = (type: string) => {
-    switch (type) {
+    switch (type.toLowerCase()) {
+      case 'combustible': return 'bg-blue-100 text-blue-600';
+      case 'mantenimiento': return 'bg-orange-100 text-orange-600';
+      case 'peaje': return 'bg-purple-100 text-purple-600';
       case 'fuel': return 'bg-blue-100 text-blue-600';
-      case 'food': return 'bg-green-100 text-green-600';
       case 'maintenance': return 'bg-orange-100 text-orange-600';
+      case 'peaje': return 'bg-purple-100 text-purple-600';
       default: return 'bg-gray-100 text-gray-600';
     }
   };
@@ -1493,64 +1741,66 @@ export default function MiRutaHoy() {
                 <span className="font-medium">{user?.name}</span> • {getTodayInfo().dayName} {getTodayInfo().day} de {getTodayInfo().month}
               </div>
             </div>
-            <Dialog open={isExpenseModalOpen} onOpenChange={setIsExpenseModalOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" className="bg-orange-600 hover:bg-orange-700">
-                  <Plus className="w-4 h-4 mr-1" />
-                  Agregar
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[400px]">
-                <DialogHeader>
-                  <DialogTitle>Agregar Gasto</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="type">Tipo de Gasto</Label>
-                    <select
-                      id="type"
-                      value={newExpense.type}
-                      onChange={(e) => setNewExpense(prev => ({ ...prev, type: e.target.value as 'fuel' | 'maintenance' | 'other', customType: '' }))}
-                      className="w-full p-2 border rounded-md"
-                    >
-                      <option value="fuel">Combustible</option>
-                      <option value="maintenance">Mantenimiento</option>
-                      <option value="other">Otro</option>
-                    </select>
-                  </div>
-                  
-                  {newExpense.type === 'other' && (
+            <div className="flex gap-2">
+              <Dialog open={isExpenseModalOpen} onOpenChange={setIsExpenseModalOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="bg-orange-600 hover:bg-orange-700">
+                    <Plus className="w-4 h-4 mr-1" />
+                    Agregar
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[400px]">
+                  <DialogHeader>
+                    <DialogTitle>Agregar Gasto</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
                     <div>
-                      <Label htmlFor="customType">Especificar Tipo de Gasto *</Label>
+                      <Label htmlFor="type">Tipo de Gasto</Label>
+                      <select
+                        id="type"
+                        value={newExpense.type}
+                        onChange={(e) => setNewExpense(prev => ({ ...prev, type: e.target.value as 'fuel' | 'maintenance' | 'peaje' | 'other', customType: '' }))}
+                        className="w-full p-2 border rounded-md"
+                      >
+                        <option value="fuel">Combustible</option>
+                        <option value="maintenance">Mantenimiento</option>
+                        <option value="peaje">Peaje</option>
+                        <option value="other">Otro</option>
+                      </select>
+                    </div>
+                  
+                    {newExpense.type === 'other' && (
+                      <div>
+                        <Label htmlFor="customType">Especificar Tipo de Gasto *</Label>
+                        <Input
+                          id="customType"
+                          placeholder="Ej: Peaje, Estacionamiento, Herramientas..."
+                          value={newExpense.customType}
+                          onChange={(e) => setNewExpense(prev => ({ ...prev, customType: e.target.value }))}
+                          className="w-full"
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <Label htmlFor="amount">Monto</Label>
                       <Input
-                        id="customType"
-                        placeholder="Ej: Peaje, Estacionamiento, Herramientas..."
-                        value={newExpense.customType}
-                        onChange={(e) => setNewExpense(prev => ({ ...prev, customType: e.target.value }))}
-                        className="w-full"
+                        id="amount"
+                        type="number"
+                        placeholder="0"
+                        value={newExpense.amount}
+                        onChange={(e) => setNewExpense(prev => ({ ...prev, amount: e.target.value }))}
                       />
                     </div>
-                  )}
-                  <div>
-                    <Label htmlFor="amount">Monto</Label>
-                    <Input
-                      id="amount"
-                      type="number"
-                      placeholder="0"
-                      value={newExpense.amount}
-                      onChange={(e) => setNewExpense(prev => ({ ...prev, amount: e.target.value }))}
-                    />
-                  </div>
-                  {/* Badge informativo */}
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                    <div className="flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <div className="text-sm text-amber-800">
-                        <p className="font-medium">⚠️ Cuidado con los gastos añadidos</p>
-                        <p className="text-xs mt-1">Los gastos no pueden ser eliminados del reporte de liquidación del día una vez añadidos.</p>
+                    {/* Badge informativo */}
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <div className="text-sm text-amber-800">
+                          <p className="font-medium">⚠️ Cuidado con los gastos añadidos</p>
+                          <p className="text-xs mt-1">Los gastos no pueden ser eliminados del reporte de liquidación del día una vez añadidos.</p>
+                        </div>
                       </div>
                     </div>
-                  </div>
                   
                   <div>
                     <Label>Comprobante del Gasto *</Label>
@@ -1635,56 +1885,70 @@ export default function MiRutaHoy() {
                 </div>
               </DialogContent>
             </Dialog>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {routeData.expenses.length === 0 ? (
-            <div className="text-center py-4 text-gray-500">
-              <Receipt className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No hay gastos registrados</p>
-            </div>
-          ) : (
-            <>
-              {routeData.expenses.map((expense) => (
-                <div key={expense.id} className="p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-full ${getExpenseColor(expense.type)}`}>
-                        {getExpenseIcon(expense.type)}
+          {(() => {
+            const gastosDelMensajero = gastosReales.find(g => g.mensajero === user?.name);
+            const gastos = gastosDelMensajero?.gastos || [];
+            
+            if (gastos.length === 0) {
+              return (
+                <div className="text-center py-4 text-gray-500">
+                  <Receipt className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No hay gastos registrados</p>
+                </div>
+              );
+            }
+            
+            return (
+              <>
+                {gastos.map((gasto) => (
+                  <div key={gasto.id} className="p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-full ${getExpenseColor(gasto.tipo_gasto)}`}>
+                          {getExpenseIcon(gasto.tipo_gasto)}
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{gasto.tipo_gasto}</p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(gasto.fecha).toLocaleTimeString('es-CR', { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-sm">{expense.description}</p>
-                        <p className="text-xs text-gray-500">
-                          {expense.type === 'other' && expense.customType ? expense.customType : 
-                           expense.type === 'fuel' ? 'Combustible' :
-                           expense.type === 'food' ? 'Alimentación' :
-                           expense.type === 'maintenance' ? 'Mantenimiento' : 'Otro'} • {formatDate(expense.createdAt)}
-                        </p>
-                      </div>
+                      <p className="font-bold text-orange-600">{formatCurrency(gasto.monto)}</p>
                     </div>
-                    <p className="font-bold text-orange-600">{formatCurrency(expense.amount)}</p>
+                    {gasto.comprobante_link && (
+                      <div className="mt-2">
+                        <a 
+                          href={gasto.comprobante_link} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          Ver comprobante
+                        </a>
+                      </div>
+                    )}
                   </div>
-                  {expense.receipt && (
-                    <div className="mt-2">
-                      <img
-                        src={expense.receipt}
-                        alt="Comprobante"
-                        className="w-full h-20 object-cover rounded-lg border border-gray-200"
-                      />
-                    </div>
-                  )}
+                ))}
+                <div className="border-t pt-3">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold">Total Gastos:</span>
+                    <span className="font-bold text-lg text-orange-600">
+                      {formatCurrency(gastosDelMensajero?.totalGastos || 0)}
+                    </span>
+                  </div>
                 </div>
-              ))}
-              <div className="border-t pt-3">
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold">Total Gastos:</span>
-                  <span className="font-bold text-lg text-orange-600">
-                    {formatCurrency(routeData.totalExpenses)}
-                  </span>
-                </div>
-              </div>
-            </>
-          )}
+              </>
+            );
+          })()}
         </CardContent>
       </Card>
 

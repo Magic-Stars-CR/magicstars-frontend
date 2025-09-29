@@ -805,6 +805,13 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
   totalSpent: number;
   initialAmount: number;
   finalAmount: number;
+  gastos: {
+    id: string;
+    monto: number;
+    tipo_gasto: string;
+    comprobante_link: string;
+    fecha: string;
+  }[];
 }[]> => {
   try {
     console.log(`🔍 Obteniendo liquidaciones para fecha: ${fecha}`);
@@ -812,6 +819,10 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
     // Obtener mensajeros únicos
     const mensajeros = await getMensajerosUnicos();
     console.log(`📋 Mensajeros encontrados: ${mensajeros.length}`, mensajeros);
+    
+    // Obtener gastos para todos los mensajeros
+    const gastosData = await getGastosMensajeros(fecha);
+    console.log(`💰 Gastos obtenidos: ${gastosData.length} mensajeros con gastos`);
     
     const liquidaciones = [];
     
@@ -822,6 +833,11 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
       // Obtener pedidos del día para este mensajero
       const pedidos = await getPedidosDelDiaByMensajeroEspecifico(mensajero, fecha);
       console.log(`📦 Pedidos para ${mensajero}: ${pedidos.length}`);
+      
+      // Buscar gastos del mensajero
+      const gastosDelMensajero = gastosData.find(g => g.mensajero === mensajero);
+      const gastos = gastosDelMensajero?.gastos || [];
+      console.log(`💰 Gastos para ${mensajero}: ${gastos.length}`);
       
       // Calcular totales (incluso si no hay pedidos)
       const totalCollected = pedidos.reduce((sum, pedido) => {
@@ -845,7 +861,7 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
         return sum;
       }, 0);
 
-      const totalSpent = 0; // Gastos del mensajero (por ahora 0)
+      const totalSpent = gastos.reduce((sum, gasto) => sum + gasto.monto, 0);
       const initialAmount = 50000; // Monto inicial por defecto
       const finalAmount = initialAmount + totalCollected - totalSpent;
 
@@ -857,7 +873,8 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
         cashPayments,
         totalSpent,
         initialAmount,
-        finalAmount
+        finalAmount,
+        gastos
       });
     }
     
@@ -1045,5 +1062,70 @@ export const debugTablaPedidos = async (fecha: string) => {
   } catch (error) {
     console.error('❌ Error en debugTablaPedidos:', error);
     return null;
+  }
+};
+
+// Función para obtener gastos de mensajeros por fecha
+export const getGastosMensajeros = async (fecha: string): Promise<{
+  mensajero: string;
+  gastos: {
+    id: string;
+    monto: number;
+    tipo_gasto: string;
+    comprobante_link: string;
+    fecha: string;
+  }[];
+  totalGastos: number;
+}[]> => {
+  try {
+    console.log(`🔍 Obteniendo gastos para fecha: ${fecha}`);
+    
+    // Obtener todos los gastos del día
+    const { data: gastos, error } = await supabasePedidos
+      .from('gastos_mensajeros')
+      .select('*')
+      .gte('fecha', `${fecha}T00:00:00`)
+      .lt('fecha', `${fecha}T23:59:59`)
+      .order('fecha', { ascending: true });
+
+    if (error) {
+      console.error('❌ Error al obtener gastos:', error);
+      return [];
+    }
+
+    console.log(`✅ Gastos encontrados: ${gastos?.length || 0}`);
+
+    // Agrupar por mensajero
+    const gastosPorMensajero: { [key: string]: any[] } = {};
+    
+    gastos?.forEach(gasto => {
+      if (!gastosPorMensajero[gasto.mensajero]) {
+        gastosPorMensajero[gasto.mensajero] = [];
+      }
+      gastosPorMensajero[gasto.mensajero].push(gasto);
+    });
+
+    // Convertir a formato requerido
+    const resultado = Object.entries(gastosPorMensajero).map(([mensajero, gastosMensajero]) => {
+      const totalGastos = gastosMensajero.reduce((sum, gasto) => sum + parseFloat(gasto.monto), 0);
+      
+      return {
+        mensajero,
+        gastos: gastosMensajero.map((gasto, index) => ({
+          id: gasto.id || `${mensajero}-${index}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          monto: parseFloat(gasto.monto),
+          tipo_gasto: gasto.tipo_gasto,
+          comprobante_link: gasto.comprobante_link,
+          fecha: gasto.fecha
+        })),
+        totalGastos
+      };
+    });
+
+    console.log(`✅ Gastos procesados para ${resultado.length} mensajeros`);
+    return resultado;
+  } catch (error) {
+    console.error('❌ Error en getGastosMensajeros:', error);
+    return [];
   }
 };
