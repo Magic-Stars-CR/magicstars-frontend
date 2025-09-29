@@ -2,8 +2,8 @@
 
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
 import { Loader2, CheckCircle, AlertCircle, Clock, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export interface LoaderStep {
   id: string;
@@ -89,7 +89,12 @@ export const ProgressLoader: React.FC<ProgressLoaderProps> = ({
               <span>Progreso</span>
               <span>{Math.round(calculatedProgress)}%</span>
             </div>
-            <Progress value={calculatedProgress} className="h-2" />
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                style={{ width: `${calculatedProgress}%` }}
+              />
+            </div>
           </div>
 
           {/* Steps */}

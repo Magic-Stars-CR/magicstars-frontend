@@ -455,7 +455,7 @@ export default function AdminPedidosPage() {
       }
 
       // Añadir usuario que realiza la acción
-      updates.usuario = user?.name || 'Admin';
+      (updates as any).usuario = user?.name || 'Admin';
 
       const success = await updatePedido(selectedPedidoForStatus.id_pedido, updates);
       if (success) {

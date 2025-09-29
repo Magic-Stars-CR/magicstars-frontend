@@ -102,7 +102,7 @@ export default function AdminOrdersPage() {
       }
       
       // Añadir usuario que realiza la acción
-      updates.usuario = 'Admin';
+      (updates as any).usuario = 'Admin';
       
       const success = await updatePedido(orderId, updates);
       

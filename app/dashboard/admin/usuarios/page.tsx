@@ -63,7 +63,7 @@ export default function UsuariosPage() {
         email: user.email,
         name: user.name,
         role: user.role,
-        phone: user.phone,
+        phone: user.phone || 'Sin teléfono',
         company: user.company?.name || 'Sin empresa',
         isActive: user.isActive,
         createdAt: user.createdAt

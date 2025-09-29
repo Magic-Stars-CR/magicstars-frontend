@@ -865,7 +865,7 @@ export const debugFechasConDatos = async () => {
     console.log('📅 Fechas encontradas en la tabla:', fechasUnicas);
     
     // Extraer fechas únicas (solo la parte de fecha, sin hora)
-    const fechas = [...new Set(fechasUnicas?.map(p => p.fecha_creacion?.split('T')[0]) || [])];
+    const fechas = Array.from(new Set(fechasUnicas?.map(p => p.fecha_creacion?.split('T')[0]) || []));
     console.log('📅 Fechas únicas:', fechas);
     
     // Probar las primeras 5 fechas
