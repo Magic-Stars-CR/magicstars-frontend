@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { mockApi } from '@/lib/mock-api';
 import { Order, PedidoTest, OrderStatus } from '@/lib/types';
-import { getPedidosByMensajero, getPedidosDelDiaByMensajero, updatePedido } from '@/lib/supabase-pedidos';
+import { getPedidosByMensajero, getPedidosDelDiaByMensajero, updatePedido, debugMensajeroQueries } from '@/lib/supabase-pedidos';
 import { supabasePedidos } from '@/lib/supabase-pedidos';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -216,10 +216,20 @@ export default function MiRutaHoy() {
   const getCostaRicaDate = () => {
     const now = new Date();
     
-    // Costa Rica está en GMT-6 (UTC-6)
+    // Costa Rica está en CST (Central Standard Time) = UTC-6
+    // Costa Rica NO observa horario de verano, siempre UTC-6
     const costaRicaOffset = -6 * 60; // -6 horas en minutos
+    
+    // Obtener el tiempo UTC actual
     const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    
+    // Aplicar el offset de Costa Rica (UTC-6)
     const costaRicaTime = new Date(utc + (costaRicaOffset * 60000));
+    
+    console.log('🕐 Fecha original:', now.toISOString());
+    console.log('🕐 Zona horaria del sistema:', now.getTimezoneOffset());
+    console.log('🕐 UTC calculado:', new Date(utc).toISOString());
+    console.log('🕐 Costa Rica (UTC-6):', costaRicaTime.toISOString());
     
     return costaRicaTime;
   };
@@ -232,11 +242,20 @@ export default function MiRutaHoy() {
     const day = String(costaRicaDate.getDate()).padStart(2, '0');
     const isoDate = `${year}-${month}-${day}`;
     
+    console.log('📅 Fecha Costa Rica:', costaRicaDate.toISOString());
+    console.log('📅 Año:', year, 'Mes:', month, 'Día:', day);
+    console.log('📅 ISO Date final:', isoDate);
+    
     return isoDate;
   };
 
   const loadRouteData = async () => {
     try {
+      console.log('🚀 INICIANDO loadRouteData');
+      console.log('👤 Usuario actual:', user?.name);
+      console.log('📅 Filtro de fecha:', dateFilter);
+      console.log('📅 Fecha seleccionada:', selectedDate);
+      
       setLoading(true);
       
       // Determinar la fecha objetivo basada en el filtro activo
@@ -246,49 +265,74 @@ export default function MiRutaHoy() {
       const now = new Date();
       const costaRicaNow = getCostaRicaDate();
       
+      console.log('🕐 Fecha actual del sistema:', now.toISOString());
+      console.log('🕐 Fecha Costa Rica:', costaRicaNow.toISOString());
+      
+      // PRIORIDAD 1: Si hay una fecha específica seleccionada, usar esa
       if (selectedDate) {
-        // Si hay una fecha específica seleccionada, usar esa pero con zona horaria de Costa Rica
+        console.log('📅 Usando fecha seleccionada:', selectedDate);
         const year = selectedDate.getFullYear();
         const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
         const day = String(selectedDate.getDate()).padStart(2, '0');
         targetDateISO = `${year}-${month}-${day}`;
         targetDateString = selectedDate.toDateString();
+        console.log('📅 Fecha específica calculada:', targetDateISO);
       } else {
-        // Usar el filtro de período por defecto con zona horaria de Costa Rica
+        // PRIORIDAD 2: Usar el filtro de período por defecto con zona horaria de Costa Rica
+        console.log('📅 Usando filtro de período:', dateFilter);
         switch (dateFilter) {
           case 'today':
             targetDateISO = getCostaRicaDateISO();
             targetDateString = costaRicaNow.toDateString();
+            console.log('📅 Filtro HOY:', targetDateISO);
             break;
           case 'yesterday':
             const yesterday = new Date(costaRicaNow);
             yesterday.setDate(yesterday.getDate() - 1);
             targetDateISO = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
             targetDateString = yesterday.toDateString();
+            console.log('📅 Filtro AYER:', targetDateISO);
             break;
           case 'thisWeek':
             // Para esta semana, usar hoy por defecto
             targetDateISO = getCostaRicaDateISO();
             targetDateString = costaRicaNow.toDateString();
+            console.log('📅 Filtro ESTA SEMANA:', targetDateISO);
             break;
           case 'thisMonth':
             // Para este mes, usar hoy por defecto
             targetDateISO = getCostaRicaDateISO();
             targetDateString = costaRicaNow.toDateString();
+            console.log('📅 Filtro ESTE MES:', targetDateISO);
+            break;
+          case 'all':
+            // Si es 'all' pero no hay selectedDate, usar hoy
+            targetDateISO = getCostaRicaDateISO();
+            targetDateString = costaRicaNow.toDateString();
+            console.log('📅 Filtro ALL (sin fecha específica):', targetDateISO);
             break;
           default:
             targetDateISO = getCostaRicaDateISO();
             targetDateString = costaRicaNow.toDateString();
+            console.log('📅 Filtro DEFAULT:', targetDateISO);
         }
       }
       
+      console.log('🎯 Fecha objetivo ISO:', targetDateISO);
+      console.log('🎯 Fecha objetivo string:', targetDateString);
+      
       // Obtener pedidos de Supabase filtrados por mensajero Y fecha objetivo
+      console.log('🔍 Consultando pedidos para:', user?.name, 'en fecha:', targetDateISO);
       const pedidosSupabase = await getPedidosDelDiaByMensajero(user?.name || '', targetDateISO);
+      console.log('📦 Pedidos obtenidos de Supabase:', pedidosSupabase?.length || 0);
+      console.log('📦 Muestra de pedidos:', pedidosSupabase?.slice(0, 3));
       
       // Usar directamente los pedidos obtenidos de Supabase (ya filtrados por fecha)
       const pedidosDelDia = pedidosSupabase;
+      console.log('📦 Pedidos del día (después de filtrado):', pedidosDelDia?.length || 0);
       
       // Convertir pedidos de Supabase al formato de la aplicación
+      console.log('🔄 Convirtiendo pedidos al formato de la aplicación...');
       const orders: Order[] = pedidosDelDia.map((pedido, index) => {
         try {
           // Determinar el estado del pedido basado en los campos disponibles
@@ -425,6 +469,12 @@ export default function MiRutaHoy() {
       
       const totalReturns = orders.filter(order => order.status === 'devolucion').length;
 
+      console.log('📊 Estadísticas calculadas:');
+      console.log('📊 Total pedidos:', orders.length);
+      console.log('📊 Pedidos completados:', completedOrders);
+      console.log('📊 Ingresos totales:', totalRevenue);
+      console.log('📊 Devoluciones:', totalReturns);
+      
       setRouteData({
         orders,
         expenses: mockExpenses,
@@ -433,6 +483,8 @@ export default function MiRutaHoy() {
         completedOrders,
         totalRevenue
       });
+      
+      console.log('✅ RouteData actualizado exitosamente');
 
       // Ordenar pedidos por ubicación (provincia, cantón, distrito) y estado
       const sortedOrders = orders.sort((a, b) => {
@@ -509,8 +561,13 @@ export default function MiRutaHoy() {
         totalReturns
       });
     } catch (error) {
-      console.error('Error loading route data:', error);
+      console.error('❌ ERROR en loadRouteData:', error);
+      console.error('❌ Usuario:', user?.name);
+      console.error('❌ Fecha objetivo:', targetDateISO);
+      console.error('❌ Filtro de fecha:', dateFilter);
+      console.error('❌ Fecha seleccionada:', selectedDate);
     } finally {
+      console.log('🏁 Finalizando loadRouteData, loading = false');
       setLoading(false);
     }
   };
@@ -1775,6 +1832,21 @@ export default function MiRutaHoy() {
               >
                 <Calendar className="w-4 h-4" />
                 Ayer
+              </Button>
+            </div>
+            
+            {/* Botón de debugging */}
+            <div className="mt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  console.log('🔍 Iniciando debugging para mensajero:', user?.name);
+                  debugMensajeroQueries(user?.name || '');
+                }}
+                className="w-full text-xs"
+              >
+                🔍 Debug Consultas
               </Button>
             </div>
           </div>

@@ -301,42 +301,70 @@ export default function MensajeroDashboard() {
       let dateMatch = true;
 
       // Si hay un rango de fechas seleccionado, usar ese
+      // CORRECCIÓN: Usar zona horaria de Costa Rica para rangos de fechas
       if (dateRange.from && dateRange.to) {
-        dateMatch = orderDate >= dateRange.from && orderDate <= dateRange.to;
+        const fromCostaRica = new Date(dateRange.from.getTime() - (6 * 60 * 60 * 1000));
+        const toCostaRica = new Date(dateRange.to.getTime() - (6 * 60 * 60 * 1000));
+        const orderDateCostaRica = new Date(orderDate.getTime() - (6 * 60 * 60 * 1000));
+        dateMatch = orderDateCostaRica >= fromCostaRica && orderDateCostaRica <= toCostaRica;
+        console.log('🔍 FILTRO RANGO - Desde:', fromCostaRica.toDateString(), 'Hasta:', toCostaRica.toDateString(), 'Pedido:', orderDateCostaRica.toDateString(), 'Match:', dateMatch);
       } else if (dateRange.from) {
-        dateMatch = orderDate >= dateRange.from;
+        const fromCostaRica = new Date(dateRange.from.getTime() - (6 * 60 * 60 * 1000));
+        const orderDateCostaRica = new Date(orderDate.getTime() - (6 * 60 * 60 * 1000));
+        dateMatch = orderDateCostaRica >= fromCostaRica;
+        console.log('🔍 FILTRO DESDE - Desde:', fromCostaRica.toDateString(), 'Pedido:', orderDateCostaRica.toDateString(), 'Match:', dateMatch);
       } else if (dateRange.to) {
-        dateMatch = orderDate <= dateRange.to;
+        const toCostaRica = new Date(dateRange.to.getTime() - (6 * 60 * 60 * 1000));
+        const orderDateCostaRica = new Date(orderDate.getTime() - (6 * 60 * 60 * 1000));
+        dateMatch = orderDateCostaRica <= toCostaRica;
+        console.log('🔍 FILTRO HASTA - Hasta:', toCostaRica.toDateString(), 'Pedido:', orderDateCostaRica.toDateString(), 'Match:', dateMatch);
       } else if (selectedDate) {
         // Si hay una fecha específica seleccionada, usar esa
-        dateMatch = orderDate.toDateString() === selectedDate.toDateString();
+        // CORRECCIÓN: Comparar fechas en zona horaria de Costa Rica
+        const orderDateCostaRica = new Date(orderDate.getTime() - (6 * 60 * 60 * 1000)); // UTC-6
+        const selectedDateCostaRica = new Date(selectedDate.getTime() - (6 * 60 * 60 * 1000)); // UTC-6
+        
+        console.log('🔍 DEBUGGING FILTRO DE FECHA ESPECÍFICA:');
+        console.log('📅 Fecha del pedido (UTC):', orderDate.toISOString());
+        console.log('📅 Fecha del pedido (Costa Rica):', orderDateCostaRica.toISOString());
+        console.log('📅 Fecha seleccionada (local):', selectedDate.toISOString());
+        console.log('📅 Fecha seleccionada (Costa Rica):', selectedDateCostaRica.toISOString());
+        console.log('📅 Comparación toDateString:', orderDateCostaRica.toDateString(), '===', selectedDateCostaRica.toDateString());
+        
+        dateMatch = orderDateCostaRica.toDateString() === selectedDateCostaRica.toDateString();
       } else {
         // Usar el filtro de período si no hay fechas específicas
+        // CORRECCIÓN: Usar zona horaria de Costa Rica para todos los filtros
+        const nowCostaRica = new Date(now.getTime() - (6 * 60 * 60 * 1000)); // UTC-6
+        const orderDateCostaRica = new Date(orderDate.getTime() - (6 * 60 * 60 * 1000)); // UTC-6
+        
         switch (dateFilter) {
           case 'today':
-            dateMatch = orderDate.toDateString() === now.toDateString();
+            dateMatch = orderDateCostaRica.toDateString() === nowCostaRica.toDateString();
+            console.log('🔍 FILTRO HOY - Pedido:', orderDateCostaRica.toDateString(), 'Hoy:', nowCostaRica.toDateString(), 'Match:', dateMatch);
             break;
           case 'yesterday':
-            const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-            dateMatch = orderDate.toDateString() === yesterday.toDateString();
+            const yesterday = new Date(nowCostaRica.getTime() - 24 * 60 * 60 * 1000);
+            dateMatch = orderDateCostaRica.toDateString() === yesterday.toDateString();
+            console.log('🔍 FILTRO AYER - Pedido:', orderDateCostaRica.toDateString(), 'Ayer:', yesterday.toDateString(), 'Match:', dateMatch);
             break;
           case 'week':
-            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            dateMatch = orderDate >= weekAgo;
+            const weekAgo = new Date(nowCostaRica.getTime() - 7 * 24 * 60 * 60 * 1000);
+            dateMatch = orderDateCostaRica >= weekAgo;
             break;
           case 'lastWeek':
-            const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-            const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            dateMatch = orderDate >= twoWeeksAgo && orderDate < oneWeekAgo;
+            const twoWeeksAgo = new Date(nowCostaRica.getTime() - 14 * 24 * 60 * 60 * 1000);
+            const oneWeekAgo = new Date(nowCostaRica.getTime() - 7 * 24 * 60 * 60 * 1000);
+            dateMatch = orderDateCostaRica >= twoWeeksAgo && orderDateCostaRica < oneWeekAgo;
             break;
           case 'month':
-            const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            dateMatch = orderDate >= monthAgo;
+            const monthAgo = new Date(nowCostaRica.getTime() - 30 * 24 * 60 * 60 * 1000);
+            dateMatch = orderDateCostaRica >= monthAgo;
             break;
           case 'lastMonth':
-            const twoMonthsAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
-            const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            dateMatch = orderDate >= twoMonthsAgo && orderDate < oneMonthAgo;
+            const twoMonthsAgo = new Date(nowCostaRica.getTime() - 60 * 24 * 60 * 60 * 1000);
+            const oneMonthAgo = new Date(nowCostaRica.getTime() - 30 * 24 * 60 * 60 * 1000);
+            dateMatch = orderDateCostaRica >= twoMonthsAgo && orderDateCostaRica < oneMonthAgo;
             break;
           case 'all':
           default:

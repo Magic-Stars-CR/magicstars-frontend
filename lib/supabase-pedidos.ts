@@ -272,8 +272,13 @@ export const getPedidosDelDiaByTienda = async (tienda: string, fecha?: string): 
 // Función para obtener pedidos del día actual por mensajero (tanto asignado como concretado)
 export const getPedidosDelDiaByMensajero = async (mensajeroName: string, fecha?: string): Promise<PedidoTest[]> => {
   try {
+    console.log('🔍 getPedidosDelDiaByMensajero INICIADA');
+    console.log('👤 Mensajero:', mensajeroName);
+    console.log('📅 Fecha recibida:', fecha);
+    
     // Usar la fecha proporcionada o la fecha actual en zona horaria de Costa Rica
     const targetDate = fecha || getCostaRicaDateISO();
+    console.log('📅 Fecha objetivo final:', targetDate);
     
     // Obtener todos los pedidos usando paginación para evitar el límite de 1000
     let allPedidos: PedidoTest[] = [];
@@ -282,18 +287,63 @@ export const getPedidosDelDiaByMensajero = async (mensajeroName: string, fecha?:
     let hasMore = true;
 
     while (hasMore) {
+      console.log(`🔄 Consultando página ${Math.floor(from / limit) + 1} para ${mensajeroName}...`);
+      console.log(`📅 Fecha objetivo: ${targetDate}`);
+      
+      // DEBUGGING SIMPLIFICADO: Verificar si hay pedidos para este mensajero
+      if (from === 0) {
+        console.log('🔍 Verificando pedidos para', mensajeroName, 'en fecha', targetDate);
+        
+        // Probar consulta simple con eq
+        const { data: testData, error: testError } = await supabasePedidos
+          .from('pedidos')
+          .select('id_pedido, fecha_creacion, mensajero_asignado, mensajero_concretado')
+          .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
+          .eq('fecha_creacion', targetDate)
+          .limit(5);
+        
+        console.log('🔍 Resultado con eq:', testData?.length || 0);
+        if (testData && testData.length > 0) {
+          console.log('🔍 Muestra de pedidos encontrados:', testData.map(p => ({
+            id: p.id_pedido,
+            fecha: p.fecha_creacion,
+            asignado: p.mensajero_asignado,
+            concretado: p.mensajero_concretado
+          })));
+        }
+      }
+      
+      // CORRECCIÓN: Usar solo fecha, no hora, ya que los datos solo tienen fecha
+      console.log('🔍 Usando solo fecha (sin hora):', targetDate);
+      
       const { data, error } = await supabasePedidos
         .from('pedidos')
         .select('*')
         .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
-        .gte('fecha_creacion', `${targetDate}T00:00:00`)
-        .lt('fecha_creacion', `${targetDate}T23:59:59`)
+        .eq('fecha_creacion', targetDate)
         .range(from, from + limit - 1)
         .order('id_pedido', { ascending: true });
 
       if (error) {
         console.error('❌ Error al obtener pedidos del día por mensajero:', error);
+        console.error('❌ Query parameters:', {
+          mensajero: mensajeroName,
+          fecha: targetDate,
+          from,
+          limit
+        });
         return allPedidos; // Devolver lo que tengamos hasta ahora
+      }
+      
+      console.log(`📊 Datos obtenidos en página ${Math.floor(from / limit) + 1}:`, data?.length || 0);
+      if (data && data.length > 0) {
+        console.log(`📋 Muestra de pedidos:`, data.slice(0, 2).map(p => ({
+          id: p.id_pedido,
+          fecha: p.fecha_creacion,
+          estado: p.estado_pedido,
+          asignado: p.mensajero_asignado,
+          concretado: p.mensajero_concretado
+        })));
       }
 
       if (data && data.length > 0) {
@@ -305,9 +355,17 @@ export const getPedidosDelDiaByMensajero = async (mensajeroName: string, fecha?:
       }
     }
 
+    console.log(`✅ CONSULTA COMPLETADA`);
+    console.log(`📊 Pedidos encontrados para ${mensajeroName} el ${targetDate}:`, allPedidos.length);
+    if (allPedidos.length > 0) {
+      console.log(`📋 Muestra:`, allPedidos.slice(0, 3).map(p => p.id_pedido));
+    }
+
     return allPedidos;
   } catch (error) {
     console.error('❌ Error en getPedidosDelDiaByMensajero:', error);
+    console.error('❌ Mensajero:', mensajeroName);
+    console.error('❌ Fecha:', fecha);
     // En caso de error, devolver array vacío en lugar de lanzar excepción
     return [];
   }
@@ -841,6 +899,80 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
   } catch (error) {
     console.error('❌ Error en getLiquidacionesReales:', error);
     return [];
+  }
+};
+
+// Función para debuggear consultas de mensajeros específicos
+export const debugMensajeroQueries = async (mensajeroName: string) => {
+  try {
+    console.log(`🔍 DEBUGGING: Consultas para mensajero ${mensajeroName}`);
+    
+    // 1. Verificar si el mensajero existe en la tabla
+    const { data: mensajeroExists, error: errorExists } = await supabasePedidos
+      .from('pedidos')
+      .select('mensajero_asignado, mensajero_concretado')
+      .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
+      .limit(5);
+    
+    console.log(`📋 Mensajero ${mensajeroName} existe:`, mensajeroExists?.length || 0);
+    console.log(`📋 Muestra de asignaciones:`, mensajeroExists);
+    console.log(`❌ Error en verificación:`, errorExists);
+    
+    // 2. Verificar fechas disponibles para este mensajero
+    const { data: fechasMensajero, error: errorFechas } = await supabasePedidos
+      .from('pedidos')
+      .select('fecha_creacion')
+      .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
+      .not('fecha_creacion', 'is', null)
+      .order('fecha_creacion', { ascending: false })
+      .limit(10);
+    
+    console.log(`📅 Fechas disponibles para ${mensajeroName}:`, fechasMensajero?.length || 0);
+    console.log(`📅 Muestra de fechas:`, fechasMensajero);
+    console.log(`❌ Error en fechas:`, errorFechas);
+    
+    // 3. Probar con fecha actual
+    const fechaActual = getCostaRicaDateISO();
+    console.log(`📅 Probando con fecha actual: ${fechaActual}`);
+    
+    const { data: pedidosHoy, error: errorHoy } = await supabasePedidos
+      .from('pedidos')
+      .select('id_pedido, fecha_creacion, mensajero_asignado, mensajero_concretado, estado_pedido')
+      .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
+      .gte('fecha_creacion', `${fechaActual}T00:00:00`)
+      .lt('fecha_creacion', `${fechaActual}T23:59:59`)
+      .limit(5);
+    
+    console.log(`📦 Pedidos para hoy (${fechaActual}):`, pedidosHoy?.length || 0);
+    console.log(`📦 Muestra de pedidos de hoy:`, pedidosHoy);
+    console.log(`❌ Error en pedidos de hoy:`, errorHoy);
+    
+    // 4. Probar con diferentes variaciones del nombre
+    const variaciones = [
+      mensajeroName,
+      mensajeroName.toLowerCase(),
+      mensajeroName.toUpperCase(),
+      mensajeroName.trim(),
+      `%${mensajeroName}%`
+    ];
+    
+    for (const variacion of variaciones) {
+      console.log(`🔍 Probando variación: "${variacion}"`);
+      
+      const { data: pedidosVariacion, error: errorVariacion } = await supabasePedidos
+        .from('pedidos')
+        .select('id_pedido, mensajero_asignado, mensajero_concretado')
+        .or(`mensajero_asignado.ilike.${variacion},mensajero_concretado.ilike.${variacion}`)
+        .limit(3);
+      
+      console.log(`📦 Resultados para "${variacion}":`, pedidosVariacion?.length || 0);
+      if (pedidosVariacion && pedidosVariacion.length > 0) {
+        console.log(`📋 Muestra:`, pedidosVariacion);
+      }
+    }
+    
+  } catch (error) {
+    console.error('❌ Error en debugMensajeroQueries:', error);
   }
 };
 
