@@ -94,7 +94,7 @@ export default function AdminLiquidationPage() {
   const [hasRealData, setHasRealData] = useState(false);
   const [showViewAndLiquidateModal, setShowViewAndLiquidateModal] = useState(false);
   const [selectedViewAndLiquidate, setSelectedViewAndLiquidate] = useState<LiquidationCalculation | null>(null);
-  const [initialAmountInput, setInitialAmountInput] = useState('');
+  const [initialAmountInput, setInitialAmountInput] = useState('0');
   
   // Progress loader
   const {
@@ -145,6 +145,35 @@ export default function AdminLiquidationPage() {
       setStepStatus('mensajeros', 'loading', 'Buscando mensajeros en la base de datos...');
       const liquidacionesReales = await getLiquidacionesReales(selectedDate);
       console.log('✅ Liquidaciones reales obtenidas:', liquidacionesReales.length);
+      
+      // LOG DETALLADO DE PEDIDOS Y ESTADOS
+      console.log('📋 ===== ANÁLISIS DETALLADO DE PEDIDOS =====');
+      liquidacionesReales.forEach((liquidation, index) => {
+        console.log(`\n👤 Mensajero ${index + 1}: ${liquidation.mensajero}`);
+        console.log(`📦 Total de pedidos: ${liquidation.pedidos.length}`);
+        
+        if (liquidation.pedidos.length > 0) {
+          console.log('📊 Estados de pedidos:');
+          const estados = liquidation.pedidos.reduce((acc, pedido) => {
+            const estado = pedido.estado_pedido || 'sin_estado';
+            acc[estado] = (acc[estado] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+          
+          Object.entries(estados).forEach(([estado, count]) => {
+            console.log(`   - ${estado}: ${count} pedidos`);
+          });
+          
+          console.log('🔍 Primeros 3 pedidos:');
+          liquidation.pedidos.slice(0, 3).forEach((pedido, i) => {
+            console.log(`   ${i + 1}. ID: ${pedido.id_pedido}, Estado: "${pedido.estado_pedido || 'sin_estado'}", Cliente: ${pedido.cliente_nombre}, Valor: ₡${pedido.valor_total}`);
+          });
+        } else {
+          console.log('   ⚠️ No hay pedidos para este mensajero');
+        }
+      });
+      console.log('📋 ===========================================\n');
+      
       setStepStatus('mensajeros', 'completed', `${liquidacionesReales.length} mensajeros encontrados`);
       setProgress(30);
       
@@ -295,7 +324,7 @@ export default function AdminLiquidationPage() {
 
   const handleViewAndLiquidate = (calculation: LiquidationCalculation) => {
     setSelectedViewAndLiquidate(calculation);
-    setInitialAmountInput(calculation.initialAmount.toString());
+    setInitialAmountInput('0'); // Siempre empezar en 0
     setShowViewAndLiquidateModal(true);
   };
 
@@ -1417,125 +1446,427 @@ export default function AdminLiquidationPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Ver y Liquidar */}
+      {/* Modal de Ver y Liquidar - Diseño Refactorizado */}
       <Dialog open={showViewAndLiquidateModal} onOpenChange={setShowViewAndLiquidateModal}>
-        <DialogContent className="sm:max-w-[800px]">
-          <DialogHeader>
-            <DialogTitle>Ver y Liquidar - {selectedViewAndLiquidate?.messengerName}</DialogTitle>
+        <DialogContent className="max-w-[95vw] w-full max-h-[95vh] overflow-y-auto">
+          <DialogHeader className="pb-4 border-b">
+            <DialogTitle className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Calculator className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <span className="text-xl font-bold">Liquidación de Mensajero</span>
+                <p className="text-sm text-gray-600 font-normal">{selectedViewAndLiquidate?.messengerName}</p>
+              </div>
+            </DialogTitle>
           </DialogHeader>
+          
           {selectedViewAndLiquidate && (
-            <div className="space-y-6">
-              {/* Resumen de Liquidación */}
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="font-semibold mb-3">Resumen de Liquidación</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Total recaudado:</span>
-                    <span className="font-bold text-green-600 ml-2">
-                      {formatCurrency(selectedViewAndLiquidate.totalCollected)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Pagos SINPE:</span>
-                    <span className="font-bold text-blue-600 ml-2">
-                      {formatCurrency(selectedViewAndLiquidate.sinpePayments)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Pagos Efectivo:</span>
-                    <span className="font-bold text-green-600 ml-2">
-                      {formatCurrency(selectedViewAndLiquidate.cashPayments)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Gastos:</span>
-                    <span className="font-bold text-red-600 ml-2">
-                      {formatCurrency(selectedViewAndLiquidate.totalSpent)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Input para Plata Inicial */}
-              <div>
-                <Label htmlFor="initial-amount">Plata Inicial (₡)</Label>
-                <Input
-                  id="initial-amount"
-                  type="number"
-                  value={initialAmountInput}
-                  onChange={(e) => setInitialAmountInput(e.target.value)}
-                  placeholder="50000"
-                  className="mt-1"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Monto entregado al mensajero en la mañana
-                </p>
-              </div>
-
-              {/* Cálculo del Monto Final */}
-              <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                <h4 className="font-semibold text-purple-800 mb-2">Cálculo del Monto Final</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Plata inicial:</span>
-                    <span className="font-bold text-green-600">
-                      {formatCurrency(parseFloat(initialAmountInput) || 0)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>+ Total recaudado:</span>
-                    <span className="font-bold text-green-600">
-                      {formatCurrency(selectedViewAndLiquidate.totalCollected)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>- Gastos:</span>
-                    <span className="font-bold text-red-600">
-                      {formatCurrency(selectedViewAndLiquidate.totalSpent)}
-                    </span>
-                  </div>
-                  <div className="border-t pt-2 flex justify-between font-bold text-lg">
-                    <span>Monto final a entregar:</span>
-                    <span className="text-purple-600">
-                      {formatCurrency((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.totalCollected - selectedViewAndLiquidate.totalSpent)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Lista de Pedidos */}
-              <div>
-                <h4 className="font-semibold mb-3">Pedidos ({selectedViewAndLiquidate.orders.length})</h4>
-                <div className="max-h-60 overflow-y-auto space-y-2">
-                  {selectedViewAndLiquidate.orders.map((pedido) => (
-                    <div key={pedido.id_pedido} className="bg-white border rounded-lg p-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <span className="font-medium">{pedido.id_pedido}</span>
-                          <p className="text-sm text-gray-600">{pedido.cliente_nombre}</p>
+            <div className="flex-1">
+              <div className="grid grid-cols-1 xl:grid-cols-5 gap-6 p-1">
+                
+                {/* Columna Izquierda - Resumen y Cálculos */}
+                <div className="xl:col-span-1 space-y-4">
+                  
+                  {/* Resumen Financiero */}
+                  <Card className="border-2 border-blue-200">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <DollarSign className="w-5 h-5 text-green-600" />
+                        Resumen Financiero
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-green-50 p-3 rounded-lg">
+                          <div className="flex items-center gap-2 mb-1">
+                            <TrendingUp className="w-4 h-4 text-green-600" />
+                            <span className="text-sm font-medium text-green-800">Total Recaudado</span>
+                          </div>
+                          <p className="text-xl font-bold text-green-900">
+                            {formatCurrency(selectedViewAndLiquidate.totalCollected)}
+                          </p>
                         </div>
-                        <div className="text-right">
-                          <span className="font-bold text-green-600">
-                            {formatCurrency(pedido.valor_total)}
-                          </span>
-                          <p className="text-xs text-gray-500">{pedido.metodo_pago}</p>
+                        <div className="bg-red-50 p-3 rounded-lg">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Minus className="w-4 h-4 text-red-600" />
+                            <span className="text-sm font-medium text-red-800">Gastos</span>
+                          </div>
+                          <p className="text-xl font-bold text-red-900">
+                            {formatCurrency(selectedViewAndLiquidate.totalSpent)}
+                          </p>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-blue-50 p-3 rounded-lg">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Smartphone className="w-4 h-4 text-blue-600" />
+                            <span className="text-sm font-medium text-blue-800">SINPE</span>
+                          </div>
+                          <p className="text-lg font-bold text-blue-900">
+                            {formatCurrency(selectedViewAndLiquidate.sinpePayments)}
+                          </p>
+                        </div>
+                        <div className="bg-green-50 p-3 rounded-lg">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Banknote className="w-4 h-4 text-green-600" />
+                            <span className="text-sm font-medium text-green-800">Efectivo</span>
+                          </div>
+                          <p className="text-lg font-bold text-green-900">
+                            {formatCurrency(selectedViewAndLiquidate.cashPayments)}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Plata Inicial */}
+                  <Card className="border-2 border-orange-200">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Plus className="w-5 h-5 text-orange-600" />
+                        Plata Inicial
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div>
+                          <Label htmlFor="initial-amount" className="text-sm font-medium">Monto (₡)</Label>
+                          <Input
+                            id="initial-amount"
+                            type="number"
+                            value={initialAmountInput}
+                            onChange={(e) => setInitialAmountInput(e.target.value)}
+                            placeholder="0"
+                            className="mt-1 text-lg font-semibold"
+                          />
+                        </div>
+                        <p className="text-xs text-gray-600 bg-orange-50 p-2 rounded">
+                          💡 Monto entregado al mensajero en la mañana
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Cálculo Final - Diseño Mejorado */}
+                  <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50">
+                    <CardHeader className="pb-4">
+                      <CardTitle className="text-xl flex items-center gap-3">
+                        <div className="p-2 bg-purple-100 rounded-lg">
+                          <Calculator className="w-6 h-6 text-purple-600" />
+                        </div>
+                        <span>Cálculo Final</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {/* Plata Inicial - Más Grande */}
+                      <div className="bg-green-50 p-4 rounded-xl border-2 border-green-200">
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-green-100 rounded-lg">
+                              <Plus className="w-5 h-5 text-green-600" />
+                            </div>
+                            <div>
+                              <span className="text-base font-semibold text-green-800">Plata inicial</span>
+                              <p className="text-xs text-green-600">Monto entregado en la mañana</p>
+                            </div>
+                          </div>
+                          <span className="text-xl font-bold text-green-900">
+                            {formatCurrency(parseFloat(initialAmountInput) || 0)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Total Recaudado - Más Grande */}
+                      <div className="bg-blue-50 p-4 rounded-xl border-2 border-blue-200">
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-100 rounded-lg">
+                              <TrendingUp className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <div>
+                              <span className="text-base font-semibold text-blue-800">+ Total recaudado</span>
+                              <p className="text-xs text-blue-600">Dinero recaudado por entregas</p>
+                            </div>
+                          </div>
+                          <span className="text-xl font-bold text-blue-900">
+                            {formatCurrency(selectedViewAndLiquidate.totalCollected)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Gastos - Más Grande */}
+                      <div className="bg-red-50 p-4 rounded-xl border-2 border-red-200">
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-red-100 rounded-lg">
+                              <Minus className="w-5 h-5 text-red-600" />
+                            </div>
+                            <div>
+                              <span className="text-base font-semibold text-red-800">- Gastos</span>
+                              <p className="text-xs text-red-600">Gastos reportados por el mensajero</p>
+                            </div>
+                          </div>
+                          <span className="text-xl font-bold text-red-900">
+                            {formatCurrency(selectedViewAndLiquidate.totalSpent)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Línea divisoria mejorada */}
+                      <div className="border-t-2 border-purple-200 pt-4">
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center text-sm text-gray-700">
+                              <span className="font-medium">Fórmula de Liquidación:</span>
+                            </div>
+                            <div className="bg-white p-3 rounded border font-mono text-sm">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-gray-600">Plata Inicial:</span>
+                                <span className="font-bold text-green-600">{formatCurrency(parseFloat(initialAmountInput) || 0)}</span>
+                              </div>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-gray-600">+ Total Recaudado:</span>
+                                <span className="font-bold text-blue-600">{formatCurrency(selectedViewAndLiquidate.totalCollected)}</span>
+                              </div>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-gray-600">- Gastos:</span>
+                                <span className="font-bold text-red-600">{formatCurrency(selectedViewAndLiquidate.totalSpent)}</span>
+                              </div>
+                              <div className="border-t pt-2 flex items-center justify-between">
+                                <span className="text-gray-800 font-semibold">= Monto Final:</span>
+                                <span className="font-bold text-purple-600 text-base">
+                                  {formatCurrency((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.totalCollected - selectedViewAndLiquidate.totalSpent)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Resultado Final - Mucho Más Prominente */}
+                      <div className="bg-gradient-to-r from-purple-100 to-blue-100 p-6 rounded-xl border-2 border-purple-300 shadow-lg">
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-4 flex-1">
+                            <div className="p-3 bg-purple-200 rounded-xl">
+                              <Calculator className="w-6 h-6 text-purple-700" />
+                            </div>
+                            <div className="flex-1">
+                              <span className="font-bold text-purple-800 text-lg">Monto final a entregar</span>
+                              <p className="text-xs text-purple-600 mt-1">
+                                {((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.totalCollected - selectedViewAndLiquidate.totalSpent) >= 0 
+                                  ? '✅ El mensajero debe entregar este monto' 
+                                  : '⚠️ El mensajero debe pagar este monto'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0 ml-4">
+                            <span className="text-2xl font-bold text-purple-900 break-words">
+                              {formatCurrency((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.totalCollected - selectedViewAndLiquidate.totalSpent)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Columna Derecha - Pedidos */}
+                <div className="xl:col-span-4 space-y-4 flex flex-col h-full">
+
+                  {/* Estadísticas de Pedidos */}
+                  <Card className="border-2 border-gray-200">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <BarChart3 className="w-4 h-4 text-gray-600" />
+                        Estadísticas de Pedidos
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="grid grid-cols-4 gap-2">
+                        <div className="bg-blue-50 p-2 rounded-lg text-center">
+                          <div className="flex items-center justify-center gap-1 mb-1">
+                            <Package className="w-3 h-3 text-blue-600" />
+                            <span className="text-xs font-medium text-blue-800">Total</span>
+                          </div>
+                          <p className="text-lg font-bold text-blue-900">{selectedViewAndLiquidate.orders.length}</p>
+                        </div>
+                        <div className="bg-green-50 p-2 rounded-lg text-center">
+                          <div className="flex items-center justify-center gap-1 mb-1">
+                            <CheckCircle className="w-3 h-3 text-green-600" />
+                            <span className="text-xs font-medium text-green-800">Entregados</span>
+                          </div>
+                          <p className="text-lg font-bold text-green-900">
+                            {selectedViewAndLiquidate.orders.filter(p => p.estado_pedido === 'entregado').length}
+                          </p>
+                        </div>
+                        <div className="bg-red-50 p-2 rounded-lg text-center">
+                          <div className="flex items-center justify-center gap-1 mb-1">
+                            <AlertCircle className="w-3 h-3 text-red-600" />
+                            <span className="text-xs font-medium text-red-800">Devoluciones</span>
+                          </div>
+                          <p className="text-lg font-bold text-red-900">
+                            {selectedViewAndLiquidate.orders.filter(p => p.estado_pedido === 'devolucion').length}
+                          </p>
+                        </div>
+                        <div className="bg-orange-50 p-2 rounded-lg text-center">
+                          <div className="flex items-center justify-center gap-1 mb-1">
+                            <Clock className="w-3 h-3 text-orange-600" />
+                            <span className="text-xs font-medium text-orange-800">Reagendados</span>
+                          </div>
+                          <p className="text-lg font-bold text-orange-900">
+                            {selectedViewAndLiquidate.orders.filter(p => p.estado_pedido === 'reagendado').length}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Tabla Detallada de Pedidos */}
+                  <Card className="border-2 border-gray-200 flex-1 flex flex-col">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Package className="w-5 h-5 text-gray-600" />
+                          Detalle de Pedidos ({selectedViewAndLiquidate.orders.length})
+                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={orderStatusFilter}
+                            onValueChange={setOrderStatusFilter}
+                          >
+                            <SelectTrigger className="w-40">
+                              <SelectValue placeholder="Filtrar por estado" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todos los estados</SelectItem>
+                              <SelectItem value="entregado">Entregados</SelectItem>
+                              <SelectItem value="devolucion">Devoluciones</SelectItem>
+                              <SelectItem value="reagendado">Reagendados</SelectItem>
+                              <SelectItem value="pendiente">Pendientes</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0 flex-1 flex flex-col">
+                      <div className="flex-1 overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-20">ID</TableHead>
+                        <TableHead className="w-40">Cliente</TableHead>
+                        <TableHead className="w-24">Teléfono</TableHead>
+                        <TableHead className="w-48">Dirección</TableHead>
+                        <TableHead className="w-24">Valor</TableHead>
+                        <TableHead className="w-24">Método</TableHead>
+                        <TableHead className="w-24">Estado</TableHead>
+                        <TableHead className="w-24">Fecha</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedViewAndLiquidate.orders
+                        .filter(pedido => 
+                          orderStatusFilter === 'all' || 
+                          pedido.estado_pedido === orderStatusFilter
+                        )
+                        .map((pedido) => (
+                        <TableRow key={pedido.id_pedido} className="hover:bg-gray-50">
+                          <TableCell className="font-medium text-xs">
+                            {pedido.id_pedido}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-medium text-xs">{pedido.cliente_nombre}</span>
+                              <span className="text-xs text-gray-500">{pedido.distrito}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {pedido.cliente_telefono ? pedido.cliente_telefono.replace('506', '') : 'N/A'}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            <div className="max-w-48 text-wrap leading-tight" title={pedido.direccion}>
+                              {pedido.direccion ? (
+                                <div className="space-y-1">
+                                  {pedido.direccion.split(',').map((part, index) => (
+                                    <div key={index} className="text-xs leading-tight">
+                                      {part.trim()}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : 'N/A'}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="font-bold text-green-600 text-xs">
+                              {formatCurrency(pedido.valor_total)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {pedido.metodo_pago === 'efectivo' && <Banknote className="w-4 h-4 text-green-600" />}
+                              {pedido.metodo_pago === 'sinpe' && <Smartphone className="w-4 h-4 text-blue-600" />}
+                              {pedido.metodo_pago === 'tarjeta' && <CreditCard className="w-4 h-4 text-purple-600" />}
+                              {pedido.metodo_pago === '2pagos' && <Receipt className="w-4 h-4 text-orange-600" />}
+                              <span className="text-xs font-medium">{pedido.metodo_pago || 'N/A'}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {pedido.estado_pedido === 'entregado' && <CheckCircle className="w-4 h-4 text-green-600" />}
+                              {pedido.estado_pedido === 'devolucion' && <AlertCircle className="w-4 h-4 text-red-600" />}
+                              {pedido.estado_pedido === 'reagendado' && <Clock className="w-4 h-4 text-orange-600" />}
+                              {(!pedido.estado_pedido || pedido.estado_pedido === 'pendiente') && <Package className="w-4 h-4 text-gray-600" />}
+                              <Badge 
+                                variant={pedido.estado_pedido === 'entregado' ? 'default' : 'outline'}
+                                className={`text-xs px-2 py-1 ${
+                                  pedido.estado_pedido === 'entregado' 
+                                    ? 'bg-green-100 text-green-800 border-green-200' 
+                                    : pedido.estado_pedido === 'devolucion'
+                                    ? 'bg-red-100 text-red-800 border-red-200'
+                                    : pedido.estado_pedido === 'reagendado'
+                                    ? 'bg-orange-100 text-orange-800 border-orange-200'
+                                    : 'bg-gray-100 text-gray-800 border-gray-200'
+                                }`}
+                              >
+                                {pedido.estado_pedido === 'entregado' ? 'ENTREGADO' : 
+                                 pedido.estado_pedido === 'devolucion' ? 'DEVOLUCIÓN' :
+                                 pedido.estado_pedido === 'reagendado' ? 'REAGENDADO' :
+                                 'PENDIENTE'}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs text-gray-500">
+                            {pedido.fecha_creacion ? new Date(pedido.fecha_creacion).toLocaleDateString('es-CR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: '2-digit'
+                            }) : 'N/A'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                        </TableBody>
+                      </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               </div>
-
-              <div className="flex justify-end gap-2">
+              
+              {/* Botones de Acción */}
+              <div className="flex justify-end gap-3 pt-4 border-t bg-gray-50 p-4 -mx-6 -mb-6">
                 <Button
                   variant="outline"
                   onClick={() => setShowViewAndLiquidateModal(false)}
+                  className="px-6"
                 >
+                  <X className="w-4 h-4 mr-2" />
                   Cancelar
                 </Button>
                 <Button
                   onClick={() => confirmLiquidation(selectedViewAndLiquidate, parseFloat(initialAmountInput))}
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-green-600 hover:bg-green-700 px-6"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-2" />
                   Confirmar Liquidación

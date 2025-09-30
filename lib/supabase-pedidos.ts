@@ -539,17 +539,11 @@ export const getPedidosCountByTienda = async (tienda: string, fecha?: string): P
 // Función para actualizar un pedido
 export const updatePedido = async (id: string, updates: Partial<PedidoTest>): Promise<boolean> => {
   try {
-    // Añadir timestamp de actualización
-    const updatesWithTimestamp = {
-      ...updates,
-      fecha_actualizacion: new Date().toISOString()
-    };
-
-    console.log(`🔄 Actualizando pedido ${id} con datos:`, updatesWithTimestamp);
+    console.log(`🔄 Actualizando pedido ${id} con datos:`, updates);
 
     const { error } = await supabasePedidos
       .from('pedidos')
-      .update(updatesWithTimestamp)
+      .update(updates)
       .eq('id_pedido', id);
 
     if (error) {
@@ -733,8 +727,6 @@ export const getMensajerosUnicos = async (): Promise<string[]> => {
 // Función para obtener pedidos del día por mensajero específico
 export const getPedidosDelDiaByMensajeroEspecifico = async (mensajeroName: string, fecha: string): Promise<PedidoTest[]> => {
   try {
-    console.log(`🔍 Obteniendo pedidos para ${mensajeroName} el ${fecha}`);
-    
     // Obtener todos los pedidos usando paginación con fecha simple (sin hora)
     let allPedidos: PedidoTest[] = [];
     let from = 0;
@@ -764,7 +756,6 @@ export const getPedidosDelDiaByMensajeroEspecifico = async (mensajeroName: strin
       }
     }
 
-    console.log(`✅ Encontrados ${allPedidos.length} pedidos para ${mensajeroName} el ${fecha}`);
     return allPedidos;
   } catch (error) {
     console.error('❌ Error en getPedidosDelDiaByMensajeroEspecifico:', error);
@@ -818,7 +809,7 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
     
     // Obtener mensajeros únicos
     const mensajeros = await getMensajerosUnicos();
-    console.log(`📋 Mensajeros encontrados: ${mensajeros.length}`, mensajeros);
+    console.log(`📋 Mensajeros encontrados: ${mensajeros.length}`);
     
     // Obtener gastos para todos los mensajeros
     const gastosData = await getGastosMensajeros(fecha);
@@ -828,16 +819,12 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
     
     // Procesar todos los mensajeros, incluso si no tienen pedidos
     for (const mensajero of mensajeros) {
-      console.log(`🔄 Procesando mensajero: ${mensajero}`);
-      
       // Obtener pedidos del día para este mensajero
       const pedidos = await getPedidosDelDiaByMensajeroEspecifico(mensajero, fecha);
-      console.log(`📦 Pedidos para ${mensajero}: ${pedidos.length}`);
       
       // Buscar gastos del mensajero
       const gastosDelMensajero = gastosData.find(g => g.mensajero === mensajero);
       const gastos = gastosDelMensajero?.gastos || [];
-      console.log(`💰 Gastos para ${mensajero}: ${gastos.length}`);
       
       // Calcular totales (incluso si no hay pedidos)
       const totalCollected = pedidos.reduce((sum, pedido) => {
@@ -862,7 +849,7 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
       }, 0);
 
       const totalSpent = gastos.reduce((sum, gasto) => sum + gasto.monto, 0);
-      const initialAmount = 50000; // Monto inicial por defecto
+      const initialAmount = 0; // Monto inicial por defecto (se define en el modal)
       const finalAmount = initialAmount + totalCollected - totalSpent;
 
       liquidaciones.push({

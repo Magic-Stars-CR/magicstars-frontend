@@ -17,7 +17,7 @@ import {
   Loader2,
   Edit3,
   Save,
-  CheckCircle
+  X
 } from 'lucide-react';
 
 // Componentes personalizados
@@ -26,9 +26,8 @@ import { PedidosStats } from '@/components/dashboard/pedidos-stats';
 import { PedidosFilters } from '@/components/dashboard/pedidos-filters';
 import { PedidosTable } from '@/components/dashboard/pedidos-table';
 import { PedidosPagination } from '@/components/dashboard/pedidos-pagination';
-import { StatusUpdateModal } from '@/components/dashboard/status-update-modal';
 
-export default function AdminPedidosPage() {
+export default function AdminPedidosPageRefactored() {
   const { user } = useAuth();
   const {
     pedidos,
@@ -64,7 +63,12 @@ export default function AdminPedidosPage() {
     nota_asesor: ''
   });
 
-  // Estados para actualización de estado
+  // Estados para actualización rápida de estado
+  const [newStatus, setNewStatus] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('');
+  const [isDualPayment, setIsDualPayment] = useState(false);
+  const [dualPaymentAmounts, setDualPaymentAmounts] = useState({ efectivo: '', sinpe: '' });
+  const [statusNotes, setStatusNotes] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
   // Estados para modal de discrepancias
@@ -90,6 +94,14 @@ export default function AdminPedidosPage() {
 
   const handleQuickStatusUpdate = (pedido: PedidoTest) => {
     setSelectedPedido(pedido);
+    setNewStatus(pedido.estado_pedido || 'pendiente');
+    setPaymentMethod(pedido.metodo_pago || 'efectivo');
+    setIsDualPayment(pedido.metodo_pago === '2pagos');
+    setDualPaymentAmounts({
+      efectivo: pedido.efectivo_2_pagos || '',
+      sinpe: pedido.sinpe_2_pagos || ''
+    });
+    setStatusNotes('');
     setIsStatusUpdateModalOpen(true);
   };
 
@@ -106,7 +118,7 @@ export default function AdminPedidosPage() {
     if (editForm.nota_asesor) updates.nota_asesor = editForm.nota_asesor;
 
     setUpdatingPedido(selectedPedido.id_pedido);
-    const success = await updatePedidoStatus(selectedPedido.id_pedido, updates, user?.name || 'Admin');
+    const success = await updatePedidoStatus(selectedPedido.id_pedido, updates);
     setUpdatingPedido(null);
     
     if (success) {
@@ -114,25 +126,45 @@ export default function AdminPedidosPage() {
     }
   };
 
+  const handleStatusUpdate = async () => {
+    if (!selectedPedido || !newStatus) return;
 
-
-  // Función para manejar actualización desde el modal
-  const handleModalUpdate = async (updates: Partial<PedidoTest>) => {
-    if (!selectedPedido) return false;
-    
+    setUpdatingStatus(true);
     try {
-      setUpdatingStatus(true);
-      const success = await updatePedidoStatus(selectedPedido.id_pedido, updates, user?.name || 'Admin');
-      
+      const updates: Partial<PedidoTest> = {
+        estado_pedido: newStatus
+      };
+
+      // Si es entregado, actualizar método de pago
+      if (newStatus === 'entregado') {
+        updates.metodo_pago = paymentMethod;
+        
+        if (isDualPayment && paymentMethod === '2pagos') {
+          updates.efectivo_2_pagos = dualPaymentAmounts.efectivo;
+          updates.sinpe_2_pagos = dualPaymentAmounts.sinpe;
+        }
+      }
+
+      // Si hay notas, añadirlas
+      if (statusNotes) {
+        updates.notas = statusNotes;
+      }
+
+      // Si es entregado, marcar como concretado
+      if (newStatus === 'entregado') {
+        updates.mensajero_concretado = selectedPedido.mensajero_asignado || 'Admin';
+      }
+
+      // Añadir usuario que realiza la acción
+      (updates as any).usuario = user?.name || 'Admin';
+
+      const success = await updatePedidoStatus(selectedPedido.id_pedido, updates);
       if (success) {
         setIsStatusUpdateModalOpen(false);
         setSelectedPedido(null);
-        return true;
       }
-      return false;
     } catch (error) {
       console.error('Error updating status:', error);
-      return false;
     } finally {
       setUpdatingStatus(false);
     }
@@ -262,11 +294,9 @@ export default function AdminPedidosPage() {
         dateFilter={filters.dateFilter}
         specificDate={filters.specificDate}
         dateRange={filters.dateRange}
-        showFutureOrders={filters.showFutureOrders}
         onDateFilterChange={(filter) => updateFilters({ dateFilter: filter })}
         onSpecificDateChange={(date) => updateFilters({ specificDate: date })}
         onDateRangeChange={(range) => updateFilters({ dateRange: range })}
-        onShowFutureOrdersChange={(show) => updateFilters({ showFutureOrders: show })}
         onClearFilters={clearAllFilters}
         hasActiveFilters={hasActiveFilters}
       />
@@ -282,14 +312,14 @@ export default function AdminPedidosPage() {
       />
 
       {/* Tabla de Pedidos */}
-        <PedidosTable
-          pedidos={pedidos}
-          loading={loading}
-          onEditPedido={handleEditPedido}
-          onViewPedido={handleViewPedido}
-          onUpdateStatus={handleQuickStatusUpdate}
-          updatingPedido={updatingPedido}
-        />
+      <PedidosTable
+        pedidos={pedidos}
+        loading={loading}
+        onEditPedido={handleEditPedido}
+        onViewPedido={handleViewPedido}
+        onUpdateStatus={handleQuickStatusUpdate}
+        updatingPedido={updatingPedido}
+      />
 
       {/* Paginación */}
       <PedidosPagination
@@ -415,18 +445,106 @@ export default function AdminPedidosPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Actualización de Estado Reutilizable */}
-      <StatusUpdateModal
-        isOpen={isStatusUpdateModalOpen}
-        onClose={() => {
-          setIsStatusUpdateModalOpen(false);
-          setSelectedPedido(null);
-        }}
-        pedido={selectedPedido}
-        onUpdate={handleModalUpdate}
-        updating={updatingStatus}
-        userRole="admin"
-      />
+      {/* Modal de Actualización Rápida de Estado */}
+      <Dialog open={isStatusUpdateModalOpen} onOpenChange={setIsStatusUpdateModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Actualizar Estado del Pedido</DialogTitle>
+          </DialogHeader>
+          
+          {selectedPedido && (
+            <div className="space-y-4">
+              <div>
+                <Label>Pedido: {selectedPedido.id_pedido}</Label>
+              </div>
+              
+              <div>
+                <Label>Nuevo Estado</Label>
+                <Select value={newStatus} onValueChange={setNewStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pendiente">Pendiente</SelectItem>
+                    <SelectItem value="asignado">Asignado</SelectItem>
+                    <SelectItem value="en_ruta">En Ruta</SelectItem>
+                    <SelectItem value="entregado">Entregado</SelectItem>
+                    <SelectItem value="devolucion">Devolución</SelectItem>
+                    <SelectItem value="reagendado">Reagendado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {newStatus === 'entregado' && (
+                <div>
+                  <Label>Método de Pago</Label>
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar método" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="efectivo">Efectivo</SelectItem>
+                      <SelectItem value="sinpe">SINPE</SelectItem>
+                      <SelectItem value="tarjeta">Tarjeta</SelectItem>
+                      <SelectItem value="2pagos">2 Pagos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  {paymentMethod === '2pagos' && (
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <div>
+                        <Label className="text-xs">Efectivo</Label>
+                        <Input 
+                          type="number"
+                          value={dualPaymentAmounts.efectivo} 
+                          onChange={(e) => setDualPaymentAmounts(prev => ({ ...prev, efectivo: e.target.value }))}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">SINPE</Label>
+                        <Input 
+                          type="number"
+                          value={dualPaymentAmounts.sinpe} 
+                          onChange={(e) => setDualPaymentAmounts(prev => ({ ...prev, sinpe: e.target.value }))}
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <div>
+                <Label>Notas (opcional)</Label>
+                <Textarea 
+                  value={statusNotes} 
+                  onChange={(e) => setStatusNotes(e.target.value)}
+                  placeholder="Notas adicionales..."
+                  rows={3}
+                />
+              </div>
+              
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsStatusUpdateModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={handleStatusUpdate}
+                  disabled={updatingStatus}
+                >
+                  {updatingStatus ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  Actualizar Estado
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Detalle del Pedido */}
       <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
