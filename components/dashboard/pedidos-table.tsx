@@ -73,9 +73,31 @@ export function PedidosTable({
         return 'Sin fecha';
       }
       
-      const dateObj = new Date(date);
+      // Si es una fecha ISO (2025-09-30T00:00:00.000Z), extraer solo la parte de la fecha
+      if (typeof date === 'string' && date.includes('T')) {
+        const datePart = date.split('T')[0]; // Obtener solo YYYY-MM-DD
+        const parts = datePart.split('-');
+        if (parts.length === 3) {
+          const year = parts[0];
+          const month = parts[1];
+          const day = parts[2];
+          return `${day}/${month}/${year}`;
+        }
+      }
       
-      // Verificar si es una fecha válida y no es la fecha Unix epoch
+      // Si es formato YYYY-M-D o YYYY-MM-DD, extraer directamente
+      if (typeof date === 'string' && date.includes('-') && !date.includes('T')) {
+        const parts = date.split('-');
+        if (parts.length === 3) {
+          const year = parts[0];
+          const month = parts[1].padStart(2, '0');
+          const day = parts[2].padStart(2, '0');
+          return `${day}/${month}/${year}`;
+        }
+      }
+      
+      // Fallback: intentar con Date pero sin zona horaria
+      const dateObj = new Date(date);
       if (isNaN(dateObj.getTime()) || dateObj.getTime() === 0) {
         return 'Sin fecha';
       }
@@ -86,6 +108,7 @@ export function PedidosTable({
         day: '2-digit'
       });
     } catch (error) {
+      console.error('Error formateando fecha:', error, 'Fecha original:', date);
       return 'Sin fecha';
     }
   };
@@ -97,9 +120,31 @@ export function PedidosTable({
         return 'Sin fecha';
       }
       
-      const dateObj = new Date(date);
+      // Si es una fecha ISO (2025-09-30T00:00:00.000Z), extraer solo la parte de la fecha
+      if (typeof date === 'string' && date.includes('T')) {
+        const datePart = date.split('T')[0]; // Obtener solo YYYY-MM-DD
+        const parts = datePart.split('-');
+        if (parts.length === 3) {
+          const year = parts[0];
+          const month = parts[1];
+          const day = parts[2];
+          return `${day}/${month}/${year}`;
+        }
+      }
       
-      // Verificar si es una fecha válida y no es la fecha Unix epoch
+      // Si es formato YYYY-M-D o YYYY-MM-DD, extraer directamente
+      if (typeof date === 'string' && date.includes('-') && !date.includes('T')) {
+        const parts = date.split('-');
+        if (parts.length === 3) {
+          const year = parts[0];
+          const month = parts[1].padStart(2, '0');
+          const day = parts[2].padStart(2, '0');
+          return `${day}/${month}/${year}`;
+        }
+      }
+      
+      // Fallback: intentar con Date pero sin zona horaria
+      const dateObj = new Date(date);
       if (isNaN(dateObj.getTime()) || dateObj.getTime() === 0) {
         return 'Sin fecha';
       }
@@ -107,11 +152,10 @@ export function PedidosTable({
       return dateObj.toLocaleDateString('es-CR', {
         year: 'numeric',
         month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
+        day: '2-digit'
       });
     } catch (error) {
+      console.error('Error formateando fecha con hora:', error, 'Fecha original:', date);
       return 'Sin fecha';
     }
   };

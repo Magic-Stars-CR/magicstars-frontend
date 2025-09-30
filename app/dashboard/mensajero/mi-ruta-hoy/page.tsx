@@ -2388,17 +2388,25 @@ export default function MiRutaHoy() {
                         <div className="space-y-1">
                           <div className="text-xs text-gray-500 font-medium">Creación</div>
                           <div className="text-sm font-semibold text-gray-800">
-                            {order.createdAt ? new Date(order.createdAt).toLocaleDateString('es-CR', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: 'numeric'
-                            }) : 'N/A'}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {order.createdAt ? new Date(order.createdAt).toLocaleTimeString('es-CR', {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            }) : ''}
+                            {order.createdAt ? (() => {
+                              // Si es una fecha ISO (2025-09-30T00:00:00.000Z), extraer solo la parte de la fecha
+                              if (order.createdAt.includes('T')) {
+                                const datePart = order.createdAt.split('T')[0]; // Obtener solo YYYY-MM-DD
+                                const parts = datePart.split('-');
+                                if (parts.length === 3) {
+                                  const year = parts[0];
+                                  const month = parts[1];
+                                  const day = parts[2];
+                                  return `${day}/${month}/${year}`;
+                                }
+                              }
+                              // Fallback
+                              return new Date(order.createdAt).toLocaleDateString('es-CR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric'
+                              });
+                            })() : 'N/A'}
                           </div>
                         </div>
                       </TableCell>
@@ -2406,17 +2414,25 @@ export default function MiRutaHoy() {
                         <div className="space-y-1">
                           <div className="text-xs text-gray-500 font-medium">Entrega</div>
                           <div className="text-sm font-semibold text-gray-800">
-                            {order.updatedAt ? new Date(order.updatedAt).toLocaleDateString('es-CR', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: 'numeric'
-                            }) : 'N/A'}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {order.updatedAt ? new Date(order.updatedAt).toLocaleTimeString('es-CR', {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            }) : ''}
+                            {order.updatedAt ? (() => {
+                              // Si es una fecha ISO (2025-09-30T00:00:00.000Z), extraer solo la parte de la fecha
+                              if (order.updatedAt.includes('T')) {
+                                const datePart = order.updatedAt.split('T')[0]; // Obtener solo YYYY-MM-DD
+                                const parts = datePart.split('-');
+                                if (parts.length === 3) {
+                                  const year = parts[0];
+                                  const month = parts[1];
+                                  const day = parts[2];
+                                  return `${day}/${month}/${year}`;
+                                }
+                              }
+                              // Fallback
+                              return new Date(order.updatedAt).toLocaleDateString('es-CR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric'
+                              });
+                            })() : 'N/A'}
                           </div>
                         </div>
                       </TableCell>
