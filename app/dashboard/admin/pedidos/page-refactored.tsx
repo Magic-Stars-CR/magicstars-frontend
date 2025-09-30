@@ -17,7 +17,8 @@ import {
   Loader2,
   Edit3,
   Save,
-  X
+  X,
+  CheckCircle
 } from 'lucide-react';
 
 // Componentes personalizados
@@ -294,9 +295,11 @@ export default function AdminPedidosPageRefactored() {
         dateFilter={filters.dateFilter}
         specificDate={filters.specificDate}
         dateRange={filters.dateRange}
+        showFutureOrders={filters.showFutureOrders}
         onDateFilterChange={(filter) => updateFilters({ dateFilter: filter })}
         onSpecificDateChange={(date) => updateFilters({ specificDate: date })}
         onDateRangeChange={(range) => updateFilters({ dateRange: range })}
+        onShowFutureOrdersChange={(show) => updateFilters({ showFutureOrders: show })}
         onClearFilters={clearAllFilters}
         hasActiveFilters={hasActiveFilters}
       />

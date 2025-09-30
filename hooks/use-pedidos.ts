@@ -177,9 +177,9 @@ export function usePedidos() {
         const todaySimple = getCostaRicaDateSimple(today);
         
         // Filtro de pedidos futuros (si está desactivado, excluir pedidos futuros)
-        if (!filters.showFutureOrders && orderDateSimple > todaySimple) {
+        if (!filters.showFutureOrders && todaySimple && orderDateSimple && orderDateSimple > todaySimple) {
           matchesDate = false;
-        } else if (filters.dateFilter !== 'all') {
+        } else if (filters.dateFilter !== 'all' && todaySimple) {
           switch (filters.dateFilter) {
             case 'today':
               matchesDate = orderDateSimple === todaySimple;
@@ -193,34 +193,38 @@ export function usePedidos() {
             case 'week':
               const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
               const weekAgoSimple = getCostaRicaDateSimple(weekAgo);
-              matchesDate = orderDateSimple >= weekAgoSimple;
+              matchesDate = orderDateSimple && weekAgoSimple ? orderDateSimple >= weekAgoSimple : false;
               break;
             case 'month':
               const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
               const monthAgoSimple = getCostaRicaDateSimple(monthAgo);
-              matchesDate = orderDateSimple >= monthAgoSimple;
+              matchesDate = orderDateSimple && monthAgoSimple ? orderDateSimple >= monthAgoSimple : false;
               break;
             case 'last_month':
               const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
               const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
               const lastMonthStartSimple = getCostaRicaDateSimple(lastMonthStart);
               const lastMonthEndSimple = getCostaRicaDateSimple(lastMonthEnd);
-              matchesDate = orderDateSimple >= lastMonthStartSimple && 
-                           orderDateSimple <= lastMonthEndSimple;
+              matchesDate = orderDateSimple && lastMonthStartSimple && lastMonthEndSimple ? 
+                           orderDateSimple >= lastMonthStartSimple && orderDateSimple <= lastMonthEndSimple : false;
               break;
             case 'year':
               const yearAgo = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
               const yearAgoSimple = getCostaRicaDateSimple(yearAgo);
-              matchesDate = orderDateSimple >= yearAgoSimple;
+              matchesDate = orderDateSimple && yearAgoSimple ? orderDateSimple >= yearAgoSimple : false;
               break;
             case 'specific':
               if (filters.specificDate) {
-                matchesDate = orderDateSimple === filters.specificDate;
+                const specificDateSimple = getCostaRicaDateSimple(filters.specificDate);
+                matchesDate = orderDateSimple === specificDateSimple;
               }
               break;
             case 'range':
               if (filters.dateRange.start && filters.dateRange.end) {
-                matchesDate = orderDateSimple >= filters.dateRange.start && orderDateSimple <= filters.dateRange.end;
+                const startDateSimple = getCostaRicaDateSimple(filters.dateRange.start);
+                const endDateSimple = getCostaRicaDateSimple(filters.dateRange.end);
+                matchesDate = orderDateSimple && startDateSimple && endDateSimple ? 
+                  orderDateSimple >= startDateSimple && orderDateSimple <= endDateSimple : false;
               }
               break;
           }
