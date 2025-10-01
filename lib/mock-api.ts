@@ -2678,6 +2678,9 @@ export const mockApi = {
       totalCollected: data.totalCollected || 0,
       totalSpent: data.totalSpent || 0,
       totalToDeliver: data.totalToDeliver || 0,
+      sinpePayments: data.sinpePayments || 0,
+      cashPayments: data.cashPayments || 0,
+      tarjetaPayments: data.tarjetaPayments || 0,
       
       totalOrders: data.totalOrders || 0,
       deliveredOrders: data.deliveredOrders || 0,
@@ -3866,6 +3869,9 @@ const mockRouteLiquidations: RouteLiquidation[] = [
     totalCollected: 125000,
     totalSpent: 15000,
     totalToDeliver: 110000,
+    sinpePayments: 45000,
+    cashPayments: 80000,
+    tarjetaPayments: 0,
     
     totalOrders: 8,
     deliveredOrders: 6,
@@ -3895,6 +3901,9 @@ const mockRouteLiquidations: RouteLiquidation[] = [
     totalCollected: 89000,
     totalSpent: 12000,
     totalToDeliver: 77000,
+    sinpePayments: 35000,
+    cashPayments: 54000,
+    tarjetaPayments: 0,
     
     totalOrders: 5,
     deliveredOrders: 4,
@@ -3923,6 +3932,9 @@ const mockRouteLiquidations: RouteLiquidation[] = [
     totalCollected: 156000,
     totalSpent: 18000,
     totalToDeliver: 138000,
+    sinpePayments: 62000,
+    cashPayments: 94000,
+    tarjetaPayments: 0,
     
     totalOrders: 7,
     deliveredOrders: 7,
