@@ -49,6 +49,9 @@ import {
   MessageSquare,
   BarChart3,
   PieChart,
+  Fuel,
+  Wrench,
+  Car,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 import Link from 'next/link';
@@ -62,6 +65,7 @@ interface LiquidationCalculation {
   totalSpent: number; // Gastos del mensajero
   sinpePayments: number; // Pagos en SINPE
   cashPayments: number; // Pagos en efectivo
+  tarjetaPayments: number; // Pagos en tarjeta
   finalAmount: number; // Monto final a entregar
   orders: PedidoTest[];
   isLiquidated: boolean;
@@ -79,7 +83,7 @@ export default function AdminLiquidationPage() {
   
   // Estados para el módulo de liquidación mejorado
   const [calculations, setCalculations] = useState<LiquidationCalculation[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState('');
   const [editingInitialAmount, setEditingInitialAmount] = useState<string | null>(null);
   const [newInitialAmount, setNewInitialAmount] = useState('');
   const [isEditingRestricted, setIsEditingRestricted] = useState(false);
@@ -89,11 +93,34 @@ export default function AdminLiquidationPage() {
   const [selectedRouteDetail, setSelectedRouteDetail] = useState<LiquidationCalculation | null>(null);
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [orderPaymentFilter, setOrderPaymentFilter] = useState('all');
+  const [statusCounts, setStatusCounts] = useState({
+    total: 0,
+    entregados: 0,
+    devoluciones: 0,
+    reagendados: 0,
+    pendientes: 0
+  });
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [selectedOrderNotes, setSelectedOrderNotes] = useState<PedidoTest | null>(null);
   const [hasRealData, setHasRealData] = useState(false);
   const [showViewAndLiquidateModal, setShowViewAndLiquidateModal] = useState(false);
   const [selectedViewAndLiquidate, setSelectedViewAndLiquidate] = useState<LiquidationCalculation | null>(null);
+  const [showExpensesModal, setShowExpensesModal] = useState(false);
+  const [selectedExpenses, setSelectedExpenses] = useState<{
+    mensajero: string;
+    gastos: {
+      id: string;
+      monto: number;
+      tipo_gasto: string;
+      comprobante_link: string;
+      fecha: string;
+    }[];
+  } | null>(null);
+  const [showSinpeModal, setShowSinpeModal] = useState(false);
+  const [showTarjetaModal, setShowTarjetaModal] = useState(false);
+  const [selectedSinpeOrders, setSelectedSinpeOrders] = useState<PedidoTest[]>([]);
+  const [selectedTarjetaOrders, setSelectedTarjetaOrders] = useState<PedidoTest[]>([]);
+  const [isLiquidationCompleted, setIsLiquidationCompleted] = useState(false);
   const [initialAmountInput, setInitialAmountInput] = useState('0');
   
   // Progress loader
@@ -109,9 +136,21 @@ export default function AdminLiquidationPage() {
   } = useProgressLoader();
 
   useEffect(() => {
+    // Inicializar con la fecha de Costa Rica si no está definida
+    const initializeDate = async () => {
+      if (!selectedDate) {
+        const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
+        const costaRicaDate = getCostaRicaDateISO();
+        setSelectedDate(costaRicaDate);
+        console.log('📅 Fecha inicializada para Costa Rica:', costaRicaDate);
+      }
+    };
+    
+    initializeDate();
     loadData();
     loadCalculations();
   }, [filters, selectedDate]);
+
 
   const loadData = async () => {
     try {
@@ -143,36 +182,29 @@ export default function AdminLiquidationPage() {
       
       // Paso 1: Obtener liquidaciones reales
       setStepStatus('mensajeros', 'loading', 'Buscando mensajeros en la base de datos...');
-      const liquidacionesReales = await getLiquidacionesReales(selectedDate);
-      console.log('✅ Liquidaciones reales obtenidas:', liquidacionesReales.length);
       
-      // LOG DETALLADO DE PEDIDOS Y ESTADOS
-      console.log('📋 ===== ANÁLISIS DETALLADO DE PEDIDOS =====');
-      liquidacionesReales.forEach((liquidation, index) => {
-        console.log(`\n👤 Mensajero ${index + 1}: ${liquidation.mensajero}`);
-        console.log(`📦 Total de pedidos: ${liquidation.pedidos.length}`);
-        
-        if (liquidation.pedidos.length > 0) {
-          console.log('📊 Estados de pedidos:');
-          const estados = liquidation.pedidos.reduce((acc, pedido) => {
-            const estado = pedido.estado_pedido || 'sin_estado';
-            acc[estado] = (acc[estado] || 0) + 1;
-            return acc;
-          }, {} as Record<string, number>);
-          
-          Object.entries(estados).forEach(([estado, count]) => {
-            console.log(`   - ${estado}: ${count} pedidos`);
-          });
-          
-          console.log('🔍 Primeros 3 pedidos:');
-          liquidation.pedidos.slice(0, 3).forEach((pedido, i) => {
-            console.log(`   ${i + 1}. ID: ${pedido.id_pedido}, Estado: "${pedido.estado_pedido || 'sin_estado'}", Cliente: ${pedido.cliente_nombre}, Valor: ₡${pedido.valor_total}`);
-          });
-        } else {
-          console.log('   ⚠️ No hay pedidos para este mensajero');
-        }
-      });
-      console.log('📋 ===========================================\n');
+      // Asegurar que tenemos una fecha válida
+      let fechaParaUsar = selectedDate;
+      if (!fechaParaUsar) {
+        const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
+        fechaParaUsar = getCostaRicaDateISO();
+        console.log('📅 Usando fecha de Costa Rica por defecto:', fechaParaUsar);
+      }
+      
+      const liquidacionesReales = await getLiquidacionesReales(fechaParaUsar);
+      console.log('✅ Liquidaciones reales obtenidas:', liquidacionesReales.length);
+      console.log('📅 Fecha usada para la consulta:', fechaParaUsar);
+      
+      // Debug: mostrar fechas de los primeros pedidos
+      if (liquidacionesReales.length > 0 && liquidacionesReales[0].pedidos.length > 0) {
+        console.log('🔍 Primeros pedidos encontrados:');
+        liquidacionesReales[0].pedidos.slice(0, 3).forEach((pedido, index) => {
+          console.log(`  ${index + 1}. ID: ${pedido.id_pedido}, Fecha: ${pedido.fecha_creacion}`);
+        });
+      }
+      
+      // Log básico de liquidaciones cargadas
+      console.log(`✅ Liquidaciones cargadas: ${liquidacionesReales.length} mensajeros`);
       
       setStepStatus('mensajeros', 'completed', `${liquidacionesReales.length} mensajeros encontrados`);
       setProgress(30);
@@ -195,6 +227,7 @@ export default function AdminLiquidationPage() {
         totalSpent: liquidation.totalSpent,
         sinpePayments: liquidation.sinpePayments,
         cashPayments: liquidation.cashPayments,
+        tarjetaPayments: liquidation.tarjetaPayments || 0,
         finalAmount: liquidation.finalAmount,
         orders: liquidation.pedidos,
         isLiquidated: false,
@@ -211,6 +244,12 @@ export default function AdminLiquidationPage() {
       setHasRealData(calculations.some(c => c.orders.length > 0));
       setStepStatus('finalization', 'completed', 'Proceso completado');
       setProgress(100);
+      
+      // Verificar estados de liquidación para todos los mensajeros
+      setTimeout(async () => {
+        await checkAllLiquidationStatuses(calculations);
+      }, 1000);
+      
       
       // Cerrar loader
       setTimeout(() => {
@@ -237,28 +276,36 @@ export default function AdminLiquidationPage() {
   const calculateLiquidation = (calculation: LiquidationCalculation): LiquidationCalculation => {
     // Los datos ya vienen calculados de Supabase, pero podemos recalcular si es necesario
     const totalCollected = calculation.orders.reduce((sum, order) => {
-      if (order.estado_pedido === 'entregado') {
+      if (order.estado_pedido === 'ENTREGADO') {
         return sum + order.valor_total;
       }
       return sum;
     }, 0);
 
     const sinpePayments = calculation.orders.reduce((sum, order) => {
-      if (order.estado_pedido === 'entregado' && order.metodo_pago === 'sinpe') {
+      if (order.estado_pedido === 'ENTREGADO' && order.metodo_pago === 'SINPE') {
         return sum + order.valor_total;
       }
       return sum;
     }, 0);
 
     const cashPayments = calculation.orders.reduce((sum, order) => {
-      if (order.estado_pedido === 'entregado' && order.metodo_pago === 'efectivo') {
+      if (order.estado_pedido === 'ENTREGADO' && order.metodo_pago === 'EFECTIVO') {
+        return sum + order.valor_total;
+      }
+      return sum;
+    }, 0);
+
+    const tarjetaPayments = calculation.orders.reduce((sum, order) => {
+      if (order.estado_pedido === 'ENTREGADO' && order.metodo_pago === 'TARJETA') {
         return sum + order.valor_total;
       }
       return sum;
     }, 0);
 
     const totalSpent = calculation.totalSpent; // Usar el valor ya calculado
-    const finalAmount = calculation.initialAmount + totalCollected - totalSpent;
+    // El mensajero solo debe entregar el efectivo recaudado, no el total de todos los pagos
+    const finalAmount = calculation.initialAmount + cashPayments - totalSpent;
 
     return {
       ...calculation,
@@ -266,6 +313,7 @@ export default function AdminLiquidationPage() {
       totalSpent,
       sinpePayments,
       cashPayments,
+      tarjetaPayments,
       finalAmount
     };
   };
@@ -322,7 +370,69 @@ export default function AdminLiquidationPage() {
     setShowRouteDetailModal(true);
   };
 
-  const handleViewAndLiquidate = (calculation: LiquidationCalculation) => {
+  const handleViewAndLiquidate = async (calculation: LiquidationCalculation) => {
+    // Verificar si la liquidación ya está completada
+    try {
+      const { checkLiquidationStatus } = await import('@/lib/supabase-pedidos');
+      const fechaParaVerificar = selectedDate || calculation.routeDate;
+      const isCompleted = await checkLiquidationStatus(calculation.messengerName, fechaParaVerificar);
+      setIsLiquidationCompleted(isCompleted);
+      
+      // Actualizar el estado en el cálculo para que se refleje en la tabla
+      if (isCompleted) {
+        setCalculations(prev => 
+          prev.map(calc => 
+            calc.messengerId === calculation.messengerId 
+              ? { ...calc, isLiquidated: true }
+              : calc
+          )
+        );
+      }
+      
+      console.log(`🔍 Liquidación para ${calculation.messengerName} en ${fechaParaVerificar}: ${isCompleted ? 'COMPLETADA' : 'PENDIENTE'}`);
+    } catch (error) {
+      console.error('❌ Error verificando estado de liquidación:', error);
+      setIsLiquidationCompleted(false);
+    }
+
+    // Calcular contadores de estado
+    const counts = {
+      total: calculation.orders.length,
+      entregados: calculation.orders.filter(p => p.estado_pedido === 'ENTREGADO').length,
+      devoluciones: calculation.orders.filter(p => p.estado_pedido === 'DEVOLUCION').length,
+      reagendados: calculation.orders.filter(p => p.estado_pedido === 'REAGENDADO').length,
+      pendientes: calculation.orders.filter(p => p.estado_pedido === 'PENDIENTE' || !p.estado_pedido).length
+    };
+    setStatusCounts(counts);
+
+    // Console.log simplificado y legible
+    const pedidosList = calculation.orders.map((pedido, index) => {
+      const estado = pedido.estado_pedido || 'sin_estado';
+      const metodo = pedido.metodo_pago || 'sin_metodo';
+      const entregado = estado === 'ENTREGADO' ? '✅' : '❌';
+      const cuentaEnRecaudado = estado === 'ENTREGADO' ? 'SÍ' : 'NO';
+      
+      return `${index + 1}. ${pedido.id_pedido} | ${pedido.cliente_nombre} | ${estado} ${entregado} | ${metodo} | ₡${pedido.valor_total} | Cuenta: ${cuentaEnRecaudado}`;
+    }).join('\n');
+
+    console.log(`
+🔍 ===== LIQUIDACIÓN: ${calculation.messengerName} =====
+📅 Fecha: ${calculation.routeDate}
+📦 Total pedidos: ${calculation.orders.length}
+💰 Total Recaudado: ₡${calculation.totalCollected}
+💵 Efectivo: ₡${calculation.cashPayments}
+📱 SINPE: ₡${calculation.sinpePayments}
+💳 Tarjeta: ₡${calculation.tarjetaPayments || 0}
+💸 Gastos: ₡${calculation.totalSpent}
+🏦 Plata Inicial: ₡${calculation.initialAmount}
+📊 Monto Final: ₡${calculation.finalAmount}
+
+📋 LISTA DE PEDIDOS:
+${pedidosList}
+
+🔍 ==========================================
+    `);
+    
     setSelectedViewAndLiquidate(calculation);
     setInitialAmountInput('0'); // Siempre empezar en 0
     setShowViewAndLiquidateModal(true);
@@ -333,8 +443,73 @@ export default function AdminLiquidationPage() {
     setShowNotesModal(true);
   };
 
+  const handleViewExpenses = async (calculation: LiquidationCalculation) => {
+    try {
+      // Obtener gastos del mensajero usando la misma lógica que en "Mi Ruta de Hoy"
+      const { getGastosMensajeros } = await import('@/lib/supabase-pedidos');
+      const gastosData = await getGastosMensajeros(calculation.routeDate);
+      
+      // Buscar gastos del mensajero específico
+      const gastosDelMensajero = gastosData.find(g => g.mensajero === calculation.messengerName);
+      
+      setSelectedExpenses({
+        mensajero: calculation.messengerName,
+        gastos: gastosDelMensajero?.gastos || []
+      });
+      setShowExpensesModal(true);
+    } catch (error) {
+      console.error('Error obteniendo gastos:', error);
+      setSelectedExpenses({
+        mensajero: calculation.messengerName,
+        gastos: []
+      });
+      setShowExpensesModal(true);
+    }
+  };
+
+  const handleViewSinpeOrders = (calculation: LiquidationCalculation) => {
+    const sinpeOrders = calculation.orders.filter(pedido => 
+      pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'SINPE'
+    );
+    setSelectedSinpeOrders(sinpeOrders);
+    setShowSinpeModal(true);
+  };
+
+  const handleViewTarjetaOrders = (calculation: LiquidationCalculation) => {
+    const tarjetaOrders = calculation.orders.filter(pedido => 
+      pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'TARJETA'
+    );
+    setSelectedTarjetaOrders(tarjetaOrders);
+    setShowTarjetaModal(true);
+  };
+
   const handleViewMap = (link: string) => {
     window.open(link, '_blank', 'noopener,noreferrer');
+  };
+
+  // Funciones para iconos y colores de gastos (igual que en Mi Ruta de Hoy)
+  const getExpenseIcon = (type: string) => {
+    switch (type.toLowerCase()) {
+      case 'combustible': return <Fuel className="w-4 h-4" />;
+      case 'mantenimiento': return <Wrench className="w-4 h-4" />;
+      case 'peaje': return <Car className="w-4 h-4" />;
+      case 'fuel': return <Fuel className="w-4 h-4" />;
+      case 'maintenance': return <Wrench className="w-4 h-4" />;
+      case 'peaje': return <Car className="w-4 h-4" />;
+      default: return <DollarSign className="w-4 h-4" />;
+    }
+  };
+
+  const getExpenseColor = (type: string) => {
+    switch (type.toLowerCase()) {
+      case 'combustible': return 'bg-blue-100 text-blue-600';
+      case 'mantenimiento': return 'bg-orange-100 text-orange-600';
+      case 'peaje': return 'bg-purple-100 text-purple-600';
+      case 'fuel': return 'bg-blue-100 text-blue-600';
+      case 'maintenance': return 'bg-orange-100 text-orange-600';
+      case 'peaje': return 'bg-purple-100 text-purple-600';
+      default: return 'bg-gray-100 text-gray-600';
+    }
   };
 
   const handleViewComprobante = (comprobante: string) => {
@@ -342,9 +517,63 @@ export default function AdminLiquidationPage() {
     alert(`Ver comprobante: ${comprobante}`);
   };
 
+  // Función para verificar y actualizar el estado de todas las liquidaciones
+  const checkAllLiquidationStatuses = async (calculations: LiquidationCalculation[]) => {
+    try {
+      const { checkLiquidationStatus, getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
+      const fechaParaVerificar = selectedDate || getCostaRicaDateISO();
+      
+      console.log('🔍 Verificando estados de liquidación para todos los mensajeros...');
+      
+      // Verificar cada mensajero y actualizar el estado
+      for (const calc of calculations) {
+        try {
+          const isCompleted = await checkLiquidationStatus(calc.messengerName, fechaParaVerificar);
+          
+          if (isCompleted && !calc.isLiquidated) {
+            // Actualizar el estado en el array de cálculos
+            setCalculations(prev => 
+              prev.map(c => 
+                c.messengerId === calc.messengerId 
+                  ? { ...c, isLiquidated: true }
+                  : c
+              )
+            );
+            console.log(`✅ ${calc.messengerName} marcado como liquidado`);
+          }
+        } catch (error) {
+          console.error(`❌ Error verificando ${calc.messengerName}:`, error);
+        }
+      }
+      
+      console.log('✅ Verificación de estados completada');
+    } catch (error) {
+      console.error('❌ Error en checkAllLiquidationStatuses:', error);
+    }
+  };
+
+
   const confirmLiquidation = async (calculation: LiquidationCalculation, initialAmount?: number) => {
     try {
-      const finalAmount = initialAmount ? initialAmount + calculation.totalCollected - calculation.totalSpent : calculation.finalAmount;
+      // Usar la fecha de la liquidación seleccionada
+      const fechaParaEnviar = selectedDate || calculation.routeDate;
+      
+      // Usar el monto inicial del input o 0 por defecto
+      const plataInicial = initialAmount || 0;
+      
+      // Calcular el monto final correctamente: Plata Inicial + Efectivo Recaudado - Gastos
+      const montoFinal = plataInicial + calculation.cashPayments - calculation.totalSpent;
+      
+      console.log('📊 Datos de liquidación a enviar:', {
+        fecha: fechaParaEnviar,
+        mensajero: calculation.messengerName,
+        plata_inicial: plataInicial,
+        total_recaudado: calculation.totalCollected,
+        pagos_sinpe: calculation.sinpePayments,
+        pagos_efectivo: calculation.cashPayments,
+        gastos: calculation.totalSpent,
+        monto_final: montoFinal
+      });
       
       // Enviar al endpoint de liquidación
       const response = await fetch('https://primary-production-2b25b.up.railway.app/webhook/add-liquidacion', {
@@ -353,14 +582,14 @@ export default function AdminLiquidationPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          fecha: selectedDate,
+          fecha: fechaParaEnviar,
           mensajero: calculation.messengerName,
-          plata_inicial: initialAmount || calculation.initialAmount,
+          plata_inicial: plataInicial,
           total_recaudado: calculation.totalCollected,
           pagos_sinpe: calculation.sinpePayments,
           pagos_efectivo: calculation.cashPayments,
           gastos: calculation.totalSpent,
-          monto_final: finalAmount
+          monto_final: montoFinal
         })
       });
 
@@ -375,7 +604,7 @@ export default function AdminLiquidationPage() {
       setCalculations(prev => 
         prev.map(calc => 
           calc.messengerId === calculation.messengerId 
-            ? { ...calc, isLiquidated: true, canEdit: false, initialAmount: initialAmount || calculation.initialAmount }
+            ? { ...calc, isLiquidated: true, canEdit: false, initialAmount: plataInicial }
             : calc
         )
       );
@@ -385,7 +614,6 @@ export default function AdminLiquidationPage() {
       
       setShowLiquidationModal(false);
       setShowViewAndLiquidateModal(false);
-      alert(`Liquidación completada para ${calculation.messengerName}`);
     } catch (error) {
       console.error('Error confirming liquidation:', error);
       alert('Error al confirmar la liquidación: ' + (error instanceof Error ? error.message : 'Error desconocido'));
@@ -603,59 +831,72 @@ export default function AdminLiquidationPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <RechartsPieChart>
-                <Pie
-                  data={[
-                    {
-                      name: 'Efectivo',
-                      value: calculations.reduce((sum, calc) => 
-                        sum + calc.orders.filter(o => o.metodo_pago === 'efectivo').length, 0
-                      ),
-                      color: '#10b981'
-                    },
-                    {
-                      name: 'SINPE',
-                      value: calculations.reduce((sum, calc) => 
-                        sum + calc.orders.filter(o => o.metodo_pago === 'sinpe').length, 0
-                      ),
-                      color: '#3b82f6'
-                    },
-                    {
-                      name: 'Tarjeta',
-                      value: calculations.reduce((sum, calc) => 
-                        sum + calc.orders.filter(o => o.metodo_pago === 'tarjeta').length, 0
-                      ),
-                      color: '#8b5cf6'
-                    },
-                    {
-                      name: '2 Pagos',
-                      value: calculations.reduce((sum, calc) => 
-                        sum + calc.orders.filter(o => o.metodo_pago === '2pagos').length, 0
-                      ),
-                      color: '#f59e0b'
-                    }
-                  ]}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {[
-                    { name: 'Efectivo', value: 0, color: '#10b981' },
-                    { name: 'SINPE', value: 0, color: '#3b82f6' },
-                    { name: 'Tarjeta', value: 0, color: '#8b5cf6' },
-                    { name: '2 Pagos', value: 0, color: '#f59e0b' }
-                  ].map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </RechartsPieChart>
-            </ResponsiveContainer>
+            {(() => {
+              const pieData = [
+                {
+                  name: 'Efectivo',
+                  value: calculations.reduce((sum, calc) => 
+                    sum + calc.orders.filter(o => o.metodo_pago === 'EFECTIVO').length, 0
+                  ),
+                  color: '#10b981'
+                },
+                {
+                  name: 'SINPE',
+                  value: calculations.reduce((sum, calc) => 
+                    sum + calc.orders.filter(o => o.metodo_pago === 'SINPE').length, 0
+                  ),
+                  color: '#3b82f6'
+                },
+                {
+                  name: 'Tarjeta',
+                  value: calculations.reduce((sum, calc) => 
+                    sum + calc.orders.filter(o => o.metodo_pago === 'TARJETA').length, 0
+                  ),
+                  color: '#8b5cf6'
+                },
+                {
+                  name: '2 Pagos',
+                  value: calculations.reduce((sum, calc) => 
+                    sum + calc.orders.filter(o => o.metodo_pago === '2PAGOS').length, 0
+                  ),
+                  color: '#f59e0b'
+                }
+              ].filter(item => item.value > 0);
+
+              if (pieData.length === 0) {
+                return (
+                  <div className="flex items-center justify-center h-[300px] text-gray-500">
+                    <div className="text-center">
+                      <PieChart className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                      <p>No hay datos de métodos de pago</p>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <ResponsiveContainer width="100%" height={300}>
+                  <RechartsPieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </RechartsPieChart>
+                </ResponsiveContainer>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>
@@ -763,12 +1004,11 @@ export default function AdminLiquidationPage() {
                           <div className="flex items-center gap-2">
                             <Button
                               size="sm"
-                              variant="outline"
-                              onClick={() => handleViewRouteDetail(calculated)}
-                              className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                              onClick={() => handleViewAndLiquidate(calculated)}
+                              className="bg-green-600 hover:bg-green-700 text-white"
                             >
                               <Eye className="w-4 h-4 mr-1" />
-                              Ver Detalles
+                              Ver
                             </Button>
                             <div className="flex items-center gap-1 text-green-600">
                               <CheckCircle2 className="w-4 h-4" />
@@ -1329,7 +1569,28 @@ export default function AdminLiquidationPage() {
                                   <div className="flex justify-between">
                                     <span className="text-gray-600">Fecha Creación:</span>
                                     <span className="font-medium text-gray-800">
-                                      {pedido.fecha_creacion ? new Date(pedido.fecha_creacion).toLocaleDateString('es-CR') : 'N/A'}
+                                      {pedido.fecha_creacion ? (() => {
+                                        if (pedido.fecha_creacion.includes('T')) {
+                                          const datePart = pedido.fecha_creacion.split('T')[0];
+                                          const parts = datePart.split('-');
+                                          if (parts.length === 3) {
+                                            const year = parts[0];
+                                            const month = parts[1];
+                                            const day = parts[2];
+                                            return `${day}/${month}/${year}`;
+                                          }
+                                        }
+                                        if (pedido.fecha_creacion.includes('-') && !pedido.fecha_creacion.includes('T')) {
+                                          const parts = pedido.fecha_creacion.split('-');
+                                          if (parts.length === 3) {
+                                            const year = parts[0];
+                                            const month = parts[1].padStart(2, '0');
+                                            const day = parts[2].padStart(2, '0');
+                                            return `${day}/${month}/${year}`;
+                                          }
+                                        }
+                                        return new Date(pedido.fecha_creacion).toLocaleDateString('es-CR');
+                                      })() : 'N/A'}
                                     </span>
                                   </div>
                                   <div className="flex justify-between">
@@ -1463,10 +1724,10 @@ export default function AdminLiquidationPage() {
           
           {selectedViewAndLiquidate && (
             <div className="flex-1">
-              <div className="grid grid-cols-1 xl:grid-cols-5 gap-6 p-1">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 p-1">
                 
                 {/* Columna Izquierda - Resumen y Cálculos */}
-                <div className="xl:col-span-1 space-y-4">
+                <div className="lg:col-span-1 space-y-4">
                   
                   {/* Resumen Financiero */}
                   <Card className="border-2 border-blue-200">
@@ -1487,35 +1748,90 @@ export default function AdminLiquidationPage() {
                             {formatCurrency(selectedViewAndLiquidate.totalCollected)}
                           </p>
                         </div>
-                        <div className="bg-red-50 p-3 rounded-lg">
+                        <div 
+                          className="bg-red-50 p-3 rounded-lg cursor-pointer hover:bg-red-100 transition-colors duration-200"
+                          onClick={() => handleViewExpenses(selectedViewAndLiquidate)}
+                        >
                           <div className="flex items-center gap-2 mb-1">
                             <Minus className="w-4 h-4 text-red-600" />
                             <span className="text-sm font-medium text-red-800">Gastos</span>
+                            <Eye className="w-3 h-3 text-red-500 ml-auto" />
                           </div>
                           <p className="text-xl font-bold text-red-900">
                             {formatCurrency(selectedViewAndLiquidate.totalSpent)}
                           </p>
+                          <p className="text-xs text-red-600 mt-1">Click para ver detalles</p>
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-blue-50 p-3 rounded-lg">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Smartphone className="w-4 h-4 text-blue-600" />
-                            <span className="text-sm font-medium text-blue-800">SINPE</span>
+                      {/* Desglose por método de pago - Filtros clickeables */}
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Filtros por Método de Pago</h4>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div 
+                            className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
+                              orderPaymentFilter === 'EFECTIVO' 
+                                ? 'bg-green-100 border-2 border-green-300' 
+                                : 'bg-green-50 hover:bg-green-100'
+                            }`}
+                            onClick={() => setOrderPaymentFilter(orderPaymentFilter === 'EFECTIVO' ? 'all' : 'EFECTIVO')}
+                          >
+                            <div className="flex items-center justify-center gap-1 mb-1">
+                              <Banknote className="w-3 h-3 text-green-600" />
+                              <span className="text-xs font-medium text-green-800">Efectivo</span>
+                            </div>
+                            <p className="text-sm font-bold text-green-900">
+                              {formatCurrency(selectedViewAndLiquidate.cashPayments)}
+                            </p>
                           </div>
-                          <p className="text-lg font-bold text-blue-900">
-                            {formatCurrency(selectedViewAndLiquidate.sinpePayments)}
-                          </p>
-                        </div>
-                        <div className="bg-green-50 p-3 rounded-lg">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Banknote className="w-4 h-4 text-green-600" />
-                            <span className="text-sm font-medium text-green-800">Efectivo</span>
+                          <div 
+                            className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
+                              orderPaymentFilter === 'SINPE' 
+                                ? 'bg-blue-100 border-2 border-blue-300' 
+                                : 'bg-blue-50 hover:bg-blue-100'
+                            }`}
+                            onClick={() => {
+                              setOrderPaymentFilter(orderPaymentFilter === 'SINPE' ? 'all' : 'SINPE');
+                              if (selectedViewAndLiquidate.sinpePayments > 0) {
+                                handleViewSinpeOrders(selectedViewAndLiquidate);
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-center gap-1 mb-1">
+                              <Smartphone className="w-3 h-3 text-blue-600" />
+                              <span className="text-xs font-medium text-blue-800">SINPE</span>
+                              {selectedViewAndLiquidate.sinpePayments > 0 && (
+                                <Eye className="w-3 h-3 text-blue-500 ml-1" />
+                              )}
+                            </div>
+                            <p className="text-sm font-bold text-blue-900">
+                              {formatCurrency(selectedViewAndLiquidate.sinpePayments)}
+                            </p>
                           </div>
-                          <p className="text-lg font-bold text-green-900">
-                            {formatCurrency(selectedViewAndLiquidate.cashPayments)}
-                          </p>
+                          <div 
+                            className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
+                              orderPaymentFilter === 'TARJETA' 
+                                ? 'bg-purple-100 border-2 border-purple-300' 
+                                : 'bg-purple-50 hover:bg-purple-100'
+                            }`}
+                            onClick={() => {
+                              setOrderPaymentFilter(orderPaymentFilter === 'TARJETA' ? 'all' : 'TARJETA');
+                              if ((selectedViewAndLiquidate.tarjetaPayments || 0) > 0) {
+                                handleViewTarjetaOrders(selectedViewAndLiquidate);
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-center gap-1 mb-1">
+                              <CreditCard className="w-3 h-3 text-purple-600" />
+                              <span className="text-xs font-medium text-purple-800">Tarjeta</span>
+                              {(selectedViewAndLiquidate.tarjetaPayments || 0) > 0 && (
+                                <Eye className="w-3 h-3 text-purple-500 ml-1" />
+                              )}
+                            </div>
+                            <p className="text-sm font-bold text-purple-900">
+                              {formatCurrency(selectedViewAndLiquidate.tarjetaPayments || 0)}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -1626,9 +1942,31 @@ export default function AdminLiquidationPage() {
                                 <span className="text-gray-600">Plata Inicial:</span>
                                 <span className="font-bold text-green-600">{formatCurrency(parseFloat(initialAmountInput) || 0)}</span>
                               </div>
+                              
+                              {/* Desglose del total recaudado */}
+                              <div className="mb-2 p-2 bg-gray-50 rounded">
+                                <div className="text-xs text-gray-500 mb-1">Total Recaudado (desglose):</div>
+                                <div className="flex items-center justify-between text-xs mb-1">
+                                  <span className="text-gray-600">• Efectivo:</span>
+                                  <span className="font-semibold text-green-600">{formatCurrency(selectedViewAndLiquidate.cashPayments)}</span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs mb-1">
+                                  <span className="text-gray-600">• SINPE:</span>
+                                  <span className="font-semibold text-blue-600">{formatCurrency(selectedViewAndLiquidate.sinpePayments)}</span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs mb-1">
+                                  <span className="text-gray-600">• Tarjeta:</span>
+                                  <span className="font-semibold text-purple-600">{formatCurrency(selectedViewAndLiquidate.tarjetaPayments || 0)}</span>
+                                </div>
+                                <div className="border-t border-gray-300 pt-1 flex items-center justify-between text-xs">
+                                  <span className="text-gray-700 font-semibold">= Total:</span>
+                                  <span className="font-bold text-gray-800">{formatCurrency(selectedViewAndLiquidate.totalCollected)}</span>
+                                </div>
+                              </div>
+                              
                               <div className="flex items-center justify-between mb-2">
-                                <span className="text-gray-600">+ Total Recaudado:</span>
-                                <span className="font-bold text-blue-600">{formatCurrency(selectedViewAndLiquidate.totalCollected)}</span>
+                                <span className="text-gray-600">+ Efectivo para Liquidación:</span>
+                                <span className="font-bold text-blue-600">{formatCurrency(selectedViewAndLiquidate.cashPayments)}</span>
                               </div>
                               <div className="flex items-center justify-between mb-2">
                                 <span className="text-gray-600">- Gastos:</span>
@@ -1637,7 +1975,7 @@ export default function AdminLiquidationPage() {
                               <div className="border-t pt-2 flex items-center justify-between">
                                 <span className="text-gray-800 font-semibold">= Monto Final:</span>
                                 <span className="font-bold text-purple-600 text-base">
-                                  {formatCurrency((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.totalCollected - selectedViewAndLiquidate.totalSpent)}
+                                  {formatCurrency((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.cashPayments - selectedViewAndLiquidate.totalSpent)}
                                 </span>
                               </div>
                             </div>
@@ -1646,25 +1984,49 @@ export default function AdminLiquidationPage() {
                       </div>
 
                       {/* Resultado Final - Mucho Más Prominente */}
-                      <div className="bg-gradient-to-r from-purple-100 to-blue-100 p-6 rounded-xl border-2 border-purple-300 shadow-lg">
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-4 flex-1">
-                            <div className="p-3 bg-purple-200 rounded-xl">
-                              <Calculator className="w-6 h-6 text-purple-700" />
+                      <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-xl border-2 border-purple-200 shadow-lg">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="bg-purple-100 p-2 rounded-lg">
+                            <Calculator className="w-6 h-6 text-purple-600" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-purple-800">Monto Final a Entregar</h3>
+                            <p className="text-sm text-purple-600">El mensajero debe entregar este monto en bodega</p>
+                          </div>
+                        </div>
+                        
+                        {/* Fórmula de liquidación */}
+                        <div className="bg-white p-4 rounded-lg border border-purple-200 mb-4">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-3">Fórmula de Liquidación:</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-600">Plata Inicial:</span>
+                              <span className="font-semibold text-green-600">₡{(parseFloat(initialAmountInput) || 0).toLocaleString()}</span>
                             </div>
-                            <div className="flex-1">
-                              <span className="font-bold text-purple-800 text-lg">Monto final a entregar</span>
-                              <p className="text-xs text-purple-600 mt-1">
-                                {((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.totalCollected - selectedViewAndLiquidate.totalSpent) >= 0 
-                                  ? '✅ El mensajero debe entregar este monto' 
-                                  : '⚠️ El mensajero debe pagar este monto'}
-                              </p>
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-600">+ Efectivo Recaudado:</span>
+                              <span className="font-semibold text-blue-600">₡{selectedViewAndLiquidate.cashPayments.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-600">- Gastos:</span>
+                              <span className="font-semibold text-red-600">₡{selectedViewAndLiquidate.totalSpent.toLocaleString()}</span>
+                            </div>
+                            <div className="border-t border-gray-200 pt-2">
+                              <div className="flex justify-between items-center">
+                                <span className="font-bold text-gray-800">= Monto Final:</span>
+                                <span className="font-bold text-purple-600">₡{((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.cashPayments - selectedViewAndLiquidate.totalSpent).toLocaleString()}</span>
+                              </div>
                             </div>
                           </div>
-                          <div className="text-right flex-shrink-0 ml-4">
-                            <span className="text-2xl font-bold text-purple-900 break-words">
-                              {formatCurrency((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.totalCollected - selectedViewAndLiquidate.totalSpent)}
-                            </span>
+                        </div>
+                        
+                        <div className="text-center">
+                          <div className="text-4xl font-bold text-purple-900 mb-2">
+                            {formatCurrency((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.cashPayments - selectedViewAndLiquidate.totalSpent)}
+                          </div>
+                          <div className="flex items-center justify-center gap-2 text-green-600">
+                            <CheckCircle className="w-4 h-4" />
+                            <span className="text-sm font-medium">Confirmado para entrega</span>
                           </div>
                         </div>
                       </div>
@@ -1673,7 +2035,7 @@ export default function AdminLiquidationPage() {
                 </div>
 
                 {/* Columna Derecha - Pedidos */}
-                <div className="xl:col-span-4 space-y-4 flex flex-col h-full">
+                <div className="lg:col-span-2 space-y-4 flex flex-col h-full">
 
                   {/* Estadísticas de Pedidos */}
                   <Card className="border-2 border-gray-200">
@@ -1685,39 +2047,61 @@ export default function AdminLiquidationPage() {
                     </CardHeader>
                     <CardContent className="pt-0">
                       <div className="grid grid-cols-4 gap-2">
-                        <div className="bg-blue-50 p-2 rounded-lg text-center">
+                        <div 
+                          className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
+                            orderStatusFilter === 'all' 
+                              ? 'bg-blue-100 border-2 border-blue-300' 
+                              : 'bg-blue-50 hover:bg-blue-100'
+                          }`}
+                          onClick={() => setOrderStatusFilter('all')}
+                        >
                           <div className="flex items-center justify-center gap-1 mb-1">
                             <Package className="w-3 h-3 text-blue-600" />
                             <span className="text-xs font-medium text-blue-800">Total</span>
                           </div>
-                          <p className="text-lg font-bold text-blue-900">{selectedViewAndLiquidate.orders.length}</p>
+                          <p className="text-lg font-bold text-blue-900">{statusCounts.total}</p>
                         </div>
-                        <div className="bg-green-50 p-2 rounded-lg text-center">
+                        <div 
+                          className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
+                            orderStatusFilter === 'entregado' 
+                              ? 'bg-green-100 border-2 border-green-300' 
+                              : 'bg-green-50 hover:bg-green-100'
+                          }`}
+                          onClick={() => setOrderStatusFilter('entregado')}
+                        >
                           <div className="flex items-center justify-center gap-1 mb-1">
                             <CheckCircle className="w-3 h-3 text-green-600" />
                             <span className="text-xs font-medium text-green-800">Entregados</span>
                           </div>
-                          <p className="text-lg font-bold text-green-900">
-                            {selectedViewAndLiquidate.orders.filter(p => p.estado_pedido === 'entregado').length}
-                          </p>
+                          <p className="text-lg font-bold text-green-900">{statusCounts.entregados}</p>
                         </div>
-                        <div className="bg-red-50 p-2 rounded-lg text-center">
+                        <div 
+                          className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
+                            orderStatusFilter === 'devolucion' 
+                              ? 'bg-red-100 border-2 border-red-300' 
+                              : 'bg-red-50 hover:bg-red-100'
+                          }`}
+                          onClick={() => setOrderStatusFilter('devolucion')}
+                        >
                           <div className="flex items-center justify-center gap-1 mb-1">
                             <AlertCircle className="w-3 h-3 text-red-600" />
                             <span className="text-xs font-medium text-red-800">Devoluciones</span>
                           </div>
-                          <p className="text-lg font-bold text-red-900">
-                            {selectedViewAndLiquidate.orders.filter(p => p.estado_pedido === 'devolucion').length}
-                          </p>
+                          <p className="text-lg font-bold text-red-900">{statusCounts.devoluciones}</p>
                         </div>
-                        <div className="bg-orange-50 p-2 rounded-lg text-center">
+                        <div 
+                          className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
+                            orderStatusFilter === 'reagendado' 
+                              ? 'bg-orange-100 border-2 border-orange-300' 
+                              : 'bg-orange-50 hover:bg-orange-100'
+                          }`}
+                          onClick={() => setOrderStatusFilter('reagendado')}
+                        >
                           <div className="flex items-center justify-center gap-1 mb-1">
                             <Clock className="w-3 h-3 text-orange-600" />
                             <span className="text-xs font-medium text-orange-800">Reagendados</span>
                           </div>
-                          <p className="text-lg font-bold text-orange-900">
-                            {selectedViewAndLiquidate.orders.filter(p => p.estado_pedido === 'reagendado').length}
-                          </p>
+                          <p className="text-lg font-bold text-orange-900">{statusCounts.reagendados}</p>
                         </div>
                       </div>
                     </CardContent>
@@ -1729,7 +2113,24 @@ export default function AdminLiquidationPage() {
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-lg flex items-center gap-2">
                           <Package className="w-5 h-5 text-gray-600" />
-                          Detalle de Pedidos ({selectedViewAndLiquidate.orders.length})
+                          Detalle de Pedidos ({selectedViewAndLiquidate.orders
+                            .filter(pedido => {
+                              let statusMatch = true;
+                              if (orderStatusFilter === 'entregado') {
+                                statusMatch = pedido.estado_pedido === 'ENTREGADO';
+                              } else if (orderStatusFilter === 'devolucion') {
+                                statusMatch = pedido.estado_pedido === 'DEVOLUCION';
+                              } else if (orderStatusFilter === 'reagendado') {
+                                statusMatch = pedido.estado_pedido === 'REAGENDADO';
+                              } else if (orderStatusFilter === 'pendiente') {
+                                statusMatch = pedido.estado_pedido === 'PENDIENTE' || !pedido.estado_pedido;
+                              }
+                              return statusMatch;
+                            })
+                            .filter(pedido => 
+                              orderPaymentFilter === 'all' || 
+                              pedido.metodo_pago === orderPaymentFilter
+                            ).length})
                         </CardTitle>
                         <div className="flex items-center gap-2">
                           <Select
@@ -1755,41 +2156,55 @@ export default function AdminLiquidationPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-20">ID</TableHead>
-                        <TableHead className="w-40">Cliente</TableHead>
-                        <TableHead className="w-24">Teléfono</TableHead>
-                        <TableHead className="w-48">Dirección</TableHead>
-                        <TableHead className="w-24">Valor</TableHead>
-                        <TableHead className="w-24">Método</TableHead>
-                        <TableHead className="w-24">Estado</TableHead>
-                        <TableHead className="w-24">Fecha</TableHead>
+                        <TableHead className="w-16 text-xs">ID</TableHead>
+                        <TableHead className="w-32 text-xs">Cliente</TableHead>
+                        <TableHead className="w-20 text-xs hidden sm:table-cell">Teléfono</TableHead>
+                        <TableHead className="w-32 text-xs hidden md:table-cell">Dirección</TableHead>
+                        <TableHead className="w-20 text-xs">Valor</TableHead>
+                        <TableHead className="w-20 text-xs">Método</TableHead>
+                        <TableHead className="w-20 text-xs">Estado</TableHead>
+                        <TableHead className="w-20 text-xs hidden lg:table-cell">Fecha</TableHead>
+                        <TableHead className="w-16 text-xs">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {selectedViewAndLiquidate.orders
+                        .filter(pedido => {
+                          let statusMatch = true;
+                          if (orderStatusFilter === 'entregado') {
+                            statusMatch = pedido.estado_pedido === 'ENTREGADO';
+                          } else if (orderStatusFilter === 'devolucion') {
+                            statusMatch = pedido.estado_pedido === 'DEVOLUCION';
+                          } else if (orderStatusFilter === 'reagendado') {
+                            statusMatch = pedido.estado_pedido === 'REAGENDADO';
+                          } else if (orderStatusFilter === 'pendiente') {
+                            statusMatch = pedido.estado_pedido === 'PENDIENTE' || !pedido.estado_pedido;
+                          }
+                          return statusMatch;
+                        })
                         .filter(pedido => 
-                          orderStatusFilter === 'all' || 
-                          pedido.estado_pedido === orderStatusFilter
+                          orderPaymentFilter === 'all' || 
+                          pedido.metodo_pago === orderPaymentFilter
                         )
                         .map((pedido) => (
                         <TableRow key={pedido.id_pedido} className="hover:bg-gray-50">
-                          <TableCell className="font-medium text-xs">
+                          <TableCell className="font-medium text-xs px-2 py-2">
                             {pedido.id_pedido}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="px-2 py-2">
                             <div className="flex flex-col">
-                              <span className="font-medium text-xs">{pedido.cliente_nombre}</span>
-                              <span className="text-xs text-gray-500">{pedido.distrito}</span>
+                              <span className="font-medium text-xs truncate max-w-28">{pedido.cliente_nombre}</span>
+                              <span className="text-xs text-gray-500 truncate max-w-28">{pedido.distrito}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="text-xs">
+                          <TableCell className="text-xs px-2 py-2 hidden sm:table-cell">
                             {pedido.cliente_telefono ? pedido.cliente_telefono.replace('506', '') : 'N/A'}
                           </TableCell>
-                          <TableCell className="text-xs">
-                            <div className="max-w-48 text-wrap leading-tight" title={pedido.direccion}>
+                          <TableCell className="text-xs px-2 py-2 hidden md:table-cell">
+                            <div className="max-w-32 text-wrap leading-tight" title={pedido.direccion}>
                               {pedido.direccion ? (
                                 <div className="space-y-1">
-                                  {pedido.direccion.split(',').map((part, index) => (
+                                  {pedido.direccion.split(',').slice(0, 2).map((part, index) => (
                                     <div key={index} className="text-xs leading-tight">
                                       {part.trim()}
                                     </div>
@@ -1798,51 +2213,151 @@ export default function AdminLiquidationPage() {
                               ) : 'N/A'}
                             </div>
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right px-2 py-2">
                             <span className="font-bold text-green-600 text-xs">
                               {formatCurrency(pedido.valor_total)}
                             </span>
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {pedido.metodo_pago === 'efectivo' && <Banknote className="w-4 h-4 text-green-600" />}
-                              {pedido.metodo_pago === 'sinpe' && <Smartphone className="w-4 h-4 text-blue-600" />}
-                              {pedido.metodo_pago === 'tarjeta' && <CreditCard className="w-4 h-4 text-purple-600" />}
-                              {pedido.metodo_pago === '2pagos' && <Receipt className="w-4 h-4 text-orange-600" />}
-                              <span className="text-xs font-medium">{pedido.metodo_pago || 'N/A'}</span>
+                          <TableCell className="px-2 py-2">
+                            <div className="flex items-center gap-1">
+                              {pedido.metodo_pago === 'EFECTIVO' && <Banknote className="w-3 h-3 text-green-600" />}
+                              {pedido.metodo_pago === 'SINPE' && <Smartphone className="w-3 h-3 text-blue-600" />}
+                              {pedido.metodo_pago === 'TARJETA' && <CreditCard className="w-3 h-3 text-purple-600" />}
+                              {pedido.metodo_pago === '2PAGOS' && <Receipt className="w-3 h-3 text-orange-600" />}
+                              <span className="text-xs font-medium truncate">{pedido.metodo_pago || 'N/A'}</span>
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {pedido.estado_pedido === 'entregado' && <CheckCircle className="w-4 h-4 text-green-600" />}
-                              {pedido.estado_pedido === 'devolucion' && <AlertCircle className="w-4 h-4 text-red-600" />}
-                              {pedido.estado_pedido === 'reagendado' && <Clock className="w-4 h-4 text-orange-600" />}
-                              {(!pedido.estado_pedido || pedido.estado_pedido === 'pendiente') && <Package className="w-4 h-4 text-gray-600" />}
+                          <TableCell className="px-2 py-2">
+                            <div className="flex items-center gap-1">
+                              {pedido.estado_pedido === 'ENTREGADO' && <CheckCircle className="w-3 h-3 text-green-600" />}
+                              {pedido.estado_pedido === 'DEVOLUCION' && <AlertCircle className="w-3 h-3 text-red-600" />}
+                              {pedido.estado_pedido === 'REAGENDADO' && <Clock className="w-3 h-3 text-orange-600" />}
+                              {(!pedido.estado_pedido || pedido.estado_pedido === 'PENDIENTE') && <Package className="w-3 h-3 text-gray-600" />}
                               <Badge 
-                                variant={pedido.estado_pedido === 'entregado' ? 'default' : 'outline'}
-                                className={`text-xs px-2 py-1 ${
-                                  pedido.estado_pedido === 'entregado' 
+                                variant={pedido.estado_pedido === 'ENTREGADO' ? 'default' : 'outline'}
+                                className={`text-xs px-1 py-0.5 ${
+                                  pedido.estado_pedido === 'ENTREGADO' 
                                     ? 'bg-green-100 text-green-800 border-green-200' 
-                                    : pedido.estado_pedido === 'devolucion'
+                                    : pedido.estado_pedido === 'DEVOLUCION'
                                     ? 'bg-red-100 text-red-800 border-red-200'
-                                    : pedido.estado_pedido === 'reagendado'
+                                    : pedido.estado_pedido === 'REAGENDADO'
                                     ? 'bg-orange-100 text-orange-800 border-orange-200'
                                     : 'bg-gray-100 text-gray-800 border-gray-200'
                                 }`}
                               >
-                                {pedido.estado_pedido === 'entregado' ? 'ENTREGADO' : 
-                                 pedido.estado_pedido === 'devolucion' ? 'DEVOLUCIÓN' :
-                                 pedido.estado_pedido === 'reagendado' ? 'REAGENDADO' :
-                                 'PENDIENTE'}
+                                {pedido.estado_pedido === 'ENTREGADO' ? 'ENT' : 
+                                 pedido.estado_pedido === 'DEVOLUCION' ? 'DEV' :
+                                 pedido.estado_pedido === 'REAGENDADO' ? 'REA' :
+                                 'PEN'}
                               </Badge>
                             </div>
                           </TableCell>
-                          <TableCell className="text-xs text-gray-500">
-                            {pedido.fecha_creacion ? new Date(pedido.fecha_creacion).toLocaleDateString('es-CR', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: '2-digit'
-                            }) : 'N/A'}
+                          <TableCell className="text-xs text-gray-500 px-2 py-2 hidden lg:table-cell">
+                            {pedido.fecha_creacion ? (() => {
+                              if (pedido.fecha_creacion.includes('T')) {
+                                const datePart = pedido.fecha_creacion.split('T')[0];
+                                const parts = datePart.split('-');
+                                if (parts.length === 3) {
+                                  const year = parts[0];
+                                  const month = parts[1];
+                                  const day = parts[2];
+                                  return `${day}/${month}/${year.slice(-2)}`;
+                                }
+                              }
+                              if (pedido.fecha_creacion.includes('-') && !pedido.fecha_creacion.includes('T')) {
+                                const parts = pedido.fecha_creacion.split('-');
+                                if (parts.length === 3) {
+                                  const year = parts[0];
+                                  const month = parts[1].padStart(2, '0');
+                                  const day = parts[2].padStart(2, '0');
+                                  return `${day}/${month}/${year.slice(-2)}`;
+                                }
+                              }
+                              return new Date(pedido.fecha_creacion).toLocaleDateString('es-CR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: '2-digit'
+                              });
+                            })() : 'N/A'}
+                          </TableCell>
+                          <TableCell className="px-2 py-2">
+                            <div className="flex items-center gap-1">
+                              {pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'SINPE' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-5 px-1 text-xs bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                                  onClick={() => {
+                                    if (pedido.comprobante_sinpe) {
+                                      // Abrir el comprobante en una nueva pestaña
+                                      window.open(pedido.comprobante_sinpe, '_blank');
+                                    } else {
+                                      alert(`No hay comprobante disponible para el pedido ${pedido.id_pedido}\nNúmero SINPE: ${pedido.numero_sinpe || 'N/A'}`);
+                                    }
+                                  }}
+                                >
+                                  <Eye className="w-3 h-3 mr-1" />
+                                  Comprobante
+                                </Button>
+                              )}
+                              {pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'EFECTIVO' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-5 px-1 text-xs bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                                  onClick={() => {
+                                    console.log('Ver comprobante efectivo para pedido:', pedido.id_pedido);
+                                    alert(`Pedido pagado en efectivo: ${pedido.id_pedido}\nValor: ${formatCurrency(pedido.valor_total)}\nCliente: ${pedido.cliente_nombre}`);
+                                  }}
+                                >
+                                  <Banknote className="w-3 h-3 mr-1" />
+                                  Efectivo
+                                </Button>
+                              )}
+                              {pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'TARJETA' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-5 px-1 text-xs bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+                                  onClick={() => {
+                                    if (pedido.comprobante_sinpe) {
+                                      window.open(pedido.comprobante_sinpe, '_blank');
+                                    } else {
+                                      alert(`No hay comprobante disponible para el pedido ${pedido.id_pedido}\nValor: ${formatCurrency(pedido.valor_total)}\nCliente: ${pedido.cliente_nombre}`);
+                                    }
+                                  }}
+                                >
+                                  <Eye className="w-3 h-3 mr-1" />
+                                  Comprobante
+                                </Button>
+                              )}
+                              {pedido.estado_pedido === 'DEVOLUCION' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-5 px-1 text-xs bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
+                                  onClick={() => {
+                                    alert(`Pedido devuelto: ${pedido.id_pedido}\nCliente: ${pedido.cliente_nombre}\nValor: ${formatCurrency(pedido.valor_total)}\nMotivo: ${pedido.notas || 'No especificado'}`);
+                                  }}
+                                >
+                                  <AlertCircle className="w-3 h-3 mr-1" />
+                                  Devolución
+                                </Button>
+                              )}
+                              {pedido.estado_pedido === 'REAGENDADO' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-5 px-1 text-xs bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100"
+                                  onClick={() => {
+                                    alert(`Pedido reagendado: ${pedido.id_pedido}\nCliente: ${pedido.cliente_nombre}\nValor: ${formatCurrency(pedido.valor_total)}\nNueva fecha: ${pedido.fecha_entrega || 'No especificada'}`);
+                                  }}
+                                >
+                                  <Clock className="w-3 h-3 mr-1" />
+                                  Reagendado
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1856,21 +2371,33 @@ export default function AdminLiquidationPage() {
               
               {/* Botones de Acción */}
               <div className="flex justify-end gap-3 pt-4 border-t bg-gray-50 p-4 -mx-6 -mb-6">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowViewAndLiquidateModal(false)}
-                  className="px-6"
-                >
-                  <X className="w-4 h-4 mr-2" />
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={() => confirmLiquidation(selectedViewAndLiquidate, parseFloat(initialAmountInput))}
-                  className="bg-green-600 hover:bg-green-700 px-6"
-                >
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                  Confirmar Liquidación
-                </Button>
+                {isLiquidationCompleted ? (
+                  <Button
+                    onClick={() => setShowViewAndLiquidateModal(false)}
+                    className="px-6"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Cerrar
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowViewAndLiquidateModal(false)}
+                      className="px-6"
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={() => confirmLiquidation(selectedViewAndLiquidate, parseFloat(initialAmountInput))}
+                      className="bg-green-600 hover:bg-green-700 px-6"
+                    >
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Confirmar Liquidación
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1886,6 +2413,244 @@ export default function AdminLiquidationPage() {
         overallProgress={loaderProgress}
         onClose={closeLoader}
       />
+      {/* Modal de Gastos */}
+      {showExpensesModal && selectedExpenses && (
+        <Dialog open={showExpensesModal} onOpenChange={setShowExpensesModal}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-red-600" />
+                Gastos de {selectedExpenses.mensajero}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {selectedExpenses.gastos.length === 0 ? (
+                <div className="text-center py-8">
+                  <Receipt className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">No hay gastos reportados para este mensajero</p>
+                </div>
+              ) : (
+                <>
+                  {/* Resumen de gastos */}
+                  <div className="bg-red-50 p-4 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold text-red-800">Total de Gastos</h3>
+                        <p className="text-sm text-red-600">
+                          {selectedExpenses.gastos.length} {selectedExpenses.gastos.length === 1 ? 'gasto' : 'gastos'} reportado{selectedExpenses.gastos.length === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-red-900">
+                          ₡{selectedExpenses.gastos.reduce((sum, gasto) => sum + gasto.monto, 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Lista de gastos - Estilo similar a Mi Ruta de Hoy */}
+                  <div className="space-y-3">
+                    {selectedExpenses.gastos.map((gasto, index) => (
+                      <div key={gasto.id || index} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-full ${getExpenseColor(gasto.tipo_gasto)}`}>
+                              {getExpenseIcon(gasto.tipo_gasto)}
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm capitalize">{gasto.tipo_gasto}</p>
+                              <p className="text-xs text-gray-500">
+                                {new Date(gasto.fecha).toLocaleTimeString('es-CR', { 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                })} - {new Date(gasto.fecha).toLocaleDateString('es-CR')}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-red-600">
+                              ₡{gasto.monto.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        {gasto.comprobante_link && (
+                          <div className="flex justify-end mt-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-3 text-xs bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                              onClick={() => window.open(gasto.comprobante_link, '_blank')}
+                            >
+                              <Eye className="w-3 h-3 mr-1" />
+                              Ver Comprobante
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Modal de pedidos SINPE */}
+      {showSinpeModal && selectedSinpeOrders && (
+        <Dialog open={showSinpeModal} onOpenChange={setShowSinpeModal}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Smartphone className="w-5 h-5 text-blue-600" />
+                Pedidos SINPE - {selectedViewAndLiquidate?.messengerName}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {selectedSinpeOrders.length === 0 ? (
+                <div className="text-center py-8">
+                  <Smartphone className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">No hay pedidos SINPE entregados</p>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold text-blue-800">Total SINPE</h3>
+                        <p className="text-sm text-blue-600">
+                          {selectedSinpeOrders.length} {selectedSinpeOrders.length === 1 ? 'pedido' : 'pedidos'} entregado{selectedSinpeOrders.length === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-blue-900">
+                          ₡{selectedSinpeOrders.reduce((sum, pedido) => sum + pedido.valor_total, 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {selectedSinpeOrders.map((pedido, index) => (
+                      <div key={pedido.id_pedido || index} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-full bg-blue-100">
+                              <Smartphone className="w-4 h-4 text-blue-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">{pedido.cliente_nombre}</p>
+                              <p className="text-xs text-gray-500">ID: {pedido.id_pedido}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-blue-600">
+                              ₡{pedido.valor_total.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        {pedido.comprobante_sinpe && (
+                          <div className="flex justify-end mt-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-3 text-xs bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                              onClick={() => window.open(pedido.comprobante_sinpe!, '_blank')}
+                            >
+                              <Eye className="w-3 h-3 mr-1" />
+                              Ver Comprobante
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Modal de pedidos Tarjeta */}
+      {showTarjetaModal && selectedTarjetaOrders && (
+        <Dialog open={showTarjetaModal} onOpenChange={setShowTarjetaModal}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-purple-600" />
+                Pedidos Tarjeta - {selectedViewAndLiquidate?.messengerName}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {selectedTarjetaOrders.length === 0 ? (
+                <div className="text-center py-8">
+                  <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">No hay pedidos con tarjeta entregados</p>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-purple-50 p-4 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold text-purple-800">Total Tarjeta</h3>
+                        <p className="text-sm text-purple-600">
+                          {selectedTarjetaOrders.length} {selectedTarjetaOrders.length === 1 ? 'pedido' : 'pedidos'} entregado{selectedTarjetaOrders.length === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-purple-900">
+                          ₡{selectedTarjetaOrders.reduce((sum, pedido) => sum + pedido.valor_total, 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {selectedTarjetaOrders.map((pedido, index) => (
+                      <div key={pedido.id_pedido || index} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-full bg-purple-100">
+                              <CreditCard className="w-4 h-4 text-purple-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">{pedido.cliente_nombre}</p>
+                              <p className="text-xs text-gray-500">ID: {pedido.id_pedido}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-purple-600">
+                              ₡{pedido.valor_total.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        {pedido.comprobante_sinpe && (
+                          <div className="flex justify-end mt-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-3 text-xs bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+                              onClick={() => window.open(pedido.comprobante_sinpe!, '_blank')}
+                            >
+                              <Eye className="w-3 h-3 mr-1" />
+                              Ver Comprobante
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
+

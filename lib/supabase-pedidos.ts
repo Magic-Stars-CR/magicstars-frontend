@@ -186,6 +186,38 @@ export const getPedidosByMensajero = async (mensajeroName: string): Promise<Pedi
   }
 };
 
+// Función para normalizar datos de pedidos a mayúsculas
+const normalizePedidoData = (pedido: any): PedidoTest => {
+  // Normalizar estados específicos
+  const estadoNormalizado = pedido.estado_pedido ? 
+    (pedido.estado_pedido.toUpperCase().trim() === 'REAGENDO' ? 'REAGENDADO' : 
+     pedido.estado_pedido.toUpperCase().trim() === 'ENTREGADO' ? 'ENTREGADO' :
+     pedido.estado_pedido.toUpperCase().trim() === 'DEVOLUCION' ? 'DEVOLUCION' :
+     pedido.estado_pedido.toUpperCase().trim() === 'PENDIENTE' ? 'PENDIENTE' :
+     pedido.estado_pedido.toUpperCase().trim()) : 'PENDIENTE';
+
+  // Normalizar métodos de pago específicos
+  const metodoNormalizado = pedido.metodo_pago ? 
+    (pedido.metodo_pago.toUpperCase().trim() === 'EFECTIVO' ? 'EFECTIVO' :
+     pedido.metodo_pago.toUpperCase().trim() === 'SINPE' ? 'SINPE' :
+     pedido.metodo_pago.toUpperCase().trim() === 'TARJETA' ? 'TARJETA' :
+     pedido.metodo_pago.toUpperCase().trim() === '2PAGOS' ? '2PAGOS' :
+     pedido.metodo_pago.toUpperCase().trim()) : 'SIN_METODO';
+
+  return {
+    ...pedido,
+    estado_pedido: estadoNormalizado,
+    metodo_pago: metodoNormalizado,
+    mensajero_asignado: pedido.mensajero_asignado ? pedido.mensajero_asignado.toUpperCase().trim() : null,
+    mensajero_concretado: pedido.mensajero_concretado ? pedido.mensajero_concretado.toUpperCase().trim() : null,
+    tienda: pedido.tienda ? pedido.tienda.toUpperCase().trim() : 'SIN_TIENDA',
+    provincia: pedido.provincia ? pedido.provincia.toUpperCase().trim() : 'SIN_PROVINCIA',
+    canton: pedido.canton ? pedido.canton.toUpperCase().trim() : 'SIN_CANTON',
+    distrito: pedido.distrito ? pedido.distrito.toUpperCase().trim() : 'SIN_DISTRITO',
+    cliente_nombre: pedido.cliente_nombre ? pedido.cliente_nombre.toUpperCase().trim() : 'SIN_NOMBRE'
+  };
+};
+
 // Función helper para obtener la fecha actual en zona horaria de Costa Rica
 const getCostaRicaDate = () => {
   const now = new Date();
@@ -206,7 +238,7 @@ const getCostaRicaDate = () => {
 };
 
 // Función helper para obtener la fecha ISO en zona horaria de Costa Rica
-const getCostaRicaDateISO = () => {
+export const getCostaRicaDateISO = () => {
   const costaRicaDate = getCostaRicaDate();
   const year = costaRicaDate.getFullYear();
   const month = String(costaRicaDate.getMonth() + 1).padStart(2, '0');
@@ -727,6 +759,14 @@ export const getMensajerosUnicos = async (): Promise<string[]> => {
 // Función para obtener pedidos del día por mensajero específico
 export const getPedidosDelDiaByMensajeroEspecifico = async (mensajeroName: string, fecha: string): Promise<PedidoTest[]> => {
   try {
+    // Validar que la fecha no esté vacía
+    if (!fecha || fecha.trim() === '') {
+      console.error('❌ Error: fecha vacía en getPedidosDelDiaByMensajeroEspecifico');
+      return [];
+    }
+    
+    console.log(`🔍 Obteniendo pedidos para mensajero: ${mensajeroName}, fecha: ${fecha}`);
+    
     // Obtener todos los pedidos usando paginación con fecha simple (sin hora)
     let allPedidos: PedidoTest[] = [];
     let from = 0;
@@ -764,13 +804,14 @@ export const getPedidosDelDiaByMensajeroEspecifico = async (mensajeroName: strin
 };
 
 // Función para obtener pedidos del día actual
-export const getPedidosDelDia = async (fecha: string = new Date().toISOString().split('T')[0]) => {
+export const getPedidosDelDia = async (fecha: string = getCostaRicaDateISO()) => {
   try {
+    console.log('🔍 getPedidosDelDia - Buscando pedidos para fecha:', fecha);
+    
     const { data, error } = await supabasePedidos
       .from('pedidos')
       .select('*')
-      .gte('fecha_creacion', `${fecha}T00:00:00`)
-      .lt('fecha_creacion', `${fecha}T23:59:59`)
+      .eq('fecha_creacion', fecha) // Usar eq en lugar de gte/lt ya que los datos solo tienen fecha
       .order('fecha_creacion', { ascending: false })
       .limit(10);
 
@@ -779,6 +820,7 @@ export const getPedidosDelDia = async (fecha: string = new Date().toISOString().
       return [];
     }
 
+    console.log('✅ Pedidos del día encontrados:', data?.length || 0);
     return data || [];
   } catch (error) {
     console.error('Error in getPedidosDelDia:', error);
@@ -793,6 +835,7 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
   totalCollected: number;
   sinpePayments: number;
   cashPayments: number;
+  tarjetaPayments: number;
   totalSpent: number;
   initialAmount: number;
   finalAmount: number;
@@ -805,6 +848,12 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
   }[];
 }[]> => {
   try {
+    // Validar que la fecha no esté vacía
+    if (!fecha || fecha.trim() === '') {
+      console.error('❌ Error: fecha vacía en getLiquidacionesReales');
+      return [];
+    }
+    
     console.log(`🔍 Obteniendo liquidaciones para fecha: ${fecha}`);
     
     // Obtener mensajeros únicos
@@ -820,29 +869,39 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
     // Procesar todos los mensajeros, incluso si no tienen pedidos
     for (const mensajero of mensajeros) {
       // Obtener pedidos del día para este mensajero
-      const pedidos = await getPedidosDelDiaByMensajeroEspecifico(mensajero, fecha);
+      const pedidosRaw = await getPedidosDelDiaByMensajeroEspecifico(mensajero, fecha);
+      
+      // Normalizar todos los pedidos a mayúsculas
+      const pedidos = pedidosRaw.map(normalizePedidoData);
       
       // Buscar gastos del mensajero
       const gastosDelMensajero = gastosData.find(g => g.mensajero === mensajero);
       const gastos = gastosDelMensajero?.gastos || [];
       
-      // Calcular totales (incluso si no hay pedidos)
+      // Calcular totales (incluso si no hay pedidos) - usando valores normalizados
       const totalCollected = pedidos.reduce((sum, pedido) => {
-        if (pedido.estado_pedido === 'entregado') {
+        if (pedido.estado_pedido === 'ENTREGADO') {
           return sum + pedido.valor_total;
         }
         return sum;
       }, 0);
 
       const sinpePayments = pedidos.reduce((sum, pedido) => {
-        if (pedido.estado_pedido === 'entregado' && pedido.metodo_pago === 'sinpe') {
+        if (pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'SINPE') {
           return sum + pedido.valor_total;
         }
         return sum;
       }, 0);
 
       const cashPayments = pedidos.reduce((sum, pedido) => {
-        if (pedido.estado_pedido === 'entregado' && pedido.metodo_pago === 'efectivo') {
+        if (pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'EFECTIVO') {
+          return sum + pedido.valor_total;
+        }
+        return sum;
+      }, 0);
+
+      const tarjetaPayments = pedidos.reduce((sum, pedido) => {
+        if (pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'TARJETA') {
           return sum + pedido.valor_total;
         }
         return sum;
@@ -850,7 +909,8 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
 
       const totalSpent = gastos.reduce((sum, gasto) => sum + gasto.monto, 0);
       const initialAmount = 0; // Monto inicial por defecto (se define en el modal)
-      const finalAmount = initialAmount + totalCollected - totalSpent;
+      // El mensajero solo debe entregar el efectivo recaudado, no el total de todos los pagos
+      const finalAmount = initialAmount + cashPayments - totalSpent;
 
       liquidaciones.push({
         mensajero,
@@ -858,6 +918,7 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
         totalCollected,
         sinpePayments,
         cashPayments,
+        tarjetaPayments,
         totalSpent,
         initialAmount,
         finalAmount,
@@ -870,6 +931,42 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
   } catch (error) {
     console.error('❌ Error en getLiquidacionesReales:', error);
     return [];
+  }
+};
+
+// Función para verificar si una liquidación ya está liquidada
+export const checkLiquidationStatus = async (mensajero: string, fecha: string): Promise<boolean> => {
+  try {
+    if (!fecha || fecha.trim() === '') {
+      console.error('❌ Error: fecha vacía en checkLiquidationStatus');
+      return false;
+    }
+    
+    console.log(`🔍 Verificando estado de liquidación para ${mensajero} en fecha ${fecha}`);
+    
+    const { data, error } = await supabasePedidos
+      .from('liquidaciones')
+      .select('ya_liquidado')
+      .eq('mensajero', mensajero)
+      .eq('fecha', fecha)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No se encontró registro, no está liquidado
+        console.log(`ℹ️ No se encontró liquidación para ${mensajero} en ${fecha}`);
+        return false;
+      }
+      console.error('❌ Error verificando liquidación:', error);
+      return false;
+    }
+
+    const isLiquidated = data?.ya_liquidado === true;
+    console.log(`✅ Estado de liquidación para ${mensajero}: ${isLiquidated ? 'LIQUIDADO' : 'PENDIENTE'}`);
+    return isLiquidated;
+  } catch (error) {
+    console.error('❌ Error en checkLiquidationStatus:', error);
+    return false;
   }
 };
 

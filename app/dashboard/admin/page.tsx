@@ -139,8 +139,9 @@ export default function AdminDashboard() {
       setLoading(true);
       console.log('Cargando datos del día de hoy para admin...');
       
-      // Cargar pedidos del día de hoy
-      const today = new Date().toISOString().split('T')[0];
+      // Cargar pedidos del día de hoy usando fecha de Costa Rica
+      const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
+      const today = getCostaRicaDateISO();
       const pedidosDelDia = await getPedidosDelDia(today);
       console.log('Pedidos del día cargados:', pedidosDelDia.length);
       

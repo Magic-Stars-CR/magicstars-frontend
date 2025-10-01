@@ -384,6 +384,9 @@ export interface RouteLiquidation {
   totalCollected: number; // Total recaudado en efectivo
   totalSpent: number; // Total gastado
   totalToDeliver: number; // Total a entregar en efectivo en bodega
+  sinpePayments: number; // Total recaudado en SINPE
+  cashPayments: number; // Total recaudado en efectivo
+  tarjetaPayments: number; // Total recaudado en tarjeta
   
   // Gestión de pedidos
   totalOrders: number; // Total de pedidos asignados

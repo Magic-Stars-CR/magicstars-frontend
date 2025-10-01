@@ -145,7 +145,7 @@ export default function MiRutaHoy() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-  const [dateFilter, setDateFilter] = useState<string>('today');
+  const [dateFilter, setDateFilter] = useState<string>('custom');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -201,13 +201,32 @@ export default function MiRutaHoy() {
   const [isReturnsModalOpen, setIsReturnsModalOpen] = useState(false);
   const [isCashModalOpen, setIsCashModalOpen] = useState(false);
   const [isSinpeModalOpen, setIsSinpeModalOpen] = useState(false);
+  const [isLiquidationCompleted, setIsLiquidationCompleted] = useState(false);
 
   useEffect(() => {
     if (user) {
       loadRouteData();
       loadGastosReales();
+      checkLiquidationStatus();
     }
-  }, [user, selectedDate, dateFilter]);
+  }, [user, selectedDate, dateFilter, activeFilter, searchTerm]);
+
+  // Efecto para actualizar la UI cuando cambien los gastos reales
+  useEffect(() => {
+    console.log('🔄 Gastos reales cambiaron, actualizando UI...');
+    console.log('💰 Gastos actuales:', gastosReales);
+    
+    if (gastosReales.length > 0) {
+      const gastosDelMensajero = gastosReales.find(g => g.mensajero === user?.name);
+      if (gastosDelMensajero) {
+        console.log('✅ Actualizando total de gastos en UI:', gastosDelMensajero.totalGastos);
+        setRouteData(prev => ({
+          ...prev,
+          totalExpenses: gastosDelMensajero.totalGastos
+        }));
+      }
+    }
+  }, [gastosReales, user?.name]);
 
 
   // Countdown para el modal de éxito
@@ -292,44 +311,10 @@ export default function MiRutaHoy() {
         targetDateString = selectedDate.toDateString();
         console.log('📅 Fecha específica calculada:', targetDateISO);
       } else {
-        // PRIORIDAD 2: Usar el filtro de período por defecto con zona horaria de Costa Rica
-        console.log('📅 Usando filtro de período:', dateFilter);
-        switch (dateFilter) {
-          case 'today':
-            targetDateISO = getCostaRicaDateISO();
-            targetDateString = costaRicaNow.toDateString();
-            console.log('📅 Filtro HOY:', targetDateISO);
-            break;
-          case 'yesterday':
-            const yesterday = new Date(costaRicaNow);
-            yesterday.setDate(yesterday.getDate() - 1);
-            targetDateISO = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
-            targetDateString = yesterday.toDateString();
-            console.log('📅 Filtro AYER:', targetDateISO);
-            break;
-          case 'thisWeek':
-            // Para esta semana, usar hoy por defecto
-            targetDateISO = getCostaRicaDateISO();
-            targetDateString = costaRicaNow.toDateString();
-            console.log('📅 Filtro ESTA SEMANA:', targetDateISO);
-            break;
-          case 'thisMonth':
-            // Para este mes, usar hoy por defecto
-            targetDateISO = getCostaRicaDateISO();
-            targetDateString = costaRicaNow.toDateString();
-            console.log('📅 Filtro ESTE MES:', targetDateISO);
-            break;
-          case 'all':
-            // Si es 'all' pero no hay selectedDate, usar hoy
-            targetDateISO = getCostaRicaDateISO();
-            targetDateString = costaRicaNow.toDateString();
-            console.log('📅 Filtro ALL (sin fecha específica):', targetDateISO);
-            break;
-          default:
-            targetDateISO = getCostaRicaDateISO();
-            targetDateString = costaRicaNow.toDateString();
-            console.log('📅 Filtro DEFAULT:', targetDateISO);
-        }
+        // Usar la fecha actual de Costa Rica
+        targetDateISO = getCostaRicaDateISO();
+        targetDateString = costaRicaNow.toDateString();
+        console.log('📅 Usando fecha actual de Costa Rica:', targetDateISO);
       }
       
       console.log('🎯 Fecha objetivo ISO:', targetDateISO);
@@ -583,6 +568,32 @@ export default function MiRutaHoy() {
     } finally {
       console.log('🏁 Finalizando loadRouteData, loading = false');
       setLoading(false);
+    }
+  };
+
+  // Función para verificar si la liquidación ya está completada
+  const checkLiquidationStatus = async () => {
+    try {
+      if (!user?.name) return;
+      
+      // Usar la fecha seleccionada en lugar de la fecha actual
+      let targetDate;
+      if (selectedDate) {
+        targetDate = selectedDate;
+      } else {
+        targetDate = getCostaRicaDate();
+      }
+      
+      const targetDateString = targetDate.toISOString().split('T')[0];
+      
+      const { checkLiquidationStatus: checkStatus } = await import('@/lib/supabase-pedidos');
+      const isCompleted = await checkStatus(user.name, targetDateString);
+      setIsLiquidationCompleted(isCompleted);
+      
+      console.log(`🔍 Estado de liquidación para ${user.name} en ${targetDateString}: ${isCompleted ? 'COMPLETADA' : 'PENDIENTE'}`);
+    } catch (error) {
+      console.error('❌ Error verificando estado de liquidación:', error);
+      setIsLiquidationCompleted(false);
     }
   };
 
@@ -852,13 +863,23 @@ export default function MiRutaHoy() {
         console.log('📋 LONGITUD DEL BASE64:', base64Image.length);
         console.log('🔍 ===========================================');
 
+        // Mostrar indicador de actualización
+        setIsAddingExpense(true);
+        
         // Pequeño delay para asegurar que el servidor procesó el gasto
-        console.log('⏳ Esperando 2 segundos para que el servidor procese el gasto...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log('⏳ Esperando 3 segundos para que el servidor procese el gasto...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
         
         // Recargar gastos reales desde Supabase
         console.log('🔄 Recargando gastos desde Supabase...');
         await loadGastosReales();
+        
+        // Forzar re-renderizado de la UI
+        console.log('🔄 Forzando actualización de la UI...');
+        setRouteData(prev => ({ ...prev }));
+        
+        // Ocultar indicador de actualización
+        setIsAddingExpense(false);
 
         setNewExpense({
           type: 'fuel',
@@ -1430,6 +1451,22 @@ export default function MiRutaHoy() {
     };
   };
 
+  // Función para obtener información de la fecha seleccionada
+  const getSelectedDateInfo = () => {
+    const targetDate = selectedDate || new Date();
+    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    
+    return {
+      dayName: dayNames[targetDate.getDay()],
+      day: targetDate.getDate(),
+      month: monthNames[targetDate.getMonth()],
+      year: targetDate.getFullYear(),
+      fullDate: targetDate.toLocaleDateString('es-CR')
+    };
+  };
+
 
   // Filtrar y buscar pedidos
   const filteredOrders = routeData.orders
@@ -1519,14 +1556,14 @@ export default function MiRutaHoy() {
                       day: 'numeric', 
                       month: 'long' 
                     }) : 
-                    getTodayInfo().dayName + ' ' + getTodayInfo().day + ' de ' + getTodayInfo().month
+                    getSelectedDateInfo().dayName + ' ' + getSelectedDateInfo().day + ' de ' + getSelectedDateInfo().month
                   }
                 </span>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="bg-white/20 text-white">
-                {selectedDate ? selectedDate.toLocaleDateString('es-CR') : getTodayInfo().fullDate}
+                {selectedDate ? selectedDate.toLocaleDateString('es-CR') : getSelectedDateInfo().fullDate}
               </Badge>
             </div>
           </div>
@@ -1546,6 +1583,7 @@ export default function MiRutaHoy() {
           </div>
         </div>
       </div>
+
 
       {/* Bento Grid Unificado - Todas las Métricas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -1738,13 +1776,18 @@ export default function MiRutaHoy() {
                 Gastos del Día
               </CardTitle>
               <div className="text-sm text-orange-600 mt-1">
-                <span className="font-medium">{user?.name}</span> • {getTodayInfo().dayName} {getTodayInfo().day} de {getTodayInfo().month}
+                <span className="font-medium">{user?.name}</span> • {getSelectedDateInfo().dayName} {getSelectedDateInfo().day} de {getSelectedDateInfo().month}
               </div>
             </div>
             <div className="flex gap-2">
               <Dialog open={isExpenseModalOpen} onOpenChange={setIsExpenseModalOpen}>
                 <DialogTrigger asChild>
-                  <Button size="sm" className="bg-orange-600 hover:bg-orange-700">
+                  <Button 
+                    size="sm" 
+                    className="bg-orange-600 hover:bg-orange-700"
+                    disabled={isLiquidationCompleted}
+                    title={isLiquidationCompleted ? "Liquidación completada - No se puede agregar gastos" : "Agregar gasto"}
+                  >
                     <Plus className="w-4 h-4 mr-1" />
                     Agregar
                   </Button>
@@ -1960,7 +2003,7 @@ export default function MiRutaHoy() {
             Filtros y Búsqueda
           </CardTitle>
           <div className="text-sm text-blue-600 mt-1">
-            <span className="font-medium">{user?.name}</span> • {getTodayInfo().dayName} {getTodayInfo().day} de {getTodayInfo().month}
+            <span className="font-medium">{user?.name}</span> • {getSelectedDateInfo().dayName} {getSelectedDateInfo().day} de {getSelectedDateInfo().month}
           </div>
         </CardHeader>
         <CardContent className="space-y-4 p-4">
@@ -2104,38 +2147,6 @@ export default function MiRutaHoy() {
               </Popover>
             </div>
             
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant={dateFilter === 'today' ? 'default' : 'outline'}
-                onClick={() => {
-                  setDateFilter('today');
-                  setSelectedDate(undefined);
-                }}
-                className={`justify-start gap-2 h-10 text-sm ${
-                  dateFilter === 'today' 
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' 
-                    : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
-                }`}
-              >
-                <Calendar className="w-4 h-4" />
-                Hoy
-              </Button>
-              <Button
-                variant={dateFilter === 'yesterday' ? 'default' : 'outline'}
-                onClick={() => {
-                  setDateFilter('yesterday');
-                  setSelectedDate(undefined);
-                }}
-                className={`justify-start gap-2 h-10 text-sm ${
-                  dateFilter === 'yesterday' 
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' 
-                    : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
-                }`}
-              >
-                <Calendar className="w-4 h-4" />
-                Ayer
-              </Button>
-            </div>
             
           </div>
           
@@ -2165,12 +2176,25 @@ export default function MiRutaHoy() {
       {/* Pedidos del Día */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Package className="w-5 h-5 text-blue-600" />
-            Pedidos del Día
-          </CardTitle>
-          <div className="text-sm text-gray-600 mt-1">
-            <span className="font-medium">{user?.name}</span> • {getTodayInfo().dayName} {getTodayInfo().day} de {getTodayInfo().month}
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Package className="w-5 h-5 text-blue-600" />
+                Pedidos del Día
+              </CardTitle>
+              <div className="text-sm text-gray-600 mt-1">
+                <span className="font-medium">{user?.name}</span> • {getSelectedDateInfo().dayName} {getSelectedDateInfo().day} de {getSelectedDateInfo().month}
+              </div>
+            </div>
+            {isLiquidationCompleted && (
+              <div className="flex items-center gap-2 bg-green-100 border border-green-300 rounded-lg px-3 py-2">
+                <CheckCircle2 className="w-5 h-5 text-green-600 animate-pulse" />
+                <div className="text-right">
+                  <div className="text-sm font-bold text-green-800">LIQUIDACIÓN COMPLETADA</div>
+                  <div className="text-xs text-green-600">Solo lectura</div>
+                </div>
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -2461,8 +2485,8 @@ export default function MiRutaHoy() {
                               setIsUpdateStatusModalOpen(true);
                             }}
                             className="h-10 w-10 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700 hover:scale-105 transition-transform"
-                            disabled={updatingOrder === order.id}
-                            title="Actualizar Estado"
+                            disabled={updatingOrder === order.id || isLiquidationCompleted}
+                            title={isLiquidationCompleted ? "Liquidación completada - No se puede editar" : "Actualizar Estado"}
                           >
                             {updatingOrder === order.id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
