@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'asesor' | 'mensajero';
+export type UserRole = 'admin' | 'asesor' | 'mensajero' | 'tienda';
 
 export type OrderStatus = 
   | 'pendiente'
@@ -45,6 +45,7 @@ export interface User {
   isActive: boolean;
   companyId?: string;        // Nueva relación con empresa
   company?: Company;         // Referencia a empresa
+  tiendaName?: string;       // Nombre de la tienda para usuarios tipo 'tienda'
 }
 
 export interface Customer {

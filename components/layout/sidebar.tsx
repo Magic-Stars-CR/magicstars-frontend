@@ -52,6 +52,12 @@ const menuItems = {
     { icon: Truck, label: 'Historial de Rutas', href: '/dashboard/mensajero/route-history' },
     { icon: User, label: 'Mi Perfil', href: '/dashboard/mensajero/profile' },
   ],
+  tienda: [
+    { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/tienda' },
+    { icon: Package, label: 'Pedidos', href: '/dashboard/tienda/orders' },
+    { icon: BarChart3, label: 'Estadísticas', href: '/dashboard/tienda/stats' },
+    { icon: User, label: 'Mi Perfil', href: '/dashboard/tienda/profile' },
+  ],
 };
 
 export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: boolean) => void }) {

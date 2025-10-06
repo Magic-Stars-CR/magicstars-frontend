@@ -243,6 +243,59 @@ export const mockUsers: User[] = [
     companyId: '3',
     company: mockCompanies[2],
   },
+  // Usuarios de Tienda
+  {
+    id: '20',
+    email: 'tienda@allstars.cr',
+    name: 'ALL STARS',
+    role: 'tienda',
+    phone: '+506 8888-2000',
+    avatar: 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=150',
+    createdAt: '2024-01-01T10:00:00Z',
+    isActive: true,
+    companyId: '3', // AllStars
+    company: mockCompanies[2],
+    tiendaName: 'ALL STARS',
+  },
+  {
+    id: '21',
+    email: 'tienda@beautyfan.cr',
+    name: 'BEAUTY FAN',
+    role: 'tienda',
+    phone: '+506 8888-2001',
+    avatar: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=150',
+    createdAt: '2024-01-01T10:00:00Z',
+    isActive: true,
+    companyId: '2', // BeautyFan
+    company: mockCompanies[1],
+    tiendaName: 'BEAUTY FAN',
+  },
+  {
+    id: '22',
+    email: 'tienda@paramachoscr.com',
+    name: 'PARA MACHOS CR',
+    role: 'tienda',
+    phone: '+506 8888-2002',
+    avatar: 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=150',
+    createdAt: '2024-01-01T10:00:00Z',
+    isActive: true,
+    companyId: '1', // Para Machos CR
+    company: mockCompanies[0],
+    tiendaName: 'PARA MACHOS CR',
+  },
+  {
+    id: '23',
+    email: 'tienda@otrastiendas.cr',
+    name: 'OTRAS TIENDAS',
+    role: 'tienda',
+    phone: '+506 8888-2003',
+    avatar: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=150',
+    createdAt: '2024-01-01T10:00:00Z',
+    isActive: true,
+    companyId: undefined,
+    company: undefined,
+    tiendaName: 'OTRAS TIENDAS',
+  },
 ];
 
 // Mock Products
