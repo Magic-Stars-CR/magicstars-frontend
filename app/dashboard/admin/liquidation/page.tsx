@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/auth-context';
 import { mockApi } from '@/lib/mock-api';
-import { RouteLiquidation, RouteLiquidationStats, RouteLiquidationFilters, PedidoTest } from '@/lib/types';
-import { getLiquidacionesReales, getMensajerosUnicos, debugTablaPedidos, debugFechasConDatos } from '@/lib/supabase-pedidos';
+import { RouteLiquidation, RouteLiquidationStats, RouteLiquidationFilters, PedidoTest, TiendaLiquidationCalculation } from '@/lib/types';
+import { getLiquidacionesReales, getMensajerosUnicos, debugTablaPedidos, debugFechasConDatos, getLiquidacionesRealesByTienda } from '@/lib/supabase-pedidos';
 import { supabasePedidos } from '@/lib/supabase-pedidos';
 import { ProgressLoader, useProgressLoader } from '@/components/ui/progress-loader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,6 +74,7 @@ interface LiquidationCalculation {
 }
 
 export default function AdminLiquidationPage() {
+  const { user } = useAuth();
   const [liquidations, setLiquidations] = useState<RouteLiquidation[]>([]);
   const [stats, setStats] = useState<RouteLiquidationStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,6 +85,23 @@ export default function AdminLiquidationPage() {
   
   // Estados para el módulo de liquidación mejorado
   const [calculations, setCalculations] = useState<LiquidationCalculation[]>([]);
+  const [tiendaCalculations, setTiendaCalculations] = useState<TiendaLiquidationCalculation[]>([]);
+  
+  // Estados para filtros y paginación de tiendas
+  const [tiendaStatusFilter, setTiendaStatusFilter] = useState<string>('TODOS');
+  const [tiendaCurrentPage, setTiendaCurrentPage] = useState<{ [key: string]: number }>({});
+  
+  // Estados para acciones de actualización de estado
+  const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
+  const [isUpdateStatusModalOpen, setIsUpdateStatusModalOpen] = useState(false);
+  const [selectedOrderForUpdate, setSelectedOrderForUpdate] = useState<PedidoTest | null>(null);
+  const [newStatus, setNewStatus] = useState<string>('ENTREGADO');
+  const [statusComment, setStatusComment] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('efectivo');
+  
+  // Estados para modal de detalles
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<PedidoTest | null>(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [editingInitialAmount, setEditingInitialAmount] = useState<string | null>(null);
   const [newInitialAmount, setNewInitialAmount] = useState('');
@@ -149,6 +168,7 @@ export default function AdminLiquidationPage() {
     initializeDate();
     loadData();
     loadCalculations();
+    loadTiendaCalculations();
   }, [filters, selectedDate]);
 
 
@@ -168,17 +188,19 @@ export default function AdminLiquidationPage() {
     }
   };
 
-  const loadCalculations = async () => {
+  const loadCalculations = async (isReload = false) => {
     try {
-      console.log('🚀 Iniciando loadCalculations para fecha:', selectedDate);
+      console.log('🚀 Iniciando loadCalculations para fecha:', selectedDate, isReload ? '(recarga)' : '');
       
-      // Iniciar loader
-      startLoader('Procesando Liquidaciones', [
-        { id: 'mensajeros', label: 'Obteniendo mensajeros únicos', status: 'pending' },
-        { id: 'pedidos', label: 'Cargando pedidos del día', status: 'pending' },
-        { id: 'calculations', label: 'Calculando liquidaciones', status: 'pending' },
-        { id: 'finalization', label: 'Finalizando proceso', status: 'pending' }
-      ]);
+      // Solo mostrar loader completo si no es una recarga
+      if (!isReload) {
+        startLoader('Procesando Liquidaciones', [
+          { id: 'mensajeros', label: 'Obteniendo mensajeros únicos', status: 'pending' },
+          { id: 'pedidos', label: 'Cargando pedidos del día', status: 'pending' },
+          { id: 'calculations', label: 'Calculando liquidaciones', status: 'pending' },
+          { id: 'finalization', label: 'Finalizando proceso', status: 'pending' }
+        ]);
+      }
       
       // Paso 1: Obtener liquidaciones reales
       setStepStatus('mensajeros', 'loading', 'Buscando mensajeros en la base de datos...');
@@ -251,10 +273,13 @@ export default function AdminLiquidationPage() {
       }, 1000);
       
       
-      // Cerrar loader
+      // Cerrar loader (más rápido para recargas)
       setTimeout(() => {
         closeLoader();
-      }, 1000);
+        if (isReload) {
+          console.log('✅ Datos actualizados correctamente');
+        }
+      }, isReload ? 500 : 1000);
       
     } catch (error) {
       console.error('❌ Error loading calculations:', error);
@@ -270,6 +295,100 @@ export default function AdminLiquidationPage() {
       
       // Fallback a datos vacíos si hay error
       setCalculations([]);
+    }
+  };
+
+  const loadTiendaCalculations = async () => {
+    try {
+      console.log('🚀 Iniciando loadTiendaCalculations para fecha:', selectedDate);
+      
+      // Iniciar loader
+      startLoader('Procesando Liquidaciones por Tienda', [
+        { id: 'tiendas', label: 'Obteniendo tiendas únicas', status: 'pending' },
+        { id: 'pedidos', label: 'Cargando pedidos del día', status: 'pending' },
+        { id: 'calculations', label: 'Calculando liquidaciones', status: 'pending' },
+        { id: 'finalization', label: 'Finalizando proceso', status: 'pending' }
+      ]);
+      
+      // Paso 1: Obtener liquidaciones reales por tienda
+      setStepStatus('tiendas', 'loading', 'Buscando tiendas en la base de datos...');
+      
+      // Asegurar que tenemos una fecha válida
+      let fechaParaUsar = selectedDate;
+      if (!fechaParaUsar) {
+        const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
+        fechaParaUsar = getCostaRicaDateISO();
+        console.log('📅 Usando fecha de Costa Rica por defecto:', fechaParaUsar);
+      }
+      
+      const liquidacionesReales = await getLiquidacionesRealesByTienda(fechaParaUsar);
+      console.log('✅ Liquidaciones por tienda obtenidas:', liquidacionesReales.length);
+      console.log('📅 Fecha usada para la consulta:', fechaParaUsar);
+      
+      setStepStatus('tiendas', 'completed', `${liquidacionesReales.length} tiendas encontradas`);
+      setProgress(30);
+      
+      // Paso 2: Procesar pedidos
+      setStepStatus('pedidos', 'loading', 'Recopilando pedidos por tienda...');
+      setStepStatus('pedidos', 'completed', 'Pedidos cargados correctamente');
+      setProgress(60);
+      
+      // Paso 3: Calcular liquidaciones
+      setStepStatus('calculations', 'loading', 'Procesando totales y montos...');
+      
+      // Los datos ya vienen calculados de Supabase
+      const calculations: TiendaLiquidationCalculation[] = liquidacionesReales.map((liquidation, index) => ({
+        tienda: liquidation.tienda,
+        routeDate: selectedDate,
+        totalOrders: liquidation.pedidos.length,
+        totalValue: liquidation.pedidos.reduce((sum, pedido) => sum + pedido.valor_total, 0),
+        totalCollected: liquidation.totalCollected,
+        totalSpent: liquidation.totalSpent,
+        sinpePayments: liquidation.sinpePayments,
+        cashPayments: liquidation.cashPayments,
+        tarjetaPayments: liquidation.tarjetaPayments || 0,
+        finalAmount: liquidation.finalAmount,
+        orders: liquidation.pedidos,
+        isLiquidated: false,
+        canEdit: true,
+        deliveredOrders: liquidation.deliveredOrders,
+        pendingOrders: liquidation.pendingOrders,
+        returnedOrders: liquidation.returnedOrders,
+        rescheduledOrders: liquidation.rescheduledOrders,
+        averageOrderValue: liquidation.averageOrderValue,
+        topMessenger: liquidation.topMessenger,
+        topDistrict: liquidation.topDistrict
+      }));
+      
+      console.log('✅ Calculations por tienda generadas:', calculations.length);
+      setStepStatus('calculations', 'completed', 'Liquidaciones calculadas correctamente');
+      setProgress(90);
+      
+      // Paso 4: Finalizar
+      setStepStatus('finalization', 'loading', 'Preparando datos para mostrar...');
+      setTiendaCalculations(calculations);
+      setStepStatus('finalization', 'completed', 'Proceso completado');
+      setProgress(100);
+      
+      // Cerrar loader
+      setTimeout(() => {
+        closeLoader();
+      }, 1000);
+      
+    } catch (error) {
+      console.error('❌ Error loading tienda calculations:', error);
+      
+      // Marcar pasos como error
+      setStepStatus('calculations', 'error', 'Error en el cálculo');
+      setStepStatus('finalization', 'error', 'Proceso falló');
+      
+      // Cerrar loader después de mostrar el error
+      setTimeout(() => {
+        closeLoader();
+      }, 3000);
+      
+      // Fallback a datos vacíos si hay error
+      setTiendaCalculations([]);
     }
   };
 
@@ -387,6 +506,9 @@ export default function AdminLiquidationPage() {
               : calc
           )
         );
+        // Recargar datos para sincronizar con la base de datos
+        console.log('🔄 Recargando datos después de verificar liquidación...');
+        await loadCalculations(true);
       }
       
       console.log(`🔍 Liquidación para ${calculation.messengerName} en ${fechaParaVerificar}: ${isCompleted ? 'COMPLETADA' : 'PENDIENTE'}`);
@@ -600,7 +722,7 @@ ${pedidosList}
       const responseData = await response.json();
       console.log('✅ Liquidación enviada exitosamente:', responseData);
 
-      // Marcar como liquidado
+      // Marcar como liquidado localmente
       setCalculations(prev => 
         prev.map(calc => 
           calc.messengerId === calculation.messengerId 
@@ -612,8 +734,13 @@ ${pedidosList}
       // Restringir edición de pedidos
       setIsEditingRestricted(true);
       
+      // Cerrar modales
       setShowLiquidationModal(false);
       setShowViewAndLiquidateModal(false);
+      
+      // Recargar datos para sincronizar con la base de datos
+      console.log('🔄 Recargando datos después de liquidación...');
+      await loadCalculations(true);
     } catch (error) {
       console.error('Error confirming liquidation:', error);
       alert('Error al confirmar la liquidación: ' + (error instanceof Error ? error.message : 'Error desconocido'));
@@ -626,6 +753,103 @@ ${pedidosList}
       currency: 'CRC',
       minimumFractionDigits: 0,
     }).format(amount);
+  };
+
+  // Funciones auxiliares para filtros y paginación de tiendas
+  const getFilteredOrders = (orders: PedidoTest[], statusFilter: string) => {
+    if (statusFilter === 'TODOS') {
+      return orders;
+    }
+    return orders.filter(pedido => pedido.estado_pedido === statusFilter);
+  };
+
+  const getPaginatedOrders = (orders: PedidoTest[], currentPage: number, pageSize: number = 10) => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return orders.slice(startIndex, endIndex);
+  };
+
+  const getTotalPages = (totalOrders: number, pageSize: number = 10) => {
+    return Math.ceil(totalOrders / pageSize);
+  };
+
+  const getCurrentPageForTienda = (tienda: string) => {
+    return tiendaCurrentPage[tienda] || 1;
+  };
+
+  const setCurrentPageForTienda = (tienda: string, page: number) => {
+    setTiendaCurrentPage(prev => ({
+      ...prev,
+      [tienda]: page
+    }));
+  };
+
+  // Función para actualizar el estado de un pedido
+  const handleUpdateOrderStatus = async () => {
+    if (!selectedOrderForUpdate || !newStatus) return;
+    
+    try {
+      setUpdatingOrder(selectedOrderForUpdate.id_pedido);
+      
+      // Preparar datos para el webhook
+      const webhookData = {
+        idPedido: selectedOrderForUpdate.id_pedido,
+        mensajero: selectedOrderForUpdate.mensajero_concretado || selectedOrderForUpdate.mensajero_asignado || 'SIN_ASIGNAR',
+        usuario: user?.name || 'Admin', // Usuario que realiza la acción
+        
+        // Datos del formulario
+        estadoPedido: newStatus === 'REAGENDADO' ? 'REAGENDO' : newStatus,
+        metodoPago: newStatus === 'DEVOLUCION' || newStatus === 'REAGENDADO' ? null : paymentMethod,
+        nota: statusComment || '',
+        
+        // Datos del pedido
+        clienteNombre: selectedOrderForUpdate.cliente_nombre,
+        clienteTelefono: selectedOrderForUpdate.cliente_telefono || '',
+        direccion: selectedOrderForUpdate.direccion || '',
+        provincia: selectedOrderForUpdate.provincia || '',
+        canton: selectedOrderForUpdate.canton || '',
+        distrito: selectedOrderForUpdate.distrito || '',
+        valorTotal: selectedOrderForUpdate.valor_total,
+        productos: selectedOrderForUpdate.productos || 'No especificados',
+        tienda: selectedOrderForUpdate.tienda || 'ALL STARS'
+      };
+
+      console.log('🔄 Actualizando estado del pedido:', webhookData);
+
+      // Llamar al webhook
+      const response = await fetch("https://primary-production-2b25b.up.railway.app/webhook/actualizar-pedido", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(webhookData)
+      });
+
+      const resultado = await response.json();
+      console.log("📡 Respuesta del webhook:", resultado);
+
+      if (response.ok) {
+        // Recargar los datos para reflejar los cambios
+        await loadTiendaCalculations();
+        await loadCalculations(true);
+        
+        // Cerrar modal y resetear estado
+        setIsUpdateStatusModalOpen(false);
+        setSelectedOrderForUpdate(null);
+        setNewStatus('ENTREGADO');
+        setStatusComment('');
+        setPaymentMethod('efectivo');
+        
+        alert(`Pedido ${selectedOrderForUpdate.id_pedido} actualizado a ${newStatus} exitosamente`);
+      } else {
+        throw new Error(resultado.message || 'Error al actualizar el pedido');
+      }
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      alert('Error al actualizar el pedido: ' + (error instanceof Error ? error.message : 'Error desconocido'));
+    } finally {
+      setUpdatingOrder(null);
+    }
   };
 
   const formatDate = (date: string) => {
@@ -1026,6 +1250,259 @@ ${pedidosList}
         </CardContent>
       </Card>
 
+      {/* Liquidaciones por Tienda */}
+      {tiendaCalculations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5" />
+              Liquidaciones por Tienda - {selectedDate}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {tiendaCalculations.map((tiendaCalculation) => {
+                return (
+                  <div key={tiendaCalculation.tienda} className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-lg">{tiendaCalculation.tienda}</h3>
+                      <div className="flex gap-2">
+                        <Badge variant="outline">
+                          {tiendaCalculation.totalOrders} pedidos
+                        </Badge>
+                        <Badge variant="secondary">
+                          ₡{tiendaCalculation.totalValue.toLocaleString()}
+                        </Badge>
+                      </div>
+                    </div>
+                    
+                    {/* Contadores de pedidos por estado */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600">{tiendaCalculation.deliveredOrders}</div>
+                        <div className="text-sm text-gray-600">Entregados</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-yellow-600">{tiendaCalculation.pendingOrders}</div>
+                        <div className="text-sm text-gray-600">Pendientes</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-red-600">{tiendaCalculation.returnedOrders}</div>
+                        <div className="text-sm text-gray-600">Devoluciones</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-blue-600">{tiendaCalculation.rescheduledOrders}</div>
+                        <div className="text-sm text-gray-600">Reagendados</div>
+                      </div>
+                    </div>
+
+                    {/* Información adicional */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 text-sm">
+                      <div>
+                        <span className="font-medium">Valor promedio por pedido:</span>
+                        <span className="ml-2 text-green-600">₡{tiendaCalculation.averageOrderValue.toLocaleString()}</span>
+                      </div>
+                      <div>
+                        <span className="font-medium">Mensajero principal:</span>
+                        <span className="ml-2">{tiendaCalculation.topMessenger}</span>
+                      </div>
+                      <div>
+                        <span className="font-medium">Distrito principal:</span>
+                        <span className="ml-2">{tiendaCalculation.topDistrict}</span>
+                      </div>
+                    </div>
+                    
+                    {tiendaCalculation.orders.length > 0 ? (
+                      <div className="space-y-4">
+                        {/* Filtros */}
+                        <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor={`status-filter-${tiendaCalculation.tienda}`} className="font-medium">
+                              Filtrar por estado:
+                            </Label>
+                            <Select
+                              value={tiendaStatusFilter}
+                              onValueChange={setTiendaStatusFilter}
+                            >
+                              <SelectTrigger className="w-40">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="TODOS">Todos</SelectItem>
+                                <SelectItem value="ENTREGADO">Entregados</SelectItem>
+                                <SelectItem value="PENDIENTE">Pendientes</SelectItem>
+                                <SelectItem value="DEVOLUCION">Devoluciones</SelectItem>
+                                <SelectItem value="REAGENDADO">Reagendados</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            Mostrando {getFilteredOrders(tiendaCalculation.orders, tiendaStatusFilter).length} de {tiendaCalculation.orders.length} pedidos
+                          </div>
+                        </div>
+
+                        {/* Tabla de pedidos */}
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>ID Pedido</TableHead>
+                                <TableHead>Cliente</TableHead>
+                                <TableHead>Estado</TableHead>
+                                <TableHead>Valor</TableHead>
+                                <TableHead>Método de Pago</TableHead>
+                                <TableHead>Distrito</TableHead>
+                                <TableHead>Mensajero</TableHead>
+                                <TableHead>Acciones</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {(() => {
+                                const filteredOrders = getFilteredOrders(tiendaCalculation.orders, tiendaStatusFilter);
+                                const currentPage = getCurrentPageForTienda(tiendaCalculation.tienda);
+                                const paginatedOrders = getPaginatedOrders(filteredOrders, currentPage, 10);
+                                
+                                return paginatedOrders.map((pedido) => (
+                                  <TableRow key={pedido.id_pedido}>
+                                    <TableCell className="font-medium">{pedido.id_pedido}</TableCell>
+                                    <TableCell>{pedido.cliente_nombre}</TableCell>
+                                    <TableCell>
+                                      <Badge 
+                                        variant={pedido.estado_pedido === 'ENTREGADO' ? 'default' : 'outline'}
+                                        className={
+                                          pedido.estado_pedido === 'ENTREGADO' ? 'bg-green-100 text-green-800' :
+                                          pedido.estado_pedido === 'PENDIENTE' ? 'bg-yellow-100 text-yellow-800' :
+                                          pedido.estado_pedido === 'DEVOLUCION' ? 'bg-red-100 text-red-800' :
+                                          pedido.estado_pedido === 'REAGENDADO' ? 'bg-blue-100 text-blue-800' : ''
+                                        }
+                                      >
+                                        {pedido.estado_pedido || 'PENDIENTE'}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>₡{pedido.valor_total.toLocaleString()}</TableCell>
+                                    <TableCell>
+                                      <Badge variant="outline">
+                                        {pedido.metodo_pago || 'SIN_METODO'}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>{pedido.distrito}</TableCell>
+                                    <TableCell>
+                                      <span className="text-sm font-medium">
+                                        {pedido.mensajero_concretado || pedido.mensajero_asignado || 'SIN_ASIGNAR'}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex gap-1">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedOrderForDetails(pedido);
+                                            setIsDetailsModalOpen(true);
+                                          }}
+                                          className="h-7 w-7 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
+                                          title="Ver Detalles"
+                                        >
+                                          <Eye className="w-4 h-4" />
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedOrderForUpdate(pedido);
+                                            setNewStatus('ENTREGADO');
+                                            setPaymentMethod(pedido.metodo_pago || 'efectivo');
+                                            setIsUpdateStatusModalOpen(true);
+                                          }}
+                                          className="h-7 w-7 p-0 bg-green-50 border-green-200 hover:bg-green-100 text-green-700"
+                                          disabled={updatingOrder === pedido.id_pedido}
+                                          title="Editar Estado"
+                                        >
+                                          {updatingOrder === pedido.id_pedido ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                          ) : (
+                                            <Edit3 className="w-4 h-4" />
+                                          )}
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ));
+                              })()}
+                            </TableBody>
+                          </Table>
+                        </div>
+
+                        {/* Paginación */}
+                        {(() => {
+                          const filteredOrders = getFilteredOrders(tiendaCalculation.orders, tiendaStatusFilter);
+                          const totalPages = getTotalPages(filteredOrders.length, 10);
+                          const currentPage = getCurrentPageForTienda(tiendaCalculation.tienda);
+                          
+                          if (totalPages <= 1) return null;
+                          
+                          return (
+                            <div className="flex items-center justify-between">
+                              <div className="text-sm text-gray-600">
+                                Página {currentPage} de {totalPages} 
+                                ({filteredOrders.length} pedidos totales)
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setCurrentPageForTienda(tiendaCalculation.tienda, Math.max(1, currentPage - 1))}
+                                  disabled={currentPage <= 1}
+                                >
+                                  Anterior
+                                </Button>
+                                <div className="flex items-center gap-1">
+                                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                    const pageNum = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
+                                    if (pageNum > totalPages) return null;
+                                    
+                                    return (
+                                      <Button
+                                        key={pageNum}
+                                        variant={pageNum === currentPage ? "default" : "outline"}
+                                        size="sm"
+                                        onClick={() => setCurrentPageForTienda(tiendaCalculation.tienda, pageNum)}
+                                        className="w-8 h-8 p-0"
+                                      >
+                                        {pageNum}
+                                      </Button>
+                                    );
+                                  })}
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setCurrentPageForTienda(tiendaCalculation.tienda, Math.min(totalPages, currentPage + 1))}
+                                  disabled={currentPage >= totalPages}
+                                >
+                                  Siguiente
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-gray-500">
+                        <Package className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p>No hay pedidos para esta tienda en esta fecha</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Detalles de Pedidos Reales */}
       {calculations.length > 0 && (
         <Card>
@@ -1055,15 +1532,15 @@ ${pedidosList}
                             <div className="flex items-center justify-between mb-2">
                               <span className="font-medium text-sm">{pedido.id_pedido}</span>
                               <Badge 
-                                variant={pedido.estado_pedido === 'entregado' ? 'default' : 'outline'}
-                                className={pedido.estado_pedido === 'entregado' ? 'bg-green-100 text-green-800' : ''}
+                                variant={pedido.estado_pedido === 'ENTREGADO' ? 'default' : 'outline'}
+                                className={pedido.estado_pedido === 'ENTREGADO' ? 'bg-green-100 text-green-800' : ''}
                               >
-                                {pedido.estado_pedido || 'pendiente'}
+                                {pedido.estado_pedido || 'PENDIENTE'}
                               </Badge>
                             </div>
                             <div className="text-sm text-gray-600 space-y-1">
                               <div>Cliente: {pedido.cliente_nombre}</div>
-                              <div>Valor: {formatCurrency(pedido.valor_total)}</div>
+                              <div>Valor: ₡{pedido.valor_total.toLocaleString()}</div>
                               <div>Método: {pedido.metodo_pago || 'N/A'}</div>
                               <div>Distrito: {pedido.distrito}</div>
                             </div>
@@ -2650,6 +3127,233 @@ ${pedidosList}
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Modal para actualizar estado de pedido */}
+      <Dialog open={isUpdateStatusModalOpen} onOpenChange={setIsUpdateStatusModalOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Actualizar Estado del Pedido</DialogTitle>
+          </DialogHeader>
+          {selectedOrderForUpdate && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <p className="text-sm font-medium">Pedido: {selectedOrderForUpdate.id_pedido}</p>
+                <p className="text-sm text-gray-600">{selectedOrderForUpdate.cliente_nombre}</p>
+                <p className="text-sm text-gray-600">Valor: ₡{selectedOrderForUpdate.valor_total.toLocaleString()}</p>
+                <p className="text-sm text-gray-600">Estado actual: {selectedOrderForUpdate.estado_pedido || 'PENDIENTE'}</p>
+              </div>
+              
+              <div>
+                <Label htmlFor="new-status">Nuevo Estado</Label>
+                <Select value={newStatus} onValueChange={setNewStatus}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ENTREGADO">Entregado</SelectItem>
+                    <SelectItem value="DEVOLUCION">Devolución</SelectItem>
+                    <SelectItem value="REAGENDADO">Reagendado</SelectItem>
+                    <SelectItem value="PENDIENTE">Pendiente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {newStatus !== 'DEVOLUCION' && newStatus !== 'REAGENDADO' && (
+                <div>
+                  <Label htmlFor="payment-method">Método de Pago</Label>
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="efectivo">Efectivo</SelectItem>
+                      <SelectItem value="sinpe">SINPE</SelectItem>
+                      <SelectItem value="tarjeta">Tarjeta</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div>
+                <Label htmlFor="status-comment">Comentarios (opcional)</Label>
+                <Textarea
+                  id="status-comment"
+                  placeholder="Agrega comentarios sobre el cambio de estado..."
+                  value={statusComment}
+                  onChange={(e) => setStatusComment(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsUpdateStatusModalOpen(false);
+                    setSelectedOrderForUpdate(null);
+                    setNewStatus('ENTREGADO');
+                    setStatusComment('');
+                    setPaymentMethod('efectivo');
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleUpdateOrderStatus}
+                  disabled={updatingOrder === selectedOrderForUpdate.id_pedido}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {updatingOrder === selectedOrderForUpdate.id_pedido ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Actualizar Estado
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de detalles del pedido */}
+      <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="w-5 h-5" />
+              Detalles del Pedido
+            </DialogTitle>
+          </DialogHeader>
+          {selectedOrderForDetails && (
+            <div className="space-y-6">
+              {/* Información básica */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">ID del Pedido</Label>
+                    <p className="text-lg font-semibold">{selectedOrderForDetails.id_pedido}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Cliente</Label>
+                    <p className="text-lg">{selectedOrderForDetails.cliente_nombre}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Teléfono</Label>
+                    <p className="text-lg">{selectedOrderForDetails.cliente_telefono || 'No especificado'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Valor Total</Label>
+                    <p className="text-lg font-semibold text-green-600">₡{selectedOrderForDetails.valor_total.toLocaleString()}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Estado</Label>
+                    <div className="mt-1">
+                      <Badge 
+                        variant={selectedOrderForDetails.estado_pedido === 'ENTREGADO' ? 'default' : 'outline'}
+                        className={
+                          selectedOrderForDetails.estado_pedido === 'ENTREGADO' ? 'bg-green-100 text-green-800' :
+                          selectedOrderForDetails.estado_pedido === 'PENDIENTE' ? 'bg-yellow-100 text-yellow-800' :
+                          selectedOrderForDetails.estado_pedido === 'DEVOLUCION' ? 'bg-red-100 text-red-800' :
+                          selectedOrderForDetails.estado_pedido === 'REAGENDADO' ? 'bg-blue-100 text-blue-800' : ''
+                        }
+                      >
+                        {selectedOrderForDetails.estado_pedido || 'PENDIENTE'}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Método de Pago</Label>
+                    <p className="text-lg">{selectedOrderForDetails.metodo_pago || 'No especificado'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Mensajero</Label>
+                    <p className="text-lg">{selectedOrderForDetails.mensajero_concretado || selectedOrderForDetails.mensajero_asignado || 'SIN_ASIGNAR'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Tienda</Label>
+                    <p className="text-lg">{selectedOrderForDetails.tienda || 'ALL STARS'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dirección */}
+              <div>
+                <Label className="text-sm font-medium text-gray-500">Dirección de Entrega</Label>
+                <div className="mt-1 p-3 bg-gray-50 rounded-lg">
+                  <p className="text-sm">
+                    {selectedOrderForDetails.direccion || 'No especificada'}, {selectedOrderForDetails.distrito || ''}, {selectedOrderForDetails.canton || ''}, {selectedOrderForDetails.provincia || ''}
+                  </p>
+                </div>
+              </div>
+
+              {/* Productos */}
+              <div>
+                <Label className="text-sm font-medium text-gray-500">Productos</Label>
+                <div className="mt-1 p-3 bg-gray-50 rounded-lg">
+                  <p className="text-sm">{selectedOrderForDetails.productos || 'No especificados'}</p>
+                </div>
+              </div>
+
+              {/* Información adicional */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Fecha de Creación</Label>
+                  <p className="text-sm">{selectedOrderForDetails.fecha_creacion || 'No especificada'}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Fecha de Entrega</Label>
+                  <p className="text-sm">{selectedOrderForDetails.fecha_entrega || 'No especificada'}</p>
+                </div>
+              </div>
+
+              {/* Notas */}
+              {(selectedOrderForDetails.notas || selectedOrderForDetails.nota_asesor) && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Notas</Label>
+                  <div className="mt-1 p-3 bg-gray-50 rounded-lg">
+                    <p className="text-sm">{selectedOrderForDetails.notas || selectedOrderForDetails.nota_asesor}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Botones de acción */}
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsDetailsModalOpen(false);
+                    setSelectedOrderForDetails(null);
+                  }}
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  onClick={() => {
+                    setIsDetailsModalOpen(false);
+                    setSelectedOrderForUpdate(selectedOrderForDetails);
+                    setNewStatus('ENTREGADO');
+                    setPaymentMethod(selectedOrderForDetails.metodo_pago || 'efectivo');
+                    setIsUpdateStatusModalOpen(true);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Edit3 className="w-4 h-4 mr-2" />
+                  Editar Estado
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

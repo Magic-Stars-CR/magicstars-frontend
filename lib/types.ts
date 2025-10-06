@@ -647,3 +647,28 @@ export interface PedidoTest {
   mensajero_asignado: string | null;
   mensajero_concretado: string | null;
 }
+
+// Interfaz para liquidación por tienda
+export interface TiendaLiquidationCalculation {
+  tienda: string;
+  routeDate: string;
+  totalOrders: number;
+  totalValue: number; // Valor total de todos los pedidos
+  totalCollected: number; // Total recaudado (solo pedidos entregados)
+  totalSpent: number; // Gastos totales de la tienda
+  sinpePayments: number; // Pagos en SINPE
+  cashPayments: number; // Pagos en efectivo
+  tarjetaPayments: number; // Pagos en tarjeta
+  finalAmount: number; // Monto final a entregar
+  orders: PedidoTest[];
+  isLiquidated: boolean;
+  canEdit: boolean;
+  // Métricas adicionales por tienda
+  deliveredOrders: number;
+  pendingOrders: number;
+  returnedOrders: number;
+  rescheduledOrders: number;
+  averageOrderValue: number;
+  topMessenger: string; // Mensajero con más pedidos
+  topDistrict: string; // Distrito con más pedidos
+}

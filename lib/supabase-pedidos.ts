@@ -1213,3 +1213,254 @@ export const getGastosMensajeros = async (fecha: string): Promise<{
     return [];
   }
 };
+
+// Función para obtener tiendas únicas de Supabase
+export const getTiendasUnicas = async (): Promise<string[]> => {
+  try {
+    console.log('🔍 Obteniendo tiendas únicas...');
+    
+    const { data, error } = await supabasePedidos
+      .from('pedidos')
+      .select('tienda')
+      .not('tienda', 'is', null)
+      .not('tienda', 'eq', '')
+      .order('tienda', { ascending: true });
+
+    if (error) {
+      console.error('❌ Error al obtener tiendas:', error);
+      return [];
+    }
+
+    // Extraer tiendas únicas y normalizar
+    const tiendasUnicas = Array.from(new Set(
+      data?.map(p => p.tienda?.toUpperCase().trim()).filter(Boolean) || []
+    ));
+
+    console.log('📋 Tiendas únicas encontradas:', tiendasUnicas);
+    console.log('📋 Total de tiendas únicas:', tiendasUnicas.length);
+    return tiendasUnicas;
+  } catch (error) {
+    console.error('❌ Error en getTiendasUnicas:', error);
+    return [];
+  }
+};
+
+// Función para obtener pedidos del día por tienda específica
+export const getPedidosDelDiaByTiendaEspecifica = async (tiendaName: string, fecha: string): Promise<PedidoTest[]> => {
+  try {
+    // Validar que la fecha no esté vacía
+    if (!fecha || fecha.trim() === '') {
+      console.error('❌ Error: fecha vacía en getPedidosDelDiaByTiendaEspecifica');
+      return [];
+    }
+    
+    console.log(`🔍 Obteniendo pedidos para tienda: ${tiendaName}, fecha: ${fecha}`);
+    
+    // Obtener todos los pedidos usando paginación
+    let allPedidos: PedidoTest[] = [];
+    let from = 0;
+    const limit = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await supabasePedidos
+        .from('pedidos')
+        .select('*')
+        .ilike('tienda', tiendaName)
+        .eq('fecha_creacion', fecha)
+        .range(from, from + limit - 1)
+        .order('id_pedido', { ascending: true });
+
+      if (error) {
+        console.error('❌ Error al obtener pedidos del día:', error);
+        return allPedidos;
+      }
+
+      if (data && data.length > 0) {
+        allPedidos = [...allPedidos, ...data];
+        from += limit;
+        hasMore = data.length === limit;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    return allPedidos;
+  } catch (error) {
+    console.error('❌ Error en getPedidosDelDiaByTiendaEspecifica:', error);
+    return [];
+  }
+};
+
+// Función para obtener liquidaciones reales por tienda
+export const getLiquidacionesRealesByTienda = async (fecha: string): Promise<{
+  tienda: string;
+  pedidos: PedidoTest[];
+  totalCollected: number;
+  sinpePayments: number;
+  cashPayments: number;
+  tarjetaPayments: number;
+  totalSpent: number;
+  initialAmount: number;
+  finalAmount: number;
+  gastos: {
+    id: string;
+    monto: number;
+    tipo_gasto: string;
+    comprobante_link: string;
+    fecha: string;
+  }[];
+  // Métricas adicionales por tienda
+  deliveredOrders: number;
+  pendingOrders: number;
+  returnedOrders: number;
+  rescheduledOrders: number;
+  averageOrderValue: number;
+  topMessenger: string;
+  topDistrict: string;
+}[]> => {
+  try {
+    // Validar que la fecha no esté vacía
+    if (!fecha || fecha.trim() === '') {
+      console.error('❌ Error: fecha vacía en getLiquidacionesRealesByTienda');
+      return [];
+    }
+    
+    console.log(`🔍 Obteniendo liquidaciones por tienda para fecha: ${fecha}`);
+    
+    // Obtener tiendas únicas que tengan pedidos en la fecha específica
+    const { data: tiendasData, error: tiendasError } = await supabasePedidos
+      .from('pedidos')
+      .select('tienda')
+      .eq('fecha_creacion', fecha)
+      .not('tienda', 'is', null)
+      .not('tienda', 'eq', '');
+    
+    if (tiendasError) {
+      console.error('❌ Error al obtener tiendas para la fecha:', tiendasError);
+      return [];
+    }
+    
+    // Extraer tiendas únicas y normalizar
+    const tiendas = Array.from(new Set(
+      tiendasData?.map(p => p.tienda?.toUpperCase().trim()).filter(Boolean) || []
+    ));
+    
+    console.log(`📋 Tiendas encontradas para fecha ${fecha}: ${tiendas.length}`);
+    console.log(`📋 Tiendas:`, tiendas);
+    
+    // Obtener gastos para todas las tiendas (agrupados por mensajero)
+    const gastosData = await getGastosMensajeros(fecha);
+    console.log(`💰 Gastos obtenidos: ${gastosData.length} mensajeros con gastos`);
+    
+    const liquidaciones = [];
+    
+    // Procesar todas las tiendas
+    for (const tienda of tiendas) {
+      // Obtener pedidos del día para esta tienda
+      const pedidosRaw = await getPedidosDelDiaByTiendaEspecifica(tienda, fecha);
+      
+      // Normalizar todos los pedidos a mayúsculas
+      const pedidos = pedidosRaw.map(normalizePedidoData);
+      
+      // Calcular métricas por tienda
+      const totalCollected = pedidos.reduce((sum, pedido) => {
+        if (pedido.estado_pedido === 'ENTREGADO') {
+          return sum + pedido.valor_total;
+        }
+        return sum;
+      }, 0);
+
+      const sinpePayments = pedidos.reduce((sum, pedido) => {
+        if (pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'SINPE') {
+          return sum + pedido.valor_total;
+        }
+        return sum;
+      }, 0);
+
+      const cashPayments = pedidos.reduce((sum, pedido) => {
+        if (pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'EFECTIVO') {
+          return sum + pedido.valor_total;
+        }
+        return sum;
+      }, 0);
+
+      const tarjetaPayments = pedidos.reduce((sum, pedido) => {
+        if (pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'TARJETA') {
+          return sum + pedido.valor_total;
+        }
+        return sum;
+      }, 0);
+
+      // Calcular métricas adicionales
+      const deliveredOrders = pedidos.filter(p => p.estado_pedido === 'ENTREGADO').length;
+      const pendingOrders = pedidos.filter(p => p.estado_pedido === 'PENDIENTE').length;
+      const returnedOrders = pedidos.filter(p => p.estado_pedido === 'DEVOLUCION').length;
+      const rescheduledOrders = pedidos.filter(p => p.estado_pedido === 'REAGENDADO').length;
+      
+      const totalValue = pedidos.reduce((sum, pedido) => sum + pedido.valor_total, 0);
+      const averageOrderValue = pedidos.length > 0 ? totalValue / pedidos.length : 0;
+
+      // Encontrar mensajero con más pedidos
+      const mensajeroCounts: { [key: string]: number } = {};
+      pedidos.forEach(pedido => {
+        const mensajero = pedido.mensajero_concretado || pedido.mensajero_asignado;
+        if (mensajero) {
+          mensajeroCounts[mensajero] = (mensajeroCounts[mensajero] || 0) + 1;
+        }
+      });
+      const topMessenger = Object.entries(mensajeroCounts)
+        .sort(([,a], [,b]) => b - a)[0]?.[0] || 'SIN_ASIGNAR';
+
+      // Encontrar distrito con más pedidos
+      const distritoCounts: { [key: string]: number } = {};
+      pedidos.forEach(pedido => {
+        if (pedido.distrito) {
+          distritoCounts[pedido.distrito] = (distritoCounts[pedido.distrito] || 0) + 1;
+        }
+      });
+      const topDistrict = Object.entries(distritoCounts)
+        .sort(([,a], [,b]) => b - a)[0]?.[0] || 'SIN_DISTRITO';
+
+      // Calcular gastos totales de la tienda (suma de gastos de todos los mensajeros que trabajaron en esta tienda)
+      const mensajerosDeLaTienda = Array.from(new Set(
+        pedidos.map(p => p.mensajero_concretado || p.mensajero_asignado).filter(Boolean)
+      ));
+      
+      const totalSpent = gastosData
+        .filter(g => mensajerosDeLaTienda.includes(g.mensajero))
+        .reduce((sum, g) => sum + g.totalGastos, 0);
+
+      const initialAmount = 0; // Monto inicial por defecto
+      const finalAmount = initialAmount + cashPayments - totalSpent;
+
+      liquidaciones.push({
+        tienda,
+        pedidos,
+        totalCollected,
+        sinpePayments,
+        cashPayments,
+        tarjetaPayments,
+        totalSpent,
+        initialAmount,
+        finalAmount,
+        gastos: gastosData
+          .filter(g => mensajerosDeLaTienda.includes(g.mensajero))
+          .flatMap(g => g.gastos),
+        deliveredOrders,
+        pendingOrders,
+        returnedOrders,
+        rescheduledOrders,
+        averageOrderValue,
+        topMessenger,
+        topDistrict
+      });
+    }
+    
+    console.log(`✅ Liquidaciones por tienda generadas: ${liquidaciones.length}`);
+    return liquidaciones;
+  } catch (error) {
+    console.error('❌ Error en getLiquidacionesRealesByTienda:', error);
+    return [];
+  }
+};
