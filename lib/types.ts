@@ -99,6 +99,7 @@ export interface Order {
   paymentMethod: PaymentMethod;
   origin: OrderOrigin;
   numero_sinpe?: string; // Número SINPE de la tienda
+  comprobante_sinpe?: string; // URL del comprobante SINPE
   deliveryMethod?: DeliveryMethod;
   createdAt: string;
   updatedAt: string;

@@ -20,6 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { 
   BarChart, 
@@ -35,15 +36,15 @@ import {
   LineChart,
   Line
 } from 'recharts';
-import {
-  Package,
-  CheckCircle,
+import { 
+  Package, 
+  CheckCircle, 
   RotateCcw,
-  Truck,
+  Truck, 
   Clock,
-  DollarSign,
+  DollarSign, 
   Smartphone,
-  Navigation,
+  Navigation, 
   Phone,
   MapPin as LocationIcon,
   User,
@@ -138,9 +139,11 @@ export default function MiRutaHoy() {
   const [accountingMetrics, setAccountingMetrics] = useState({
     totalCash: 0,
     totalSinpe: 0,
+    totalTarjeta: 0,
     totalReturns: 0
   });
   const [activeFilter, setActiveFilter] = useState<'todos' | 'en_ruta' | 'completados' | 'reagendados' | 'devoluciones'>('todos');
+  const [activeTab, setActiveTab] = useState<'pedidos' | 'contabilidad'>('pedidos');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
@@ -201,13 +204,17 @@ export default function MiRutaHoy() {
   const [isReturnsModalOpen, setIsReturnsModalOpen] = useState(false);
   const [isCashModalOpen, setIsCashModalOpen] = useState(false);
   const [isSinpeModalOpen, setIsSinpeModalOpen] = useState(false);
+  const [isTarjetaModalOpen, setIsTarjetaModalOpen] = useState(false);
   const [isLiquidationCompleted, setIsLiquidationCompleted] = useState(false);
 
   useEffect(() => {
     if (user) {
-      loadRouteData();
-      loadGastosReales();
-      checkLiquidationStatus();
+      const loadData = async () => {
+        await loadGastosReales();
+        loadRouteData();
+        checkLiquidationStatus();
+      };
+      loadData();
     }
   }, [user, selectedDate, dateFilter, activeFilter, searchTerm]);
 
@@ -219,12 +226,19 @@ export default function MiRutaHoy() {
     if (gastosReales.length > 0) {
       const gastosDelMensajero = gastosReales.find(g => g.mensajero === user?.name);
       if (gastosDelMensajero) {
-        console.log('✅ Actualizando total de gastos en UI:', gastosDelMensajero.totalGastos);
+        const totalGastos = gastosDelMensajero.gastos?.reduce((sum, gasto) => sum + gasto.monto, 0) || 0;
+        console.log('✅ Actualizando total de gastos en UI:', totalGastos);
         setRouteData(prev => ({
           ...prev,
-          totalExpenses: gastosDelMensajero.totalGastos
+          totalExpenses: totalGastos
         }));
       }
+    } else {
+      // Si no hay gastos, establecer en 0
+      setRouteData(prev => ({
+        ...prev,
+        totalExpenses: 0
+      }));
     }
   }, [gastosReales, user?.name]);
 
@@ -290,8 +304,8 @@ export default function MiRutaHoy() {
       console.log('👤 Usuario actual:', user?.name);
       console.log('📅 Filtro de fecha:', dateFilter);
       console.log('📅 Fecha seleccionada:', selectedDate);
-      
-      setLoading(true);
+    
+    setLoading(true);
       
       // Determinar la fecha objetivo basada en el filtro activo
       
@@ -411,6 +425,7 @@ export default function MiRutaHoy() {
           asesorNotes: pedido.nota_asesor || '',
           deliveryNotes: pedido.nota_asesor || '',
           numero_sinpe: pedido.numero_sinpe || undefined,
+          comprobante_sinpe: pedido.comprobante_sinpe || undefined,
           tienda: pedido.tienda || 'ALL STARS',
                assignedMessenger: pedido.mensajero_concretado ? {
                  id: '1',
@@ -450,7 +465,9 @@ export default function MiRutaHoy() {
       // Gastos vacíos - se conectará al backend esta semana
       const mockExpenses: Expense[] = [];
 
-      const totalExpenses = 0;
+      // Calcular total de gastos del mensajero actual
+      const gastosDelMensajero = gastosReales.find(g => g.mensajero === user?.name);
+      const totalExpenses = gastosDelMensajero?.gastos?.reduce((sum, gasto) => sum + gasto.monto, 0) || 0;
       const completedOrders = orders.filter(order => order.status === 'entregado').length;
       // Solo contar pedidos entregados para el total del día
       const totalRevenue = orders
@@ -464,6 +481,10 @@ export default function MiRutaHoy() {
       
       const totalSinpe = orders
         .filter(order => order.paymentMethod === 'sinpe' && order.status === 'entregado')
+        .reduce((sum, order) => sum + order.totalAmount, 0);
+      
+      const totalTarjeta = orders
+        .filter(order => order.paymentMethod === 'tarjeta' && order.status === 'entregado')
         .reduce((sum, order) => sum + order.totalAmount, 0);
       
       const totalReturns = orders.filter(order => order.status === 'devolucion').length;
@@ -482,7 +503,7 @@ export default function MiRutaHoy() {
         completedOrders,
         totalRevenue
       });
-      
+
       console.log('✅ RouteData actualizado exitosamente');
 
       // Ordenar pedidos por ubicación (provincia, cantón, distrito) y estado
@@ -557,6 +578,7 @@ export default function MiRutaHoy() {
       setAccountingMetrics({
         totalCash,
         totalSinpe,
+        totalTarjeta,
         totalReturns
       });
     } catch (error) {
@@ -790,7 +812,7 @@ export default function MiRutaHoy() {
       archivo: newExpense.receipt?.name,
       tamaño: newExpense.receipt?.size
     });
-
+    
     setIsAddingExpense(true);
     try {
       // Convertir imagen a base64
@@ -881,14 +903,14 @@ export default function MiRutaHoy() {
         // Ocultar indicador de actualización
         setIsAddingExpense(false);
 
-        setNewExpense({
-          type: 'fuel',
-          amount: '',
-          receipt: null,
-          customType: ''
-        });
-        setUploadedReceiptImage(null);
-        setIsExpenseModalOpen(false);
+      setNewExpense({
+        type: 'fuel',
+        amount: '',
+        receipt: null,
+        customType: ''
+      });
+      setUploadedReceiptImage(null);
+      setIsExpenseModalOpen(false);
     } catch (error) {
       console.error('Error adding expense:', error);
       alert(`Error al añadir gasto: ${error instanceof Error ? error.message : 'Error desconocido'}`);
@@ -1207,16 +1229,16 @@ export default function MiRutaHoy() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
       const result = e.target?.result as string;
       if (paymentNumber === 'first') {
         setFirstPaymentReceipt(result);
       } else {
         setSecondPaymentReceipt(result);
       }
-    };
-    reader.readAsDataURL(file);
+      };
+      reader.readAsDataURL(file);
   };
 
   const resetModalState = () => {
@@ -1333,7 +1355,14 @@ export default function MiRutaHoy() {
   const getRescheduledOrders = () => routeData.orders.filter(order => order.status === 'reagendado');
   const getReturnOrders = () => routeData.orders.filter(order => order.status === 'devolucion');
   const getCashOrders = () => routeData.orders.filter(order => order.status === 'entregado' && order.paymentMethod === 'efectivo');
-  const getSinpeOrders = () => routeData.orders.filter(order => order.status === 'entregado' && order.paymentMethod === 'sinpe');
+  const getSinpeOrders = () => routeData.orders.filter(order => 
+    order.status.toLowerCase() === 'entregado' && 
+    order.paymentMethod === 'sinpe'
+  );
+  const getTarjetaOrders = () => routeData.orders.filter(order => 
+    order.status.toLowerCase() === 'entregado' && 
+    order.paymentMethod === 'tarjeta'
+  );
 
   // Funciones para datos de gráficos
   const getPaymentMethodData = () => {
@@ -1370,24 +1399,6 @@ export default function MiRutaHoy() {
   };
 
 
-  const getRevenueByHourData = () => {
-    const completedOrders = getCompletedOrders();
-    const hourlyRevenue = Array.from({ length: 24 }, (_, hour) => ({
-      hour: `${hour}:00`,
-      revenue: 0,
-      orders: 0
-    }));
-
-    completedOrders.forEach(order => {
-      if (order.deliveryDate) {
-        const hour = new Date(order.deliveryDate).getHours();
-        hourlyRevenue[hour].revenue += order.totalAmount || 0;
-        hourlyRevenue[hour].orders += 1;
-      }
-    });
-
-    return hourlyRevenue.filter(h => h.revenue > 0 || h.orders > 0);
-  };
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -1538,7 +1549,7 @@ export default function MiRutaHoy() {
 
   return (
     <div className="space-y-6 p-4 max-w-7xl mx-auto">
-      {/* Header */}
+        {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-700 text-white p-6 rounded-xl shadow-lg">
         <div className="space-y-3">
           <div className="flex items-center gap-3">
@@ -1582,610 +1593,231 @@ export default function MiRutaHoy() {
             </p>
           </div>
         </div>
-      </div>
+        </div>
 
+      {/* Sistema de Pestañas */}
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'pedidos' | 'contabilidad')} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 rounded-lg">
+          <TabsTrigger 
+            value="pedidos" 
+            className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all ${
+              activeTab === 'pedidos' 
+                ? 'bg-white text-blue-600 shadow-sm font-medium' 
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            Pedidos de Hoy
+            <Badge variant="secondary" className="ml-2 bg-blue-100 text-blue-700">
+              {routeData.orders.length}
+            </Badge>
+            </TabsTrigger>
+          <TabsTrigger 
+            value="contabilidad" 
+            className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all ${
+              activeTab === 'contabilidad' 
+                ? 'bg-white text-green-600 shadow-sm font-medium' 
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            <DollarSign className="w-4 h-4" />
+            Contabilidad
+            <Badge variant="secondary" className="ml-2 bg-green-100 text-green-700">
+              {formatCurrency(accountingMetrics.totalCash + accountingMetrics.totalSinpe + accountingMetrics.totalTarjeta)}
+            </Badge>
+            </TabsTrigger>
+          </TabsList>
 
-      {/* Bento Grid Unificado - Todas las Métricas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        {/* Completados */}
-        <Card 
-          className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-          onClick={() => setIsCompletedModalOpen(true)}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-green-500 rounded-lg">
-                    <CheckCircle className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="text-sm font-medium text-green-700">Completados</span>
-                </div>
-                <p className="text-2xl font-bold text-green-800">{routeData.completedOrders}</p>
-                <p className="text-xs text-green-600">Entregados</p>
-              </div>
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs">→</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Ingresos */}
-        <Card 
-          className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-          onClick={() => setIsRevenueModalOpen(true)}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-blue-500 rounded-lg">
-                    <DollarSign className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="text-sm font-medium text-blue-700">Ingresos</span>
-                </div>
-                <p className="text-xl font-bold text-blue-800">{formatCurrency(routeData.totalRevenue)}</p>
-                <p className="text-xs text-blue-600">Total del día</p>
-              </div>
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs">→</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Total Efectivo */}
-        <Card 
-          className="bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-          onClick={() => setIsCashModalOpen(true)}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-emerald-500 rounded-lg">
-                    <Banknote className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="text-sm font-medium text-emerald-700">Efectivo</span>
-                </div>
-                <p className="text-xl font-bold text-emerald-800">{formatCurrency(accountingMetrics.totalCash)}</p>
-                <p className="text-xs text-emerald-600">En efectivo</p>
-              </div>
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs">→</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Total SINPE */}
-        <Card 
-          className="bg-gradient-to-br from-cyan-50 to-cyan-100 border-cyan-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-          onClick={() => setIsSinpeModalOpen(true)}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-cyan-500 rounded-lg">
-                    <Smartphone className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="text-sm font-medium text-cyan-700">SINPE</span>
-                </div>
-                <p className="text-xl font-bold text-cyan-800">{formatCurrency(accountingMetrics.totalSinpe)}</p>
-                <p className="text-xs text-cyan-600">Con SINPE</p>
-              </div>
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-6 h-6 bg-cyan-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs">→</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Devoluciones */}
-        <Card 
-          className="bg-gradient-to-br from-red-50 to-red-100 border-red-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-          onClick={() => setIsReturnsModalOpen(true)}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-red-500 rounded-lg">
-                    <RotateCcw className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="text-sm font-medium text-red-700">Devoluciones</span>
-                </div>
-                <p className="text-2xl font-bold text-red-800">{getReturnOrders().length}</p>
-                <p className="text-xs text-red-600">Para devolver</p>
-              </div>
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs">→</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Reagendados */}
-        <Card 
-          className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-          onClick={() => setIsRescheduledModalOpen(true)}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-orange-500 rounded-lg">
-                    <Calendar className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="text-sm font-medium text-orange-700">Reagendados</span>
-                </div>
-                <p className="text-2xl font-bold text-orange-800">{getRescheduledOrders().length}</p>
-                <p className="text-xs text-orange-600">Pendientes</p>
-              </div>
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs">→</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Total Recaudado - Destacado */}
-      <Card className="bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200 mt-4">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-purple-500 rounded-lg">
-                <Receipt className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-purple-800">Total Recaudado</h3>
-                <p className="text-sm text-purple-600">Suma de efectivo y SINPE</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-3xl font-bold text-green-600">
-                {formatCurrency(accountingMetrics.totalCash + accountingMetrics.totalSinpe)}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Gastos del Día */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-orange-600" />
-                Gastos del Día
+        {/* Pestaña de Pedidos de Hoy */}
+        <TabsContent value="pedidos" className="space-y-6 mt-6">
+          {/* Filtros y Búsqueda */}
+          <Card>
+            <CardHeader className="pb-3 bg-gradient-to-r from-blue-50 to-purple-50">
+              <CardTitle className="text-lg flex items-center gap-2 text-blue-800">
+                <Filter className="w-5 h-5" />
+                Filtros y Búsqueda
               </CardTitle>
-              <div className="text-sm text-orange-600 mt-1">
+              <div className="text-sm text-blue-600 mt-1">
                 <span className="font-medium">{user?.name}</span> • {getSelectedDateInfo().dayName} {getSelectedDateInfo().day} de {getSelectedDateInfo().month}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Dialog open={isExpenseModalOpen} onOpenChange={setIsExpenseModalOpen}>
-                <DialogTrigger asChild>
-                  <Button 
-                    size="sm" 
-                    className="bg-orange-600 hover:bg-orange-700"
-                    disabled={isLiquidationCompleted}
-                    title={isLiquidationCompleted ? "Liquidación completada - No se puede agregar gastos" : "Agregar gasto"}
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    Agregar
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[400px]">
-                  <DialogHeader>
-                    <DialogTitle>Agregar Gasto</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="type">Tipo de Gasto</Label>
-                      <select
-                        id="type"
-                        value={newExpense.type}
-                        onChange={(e) => setNewExpense(prev => ({ ...prev, type: e.target.value as 'fuel' | 'maintenance' | 'peaje' | 'other', customType: '' }))}
-                        className="w-full p-2 border rounded-md"
-                      >
-                        <option value="fuel">Combustible</option>
-                        <option value="maintenance">Mantenimiento</option>
-                        <option value="peaje">Peaje</option>
-                        <option value="other">Otro</option>
-                      </select>
-                    </div>
-                  
-                    {newExpense.type === 'other' && (
-                      <div>
-                        <Label htmlFor="customType">Especificar Tipo de Gasto *</Label>
-                        <Input
-                          id="customType"
-                          placeholder="Ej: Peaje, Estacionamiento, Herramientas..."
-                          value={newExpense.customType}
-                          onChange={(e) => setNewExpense(prev => ({ ...prev, customType: e.target.value }))}
-                          className="w-full"
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <Label htmlFor="amount">Monto</Label>
-                      <Input
-                        id="amount"
-                        type="number"
-                        placeholder="0"
-                        value={newExpense.amount}
-                        onChange={(e) => setNewExpense(prev => ({ ...prev, amount: e.target.value }))}
-                      />
-                    </div>
-                    {/* Badge informativo */}
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                        <div className="text-sm text-amber-800">
-                          <p className="font-medium">⚠️ Cuidado con los gastos añadidos</p>
-                          <p className="text-xs mt-1">Los gastos no pueden ser eliminados del reporte de liquidación del día una vez añadidos.</p>
-                        </div>
-                      </div>
-                    </div>
-                  
-                  <div>
-                    <Label>Comprobante del Gasto *</Label>
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                      {uploadedReceiptImage ? (
-                        <div className="space-y-3">
-                          <img
-                            src={uploadedReceiptImage}
-                            alt="Comprobante"
-                            className="max-w-full h-32 object-contain mx-auto rounded-lg"
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setUploadedReceiptImage(null);
-                              setNewExpense(prev => ({ ...prev, receipt: null }));
-                            }}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <X className="w-4 h-4 mr-1" />
-                            Eliminar
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          <Camera className="w-8 h-8 mx-auto text-gray-400" />
-                          <p className="text-sm text-gray-600">Toca para seleccionar comprobante</p>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleImageUpload}
-                            className="hidden"
-                            id="receipt-upload"
-                          />
-                          <Button
-                            variant="outline"
-                            onClick={() => document.getElementById('receipt-upload')?.click()}
-                          >
-                            <ImageIcon className="w-4 h-4 mr-2" />
-                            Seleccionar Imagen
-                          </Button>
-                        </div>
-                      )}
-                    </div>
                   </div>
-                  
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setIsExpenseModalOpen(false);
-                        setUploadedReceiptImage(null);
-                        setNewExpense({
-                          type: 'fuel',
-                          amount: '',
-                          receipt: null,
-                          customType: ''
-                        });
-                      }}
-                      className="flex-1"
-                    >
-                      Cancelar
-                    </Button>
-                    <Button
-                      onClick={handleAddExpense}
-                      disabled={
-                        !newExpense.amount || 
-                        !newExpense.receipt || 
-                        isAddingExpense ||
-                        (newExpense.type === 'other' && !newExpense.customType.trim())
-                      }
-                      className="flex-1 bg-orange-600 hover:bg-orange-700"
-                    >
-                      {isAddingExpense ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        'Agregar'
-                      )}
-                    </Button>
-                  </div>
+            </CardHeader>
+            <CardContent className="space-y-4 p-4">
+              {/* Barra de búsqueda mejorada */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500 w-4 h-4" />
+                <Input
+                  placeholder="Buscar por ID, cliente o dirección..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 border-blue-200 focus:border-blue-400 focus:ring-blue-400"
+                />
                 </div>
-              </DialogContent>
-            </Dialog>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {(() => {
-            const gastosDelMensajero = gastosReales.find(g => g.mensajero === user?.name);
-            const gastos = gastosDelMensajero?.gastos || [];
-            
-            if (gastos.length === 0) {
-              return (
-                <div className="text-center py-4 text-gray-500">
-                  <Receipt className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">No hay gastos registrados</p>
-                </div>
-              );
-            }
-            
-            return (
-              <>
-                {gastos.map((gasto) => (
-                  <div key={gasto.id} className="p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-full ${getExpenseColor(gasto.tipo_gasto)}`}>
-                          {getExpenseIcon(gasto.tipo_gasto)}
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">{gasto.tipo_gasto}</p>
-                          <p className="text-xs text-gray-500">
-                            {new Date(gasto.fecha).toLocaleTimeString('es-CR', { 
-                              hour: '2-digit', 
-                              minute: '2-digit' 
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                      <p className="font-bold text-orange-600">{formatCurrency(gasto.monto)}</p>
-                    </div>
-                    {gasto.comprobante_link && (
-                      <div className="mt-2">
-                        <a 
-                          href={gasto.comprobante_link} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                          Ver comprobante
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <div className="border-t pt-3">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold">Total Gastos:</span>
-                    <span className="font-bold text-lg text-orange-600">
-                      {formatCurrency(gastosDelMensajero?.totalGastos || 0)}
-                    </span>
-                  </div>
-                </div>
-              </>
-            );
-          })()}
-        </CardContent>
-      </Card>
-
-      {/* Filtros y Búsqueda */}
-      <Card className="border-2 border-blue-100">
-        <CardHeader className="pb-3 bg-gradient-to-r from-blue-50 to-purple-50">
-          <CardTitle className="text-lg flex items-center gap-2 text-blue-800">
-            <Filter className="w-5 h-5" />
-            Filtros y Búsqueda
-          </CardTitle>
-          <div className="text-sm text-blue-600 mt-1">
-            <span className="font-medium">{user?.name}</span> • {getSelectedDateInfo().dayName} {getSelectedDateInfo().day} de {getSelectedDateInfo().month}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4 p-4">
-          {/* Barra de búsqueda mejorada */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500 w-4 h-4" />
-            <Input
-              placeholder="Buscar por ID, cliente o dirección..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 border-blue-200 focus:border-blue-400 focus:ring-blue-400"
-            />
-          </div>
-          
-          {/* Filtros con mejor diseño */}
-          <div className="space-y-3">
-            {/* Todos - Ocupa las dos columnas */}
-            <Button
-              variant={activeFilter === 'todos' ? 'default' : 'outline'}
-              onClick={() => setActiveFilter('todos')}
-              className={`justify-start gap-2 h-12 w-full ${
-                activeFilter === 'todos' 
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' 
-                  : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              <div className="flex flex-col items-start">
-                <span className="font-medium">Todos</span>
-                <span className="text-xs opacity-75">({getFilterCount('todos')})</span>
-              </div>
-            </Button>
-            
-            {/* En Ruta y Completados - Primera fila de dos columnas */}
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant={activeFilter === 'en_ruta' ? 'default' : 'outline'}
-                onClick={() => setActiveFilter('en_ruta')}
-                className={`justify-start gap-2 h-12 ${
-                  activeFilter === 'en_ruta' 
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' 
-                    : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
-                }`}
-              >
-                <Clock className="w-4 h-4" />
-                <div className="flex flex-col items-start">
-                  <span className="font-medium">En Ruta</span>
-                  <span className="text-xs opacity-75">({getFilterCount('en_ruta')})</span>
-                </div>
-              </Button>
-              <Button
-                variant={activeFilter === 'completados' ? 'default' : 'outline'}
-                onClick={() => setActiveFilter('completados')}
-                className={`justify-start gap-2 h-12 ${
-                  activeFilter === 'completados' 
-                    ? 'bg-green-600 hover:bg-green-700 text-white shadow-md' 
-                    : 'border-green-200 hover:border-green-300 hover:bg-green-50'
-                }`}
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <div className="flex flex-col items-start">
-                  <span className="font-medium">Completados</span>
-                  <span className="text-xs opacity-75">({getFilterCount('completados')})</span>
-                </div>
-              </Button>
-            </div>
-            
-            {/* Reagendados y Devoluciones - Segunda fila de dos columnas */}
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant={activeFilter === 'reagendados' ? 'default' : 'outline'}
-                onClick={() => setActiveFilter('reagendados')}
-                className={`justify-start gap-2 h-12 ${
-                  activeFilter === 'reagendados' 
-                    ? 'bg-orange-600 hover:bg-orange-700 text-white shadow-md' 
-                    : 'border-orange-200 hover:border-orange-300 hover:bg-orange-50'
-                }`}
-              >
-                <Calendar className="w-4 h-4" />
-                <div className="flex flex-col items-start">
-                  <span className="font-medium">Reagendados</span>
-                  <span className="text-xs opacity-75">({getFilterCount('reagendados')})</span>
-                </div>
-              </Button>
-              <Button
-                variant={activeFilter === 'devoluciones' ? 'default' : 'outline'}
-                onClick={() => setActiveFilter('devoluciones')}
-                className={`justify-start gap-2 h-12 ${
-                  activeFilter === 'devoluciones' 
-                    ? 'bg-red-600 hover:bg-red-700 text-white shadow-md' 
-                    : 'border-red-200 hover:border-red-300 hover:bg-red-50'
-                }`}
-              >
-                <AlertTriangle className="w-4 h-4" />
-                <div className="flex flex-col items-start">
-                  <span className="font-medium">Devoluciones</span>
-                  <span className="text-xs opacity-75">({getFilterCount('devoluciones')})</span>
-                </div>
-              </Button>
-            </div>
-          </div>
-
-
-          {/* Filtros de fecha rápida */}
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-2">
-              {/* Selector de fecha específica */}
-              <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal h-10",
-                      !selectedDate && "text-muted-foreground"
-                    )}
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    {selectedDate ? (
-                      selectedDate.toLocaleDateString('es-CR', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                      })
-                    ) : (
-                      <span>Seleccionar fecha</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <CalendarComponent
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={(date) => {
-                      setSelectedDate(date);
-                      setDateFilter('all');
-                      setIsDatePickerOpen(false);
-                    }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-            
-            
-          </div>
-          
-          {/* Resumen de resultados */}
-          <div className="bg-gray-50 p-3 rounded-lg border">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">
-                Mostrando <span className="font-semibold text-gray-800">{filteredOrders.length}</span> de <span className="font-semibold text-gray-800">{routeData.orders.length}</span> pedidos
-              </span>
-              {searchTerm && (
+              
+              {/* Filtros con mejor diseño */}
+              <div className="space-y-3">
+                {/* Todos - Ocupa las dos columnas */}
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSearchTerm('')}
-                  className="text-blue-600 hover:text-blue-700 h-6 px-2"
+                  variant={activeFilter === 'todos' ? 'default' : 'outline'}
+                  onClick={() => setActiveFilter('todos')}
+                  className={`justify-start gap-2 h-12 w-full ${
+                    activeFilter === 'todos' 
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' 
+                      : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
+                  }`}
                 >
-                  <X className="w-3 h-3 mr-1" />
-                  Limpiar
+                  <Package className="w-4 h-4" />
+                  <div className="flex flex-col items-start">
+                    <span className="font-medium">Todos</span>
+                    <span className="text-xs opacity-75">({getFilterCount('todos')})</span>
+                  </div>
                 </Button>
-              )}
+                
+                {/* En Ruta y Completados - Primera fila de dos columnas */}
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant={activeFilter === 'en_ruta' ? 'default' : 'outline'}
+                    onClick={() => setActiveFilter('en_ruta')}
+                    className={`justify-start gap-2 h-12 ${
+                      activeFilter === 'en_ruta' 
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' 
+                        : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
+                    }`}
+                  >
+                    <Clock className="w-4 h-4" />
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">En Ruta</span>
+                      <span className="text-xs opacity-75">({getFilterCount('en_ruta')})</span>
+                </div>
+                  </Button>
+                  <Button
+                    variant={activeFilter === 'completados' ? 'default' : 'outline'}
+                    onClick={() => setActiveFilter('completados')}
+                    className={`justify-start gap-2 h-12 ${
+                      activeFilter === 'completados' 
+                        ? 'bg-green-600 hover:bg-green-700 text-white shadow-md' 
+                        : 'border-green-200 hover:border-green-300 hover:bg-green-50'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">Completados</span>
+                      <span className="text-xs opacity-75">({getFilterCount('completados')})</span>
+                  </div>
+                  </Button>
+                </div>
+                
+                {/* Reagendados y Devoluciones - Segunda fila de dos columnas */}
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant={activeFilter === 'reagendados' ? 'default' : 'outline'}
+                    onClick={() => setActiveFilter('reagendados')}
+                    className={`justify-start gap-2 h-12 ${
+                      activeFilter === 'reagendados' 
+                        ? 'bg-orange-600 hover:bg-orange-700 text-white shadow-md' 
+                        : 'border-orange-200 hover:border-orange-300 hover:bg-orange-50'
+                    }`}
+                  >
+                    <Calendar className="w-4 h-4" />
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">Reagendados</span>
+                      <span className="text-xs opacity-75">({getFilterCount('reagendados')})</span>
+                  </div>
+                  </Button>
+                  <Button
+                    variant={activeFilter === 'devoluciones' ? 'default' : 'outline'}
+                    onClick={() => setActiveFilter('devoluciones')}
+                    className={`justify-start gap-2 h-12 ${
+                      activeFilter === 'devoluciones' 
+                        ? 'bg-red-600 hover:bg-red-700 text-white shadow-md' 
+                        : 'border-red-200 hover:border-red-300 hover:bg-red-50'
+                    }`}
+                  >
+                    <AlertTriangle className="w-4 h-4" />
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">Devoluciones</span>
+                      <span className="text-xs opacity-75">({getFilterCount('devoluciones')})</span>
+                </div>
+                  </Button>
+                </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+
+              {/* Filtros de fecha rápida */}
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 gap-2">
+                  {/* Selector de fecha específica */}
+                  <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                    <PopoverTrigger asChild>
+                <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal h-10",
+                          !selectedDate && "text-muted-foreground"
+                        )}
+                      >
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {selectedDate ? (
+                          selectedDate.toLocaleDateString('es-CR', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })
+                        ) : (
+                          <span>Seleccionar fecha</span>
+                        )}
+                </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={(date) => {
+                          setSelectedDate(date);
+                          setDateFilter('all');
+                          setIsDatePickerOpen(false);
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+              
+              {/* Resumen de resultados */}
+              <div className="bg-gray-50 p-3 rounded-lg border">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">
+                    Mostrando <span className="font-semibold text-gray-800">{filteredOrders.length}</span> de <span className="font-semibold text-gray-800">{routeData.orders.length}</span> pedidos
+                  </span>
+                  {searchTerm && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSearchTerm('')}
+                      className="text-blue-600 hover:text-blue-700 h-6 px-2"
+                    >
+                      <X className="w-3 h-3 mr-1" />
+                      Limpiar
+                    </Button>
+                  )}
+                </div>
+                        </div>
+            </CardContent>
+          </Card>
 
 
-      {/* Pedidos del Día */}
-      <Card>
+          {/* Pedidos del Día */}
+          <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <div>
+                        <div>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Package className="w-5 h-5 text-blue-600" />
                 Pedidos del Día
               </CardTitle>
               <div className="text-sm text-gray-600 mt-1">
                 <span className="font-medium">{user?.name}</span> • {getSelectedDateInfo().dayName} {getSelectedDateInfo().day} de {getSelectedDateInfo().month}
-              </div>
-            </div>
+                        </div>
+                      </div>
             {isLiquidationCompleted && (
               <div className="flex items-center gap-2 bg-green-100 border border-green-300 rounded-lg px-3 py-2">
                 <CheckCircle2 className="w-5 h-5 text-green-600 animate-pulse" />
@@ -2205,101 +1837,98 @@ export default function MiRutaHoy() {
                 {searchTerm ? 'No se encontraron pedidos con ese criterio' : 'No hay pedidos asignados para hoy'}
               </p>
               {searchTerm && (
-                <Button
-                  variant="outline"
+                          <Button
+                            variant="outline"
                   size="sm"
                   onClick={() => setSearchTerm('')}
                   className="mt-2"
-                >
+                          >
                   Limpiar búsqueda
-                </Button>
-              )}
-            </div>
+                          </Button>
+                        )}
+                      </div>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-              <div className="mb-2 text-xs text-gray-500 text-center">
+              <div className="mb-1 text-xs text-gray-500 text-center">
                 💡 Haz clic en cualquier fila para fijar la columna ID y verla siempre visible
-              </div>
-              <Table className="min-w-[1600px]">
+                    </div>
+              <Table className="min-w-[1000px] text-[10px]">
                 <TableHeader>
-                  <TableRow className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
-                    <TableHead className="min-w-[200px] px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                        <span className="font-bold text-gray-800 text-sm">ID y Cliente</span>
-                      </div>
+                  <TableRow className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200 h-4">
+                    <TableHead className="min-w-[100px] px-1 py-0.5">
+                      <div className="flex items-center gap-0.5">
+                        <div className="w-1 h-1 rounded-full bg-blue-500"></div>
+                        <span className="font-bold text-gray-800 text-[10px]">ID y Cliente</span>
+                  </div>
                     </TableHead>
-                    <TableHead className="min-w-[180px] px-4 py-3 font-bold text-gray-800 text-sm">Contacto</TableHead>
-                    <TableHead className="min-w-[300px] px-4 py-3 font-bold text-gray-800 text-sm">Dirección</TableHead>
-                    <TableHead className="min-w-[320px] px-4 py-3 font-bold text-gray-800 text-sm">Productos</TableHead>
-                    <TableHead className="min-w-[120px] px-4 py-3 font-bold text-gray-800 text-sm">Fecha Creación</TableHead>
-                    <TableHead className="min-w-[120px] px-4 py-3 font-bold text-gray-800 text-sm">Fecha Entrega</TableHead>
-                    <TableHead className="min-w-[160px] px-4 py-3 font-bold text-gray-800 text-sm">Acciones</TableHead>
-                    <TableHead className="min-w-[120px] px-4 py-3 font-bold text-gray-800 text-sm">Pago</TableHead>
-                    <TableHead className="min-w-[120px] px-4 py-3 font-bold text-gray-800 text-sm">Estado</TableHead>
-                    <TableHead className="min-w-[200px] px-4 py-3 font-bold text-gray-800 text-sm">Notas de Asesor</TableHead>
+                    <TableHead className="min-w-[80px] px-1 py-0.5 font-bold text-gray-800 text-[10px]">Contacto</TableHead>
+                    <TableHead className="min-w-[150px] px-1 py-0.5 font-bold text-gray-800 text-[10px]">Dirección</TableHead>
+                    <TableHead className="min-w-[120px] px-1 py-0.5 font-bold text-gray-800 text-[10px]">Productos</TableHead>
+                    <TableHead className="min-w-[60px] px-1 py-0.5 font-bold text-gray-800 text-[10px]">Fecha Creación</TableHead>
+                    <TableHead className="min-w-[60px] px-1 py-0.5 font-bold text-gray-800 text-[10px]">Fecha Entrega</TableHead>
+                    <TableHead className="min-w-[70px] px-1 py-0.5 font-bold text-gray-800 text-[10px]">Acciones</TableHead>
+                    <TableHead className="min-w-[60px] px-1 py-0.5 font-bold text-gray-800 text-[10px]">Pago</TableHead>
+                    <TableHead className="min-w-[60px] px-1 py-0.5 font-bold text-gray-800 text-[10px]">Estado</TableHead>
+                    <TableHead className="min-w-[80px] px-1 py-0.5 font-bold text-gray-800 text-[10px]">Notas Asesor</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredOrders.map((order, index) => (
                     <TableRow 
                       key={order.id} 
-                      className={`hover:bg-gray-50 ${getStatusRowColor(order.status)} cursor-pointer transition-all duration-200 ${
+                      className={`hover:bg-gray-50 ${getStatusRowColor(order.status)} cursor-pointer transition-all duration-200 h-5 ${
                         selectedRowId === order.id 
-                          ? 'ring-2 ring-blue-500 ring-opacity-50 bg-blue-50/20 shadow-md' 
+                          ? 'ring-1 ring-blue-500 ring-opacity-50 bg-blue-50/20 shadow-sm' 
                           : ''
                       }`}
                       onClick={() => setSelectedRowId(selectedRowId === order.id ? null : order.id)}
                     >
-                      <TableCell className={`font-medium px-4 py-3 ${
+                      <TableCell className={`font-medium px-1 py-0.5 ${
                         selectedRowId === order.id 
-                          ? `sticky left-0 z-30 border-r-2 border-gray-300 ${getStatusStickyStyle(order.status)}` 
+                          ? `sticky left-0 z-30 border-r border-gray-300 ${getStatusStickyStyle(order.status)}` 
                           : ''
                       }`}>
-                        {/* El borde izquierdo (border-l-8) SÍ es sticky porque está en la TableCell sticky */}
-                        <div className="flex items-center gap-3">
-                          <div className={`w-5 h-5 rounded-full ${getStatusIndicatorColor(order.status)} shadow-md border-2 border-white ${
-                            selectedRowId === order.id ? 'ring-2 ring-white ring-opacity-50' : ''
+                        <div className="flex items-center gap-0.5">
+                          <div className={`w-1 h-1 rounded-full ${getStatusIndicatorColor(order.status)} shadow-sm border border-white ${
+                            selectedRowId === order.id ? 'ring-1 ring-white ring-opacity-50' : ''
                           }`} />
-                          <div className="flex flex-col space-y-1">
-                            <span className="font-mono text-sm font-bold text-gray-900">{order.id}</span>
-                            <span className="text-xs text-gray-500 font-medium">Pedido</span>
-                            <div className="font-medium text-gray-800">{order.customerName}</div>
-                          </div>
+                          <div className="flex flex-col space-y-0">
+                            <span className="font-mono text-[10px] font-bold text-gray-900">{order.id}</span>
+                            <span className="text-[9px] text-gray-500 font-medium">Pedido</span>
+                            <div className="font-medium text-gray-800 text-[9px]">{order.customerName}</div>
+                </div>
                         </div>
                       </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <div className="space-y-2">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-gray-700">{order.customerPhone}</span>
-                              {order.customerPhone && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => copyToClipboard(order.customerPhone!, 'Número de teléfono')}
-                                  className="h-6 w-6 p-0 bg-green-50 border-green-200 hover:bg-green-100 text-green-700"
-                                  title="Copiar número de teléfono"
-                                >
-                                  <Clipboard className="w-3 h-3" />
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                          
+                      <TableCell className="px-1 py-0.5">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-0.5">
+                            <span className="text-[9px] font-medium text-gray-700">{order.customerPhone}</span>
+                            {order.customerPhone && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => copyToClipboard(order.customerPhone!, 'Número de teléfono')}
+                                className="h-3 w-3 p-0 bg-green-50 border-green-200 hover:bg-green-100 text-green-700"
+                                title="Copiar número de teléfono"
+                              >
+                                <Clipboard className="w-1.5 h-1.5" />
+                              </Button>
+                            )}
+                </div>
+
                           {/* Botones de contacto */}
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
+                          <div className="flex gap-0.5">
+                      <Button
+                        size="sm"
                               variant="outline"
                               onClick={() => order.customerPhone && window.open(`tel:${order.customerPhone}`)}
-                              className="h-7 px-2 text-xs bg-green-50 border-green-200 hover:bg-green-100 text-green-700"
+                              className="h-3 px-1 text-[8px] bg-green-50 border-green-200 hover:bg-green-100 text-green-700"
                               disabled={!order.customerPhone}
                               title="Llamar"
                             >
-                              <Phone className="w-3 h-3 mr-1" />
+                              <Phone className="w-1.5 h-1.5 mr-0.5" />
                               Llamar
-                            </Button>
+                      </Button>
                             <Button
                               size="sm"
                               variant="outline"
@@ -2323,34 +1952,34 @@ export default function MiRutaHoy() {
                                   window.open(whatsappUrl);
                                 }
                               }}
-                              className="h-7 px-2 text-xs bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700"
+                              className="h-3 px-1 text-[8px] bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700"
                               disabled={!order.customerPhone}
                               title="WhatsApp"
                             >
-                              <MessageCircle className="w-3 h-3 mr-1" />
+                              <MessageCircle className="w-1.5 h-1.5 mr-0.5" />
                               WhatsApp
                             </Button>
-                          </div>
-                        </div>
+                </div>
+              </div>
                       </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <div className="space-y-2">
+                      <TableCell className="px-1 py-0.5">
+                        <div className="space-y-0.5">
                           {/* Dirección principal */}
-                          <div className="space-y-1">
-                            <div className="text-sm font-medium text-gray-900">
+                          <div className="space-y-0">
+                            <div className="text-[9px] font-medium text-gray-900">
                               {order.customerAddress || 'Dirección no especificada'}
                             </div>
-                            <div className="text-xs text-gray-600">
-                              <span className="font-medium">Provincia:</span> {order.customerProvince || 'No especificada'}
+                            <div className="text-[8px] text-gray-600">
+                              <span className="font-medium">Prov:</span> {order.customerProvince || 'No especificada'}
                             </div>
-                            <div className="text-xs text-gray-600">
+                            <div className="text-[8px] text-gray-600">
                               <span className="font-medium">Cantón:</span> {order.customerCanton || 'No especificado'}
                             </div>
-                            <div className="text-xs text-gray-600">
-                              <span className="font-medium">Distrito:</span> {order.customerDistrict || 'No especificado'}
+                            <div className="text-[8px] text-gray-600">
+                              <span className="font-medium">Dist:</span> {order.customerDistrict || 'No especificado'}
                             </div>
-                          </div>
-                          
+              </div>
+              
                           {/* Botón de Maps */}
                           {order.customerLocationLink && (
                             <Button
@@ -2359,59 +1988,59 @@ export default function MiRutaHoy() {
                               onClick={() => {
                                 window.open(order.customerLocationLink, '_blank');
                               }}
-                              className="h-7 px-2 text-xs bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
+                              className="h-3 px-1 text-[8px] bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
                               title="Abrir en Maps"
                             >
-                              <Navigation className="w-3 h-3 mr-1" />
+                              <Navigation className="w-1.5 h-1.5 mr-0.5" />
                               Maps
                             </Button>
                           )}
                         </div>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <div className="max-w-[320px] space-y-2">
+                        </TableCell>
+                      <TableCell className="px-1 py-0.5">
+                        <div className="max-w-[120px] space-y-0.5">
                           {/* Tienda */}
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                            <span className="text-xs font-bold text-purple-700 bg-purple-100 px-2 py-1 rounded-md border border-purple-200">
+                          <div className="flex items-center gap-0.5">
+                            <div className="w-1 h-1 rounded-full bg-purple-500"></div>
+                            <span className="text-[8px] font-bold text-purple-700 bg-purple-100 px-0.5 py-0 rounded border border-purple-200">
                               {order.tienda || 'ALL STARS'}
                             </span>
                           </div>
                           {/* Productos */}
-                          <div className="text-sm text-gray-700 leading-relaxed" title={order.productos || 'No especificados'}>
+                          <div className="text-[8px] text-gray-700 leading-tight" title={order.productos || 'No especificados'}>
                             {order.productos || 'No especificados'}
                           </div>
                           {/* Monto */}
-                          <div className="flex items-center gap-2 pt-1">
-                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                            <span className="text-sm font-bold text-green-700">
+                          <div className="flex items-center gap-0.5">
+                            <div className="w-1 h-1 rounded-full bg-green-500"></div>
+                            <span className="text-[8px] font-bold text-green-700">
                               {formatCurrency(order.totalAmount)}
                             </span>
                           </div>
                           {/* Número SINPE */}
                           {order.numero_sinpe && (
-                            <div className="flex items-center gap-2 pt-1">
-                              <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                              <span className="text-xs text-blue-700 font-mono bg-blue-50 px-2 py-1 rounded border border-blue-200">
+                            <div className="flex items-center gap-0.5">
+                              <div className="w-1 h-1 rounded-full bg-blue-500"></div>
+                              <span className="text-[8px] text-blue-700 font-mono bg-blue-50 px-0.5 py-0 rounded border border-blue-200">
                                 SINPE: {order.numero_sinpe}
                               </span>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => copyToClipboard(order.numero_sinpe!, 'Número SINPE')}
-                                className="h-6 w-6 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
+                                className="h-3 w-3 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
                                 title="Copiar número SINPE"
                               >
-                                <Clipboard className="w-3 h-3" />
+                                <Clipboard className="w-1.5 h-1.5" />
                               </Button>
                             </div>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <div className="space-y-1">
-                          <div className="text-xs text-gray-500 font-medium">Creación</div>
-                          <div className="text-sm font-semibold text-gray-800">
+                      <TableCell className="px-1 py-0.5">
+                        <div className="space-y-0">
+                          <div className="text-[8px] text-gray-500 font-medium">Creación</div>
+                          <div className="text-[8px] font-semibold text-gray-800">
                             {order.createdAt ? (() => {
                               // Si es una fecha ISO (2025-09-30T00:00:00.000Z), extraer solo la parte de la fecha
                               if (order.createdAt.includes('T')) {
@@ -2426,18 +2055,18 @@ export default function MiRutaHoy() {
                               }
                               // Fallback
                               return new Date(order.createdAt).toLocaleDateString('es-CR', {
-                                day: '2-digit',
-                                month: '2-digit',
+                            day: '2-digit', 
+                            month: '2-digit', 
                                 year: 'numeric'
                               });
                             })() : 'N/A'}
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <div className="space-y-1">
-                          <div className="text-xs text-gray-500 font-medium">Entrega</div>
-                          <div className="text-sm font-semibold text-gray-800">
+                          </div>
+                        </TableCell>
+                      <TableCell className="px-1 py-0.5">
+                        <div className="space-y-0">
+                          <div className="text-[8px] text-gray-500 font-medium">Entrega</div>
+                          <div className="text-[8px] font-semibold text-gray-800">
                             {order.updatedAt ? (() => {
                               // Si es una fecha ISO (2025-09-30T00:00:00.000Z), extraer solo la parte de la fecha
                               if (order.updatedAt.includes('T')) {
@@ -2457,11 +2086,11 @@ export default function MiRutaHoy() {
                                 year: 'numeric'
                               });
                             })() : 'N/A'}
-                          </div>
+                            </div>
                         </div>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <div className="flex gap-2">
+                        </TableCell>
+                      <TableCell className="px-1 py-0.5">
+                        <div className="flex gap-1.5">
                           <Button
                             size="sm"
                             variant="outline"
@@ -2469,7 +2098,7 @@ export default function MiRutaHoy() {
                               e.stopPropagation();
                               handleViewDetails(order);
                             }}
-                            className="h-10 w-10 p-0 bg-purple-50 border-purple-200 hover:bg-purple-100 text-purple-700 hover:scale-105 transition-transform"
+                            className="h-7 w-7 p-0 bg-purple-50 border-purple-200 hover:bg-purple-100 text-purple-700 hover:scale-105 transition-transform"
                             title="Ver Detalles"
                           >
                             <FileText className="w-4 h-4" />
@@ -2484,7 +2113,7 @@ export default function MiRutaHoy() {
                               setPaymentMethod(order.paymentMethod || 'efectivo');
                               setIsUpdateStatusModalOpen(true);
                             }}
-                            className="h-10 w-10 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700 hover:scale-105 transition-transform"
+                            className="h-7 w-7 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700 hover:scale-105 transition-transform"
                             disabled={updatingOrder === order.id || isLiquidationCompleted}
                             title={isLiquidationCompleted ? "Liquidación completada - No se puede editar" : "Actualizar Estado"}
                           >
@@ -2496,10 +2125,10 @@ export default function MiRutaHoy() {
                           </Button>
                         </div>
                       </TableCell>
-                      <TableCell className="px-4 py-3">
+                      <TableCell className="px-1 py-0.5">
                         <Badge 
                           variant="outline" 
-                          className={`text-xs ${
+                          className={`text-[8px] ${
                             order.paymentMethod === 'efectivo' ? 'bg-green-50 text-green-700 border-green-200' :
                             order.paymentMethod === 'sinpe' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                             order.paymentMethod === 'tarjeta' ? 'bg-purple-50 text-purple-700 border-purple-200' :
@@ -2510,11 +2139,11 @@ export default function MiRutaHoy() {
                           {order.paymentMethod === '2pagos' ? '💰 2 Pagos' : (order.metodoPagoOriginal || 'No especificado')}
                         </Badge>
                       </TableCell>
-                      <TableCell className="px-4 py-3">
+                      <TableCell className="px-1 py-0.5">
                         <div className="flex items-center justify-center">
                           <Badge 
                             variant="outline"
-                            className={`text-sm font-semibold px-3 py-2 rounded-lg shadow-sm ${
+                            className={`text-[8px] font-semibold px-1 py-0.5 rounded shadow-sm ${
                               order.status === 'entregado' ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' :
                               order.status === 'en_ruta' ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' :
                               order.status === 'devolucion' ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' :
@@ -2522,8 +2151,8 @@ export default function MiRutaHoy() {
                               'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
                             }`}
                           >
-                            <div className="flex items-center gap-2">
-                              <span className="text-base">
+                            <div className="flex items-center gap-0.5">
+                              <span className="text-[8px]">
                                 {order.status === 'entregado' ? '✅' :
                                  order.status === 'en_ruta' ? '🚚' :
                                  order.status === 'devolucion' ? '❌' :
@@ -2541,39 +2170,526 @@ export default function MiRutaHoy() {
                           </Badge>
                         </div>
                       </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <div className="max-w-[200px]">
+                      <TableCell className="px-1 py-0.5">
+                        <div className="max-w-[80px]">
                           {order.asesorNotes ? (
-                            <div className="space-y-2">
-                              <div className="text-xs text-orange-600 font-medium bg-orange-50 px-2 py-1 rounded border border-orange-200">
-                                Notas del Asesor
+                            <div className="space-y-0.5">
+                              <div className="text-[8px] text-orange-600 font-medium bg-orange-50 px-0.5 py-0 rounded border border-orange-200">
+                                Notas Asesor
                               </div>
-                              <div className="text-sm text-gray-700 bg-orange-50 p-2 rounded border border-orange-200">
+                              <div className="text-[8px] text-gray-700 bg-orange-50 p-0.5 rounded border border-orange-200">
                                 {order.asesorNotes}
                               </div>
                             </div>
                           ) : (
-                            <div className="text-xs text-gray-500 italic">
-                              Sin notas del asesor
+                            <div className="text-[8px] text-gray-500 italic">
+                              Sin notas
                             </div>
                           )}
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                </div>
+              )}
+          </CardContent>
+            </Card>
+          </TabsContent>
+
+        {/* Pestaña de Contabilidad */}
+        <TabsContent value="contabilidad" className="space-y-6 mt-6">
+          {/* Bento Grid de Contabilidad - Optimizado para Móvil */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+            {/* Completados */}
+            <Card 
+              className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+              onClick={() => setIsCompletedModalOpen(true)}
+            >
+              <CardContent className="p-3">
+                <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-green-500 rounded-lg">
+                      <CheckCircle className="w-4 h-4 text-white" />
+                  </div>
+                    <span className="text-xs font-medium text-green-700">Completados</span>
+                  </div>
+                  <p className="text-lg font-bold text-green-800">{routeData.completedOrders}</p>
+                  <p className="text-xs text-green-600">Entregados</p>
+                </div>
+              </CardContent>
+              </Card>
+
+            {/* Ingresos */}
+            <Card 
+              className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+              onClick={() => setIsRevenueModalOpen(true)}
+            >
+              <CardContent className="p-3">
+                <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-blue-500 rounded-lg">
+                      <DollarSign className="w-4 h-4 text-white" />
+                  </div>
+                    <span className="text-xs font-medium text-blue-700">Ingresos</span>
+                  </div>
+                  <p className="text-sm font-bold text-blue-800">{formatCurrency(routeData.totalRevenue)}</p>
+                  <p className="text-xs text-blue-600">Total del día</p>
+                </div>
+              </CardContent>
+              </Card>
+
+            {/* Total Efectivo */}
+            <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+              onClick={() => setIsCashModalOpen(true)}>
+              <CardContent className="p-3">
+                <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-green-500 rounded-lg">
+                      <Banknote className="w-4 h-4 text-white" />
+                  </div>
+                    <span className="text-xs font-medium text-green-700">Efectivo</span>
+                  </div>
+                  <p className="text-sm font-bold text-green-800">{formatCurrency(accountingMetrics.totalCash)}</p>
+                  <p className="text-xs text-green-600">{getCashOrders().length} pedidos</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Total SINPE */}
+            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+              onClick={() => setIsSinpeModalOpen(true)}>
+              <CardContent className="p-3">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-blue-500 rounded-lg">
+                      <Smartphone className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="text-xs font-medium text-blue-700">SINPE</span>
+                  </div>
+                  <p className="text-sm font-bold text-blue-800">{formatCurrency(accountingMetrics.totalSinpe)}</p>
+                  <p className="text-xs text-blue-600">{getSinpeOrders().length} pedidos</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Total Tarjeta */}
+            <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+              onClick={() => setIsTarjetaModalOpen(true)}>
+              <CardContent className="p-3">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-purple-500 rounded-lg">
+                      <CreditCard className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="text-xs font-medium text-purple-700">Tarjeta</span>
+                  </div>
+                  <p className="text-sm font-bold text-purple-800">{formatCurrency(accountingMetrics.totalTarjeta)}</p>
+                  <p className="text-xs text-purple-600">{getTarjetaOrders().length} pedidos</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Total Recaudado */}
+            <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 hover:shadow-lg transition-all duration-200">
+              <CardContent className="p-3">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-purple-500 rounded-lg">
+                      <DollarSign className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="text-xs font-medium text-purple-700">Total Recaudado</span>
+                  </div>
+                  <p className="text-sm font-bold text-purple-800">
+                    {formatCurrency(accountingMetrics.totalCash + accountingMetrics.totalSinpe + accountingMetrics.totalTarjeta)}
+                  </p>
+                  <p className="text-xs text-purple-600">Efectivo + SINPE + Tarjeta</p>
+                  </div>
+              </CardContent>
+            </Card>
+
+            {/* Devoluciones */}
+            <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+              onClick={() => setIsReturnsModalOpen(true)}>
+              <CardContent className="p-3">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-red-500 rounded-lg">
+                      <RotateCcw className="w-4 h-4 text-white" />
+                </div>
+                    <span className="text-xs font-medium text-red-700">Devoluciones</span>
+                  </div>
+                  <p className="text-lg font-bold text-red-800">{getReturnOrders().length}</p>
+                  <p className="text-xs text-red-600">Para devolver</p>
+                </div>
+              </CardContent>
+              </Card>
+
+            {/* Reagendados */}
+            <Card 
+              className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+              onClick={() => setIsRescheduledModalOpen(true)}
+            >
+              <CardContent className="p-3">
+                <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-orange-500 rounded-lg">
+                      <Calendar className="w-4 h-4 text-white" />
+                  </div>
+                    <span className="text-xs font-medium text-orange-700">Reagendados</span>
+                  </div>
+                  <p className="text-lg font-bold text-orange-800">{getRescheduledOrders().length}</p>
+                  <p className="text-xs text-orange-600">Pendientes</p>
+                </div>
+              </CardContent>
+            </Card>
+
             </div>
-          )}
-        </CardContent>
-      </Card>
+
+
+          {/* Gráficos de Contabilidad */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Gráfico de Métodos de Pago */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PieChart className="w-5 h-5 text-blue-600" />
+                  Distribución de Pagos
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RechartsPieChart>
+                      <Pie
+                        data={getPaymentMethodData()}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {getPaymentMethodData().map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={index === 0 ? '#10b981' : index === 1 ? '#3b82f6' : '#8b5cf6'} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value, name) => [value, name]} />
+                    </RechartsPieChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+              </Card>
+
+                </div>
+
+          {/* Gastos del Día - Ocupa 2 columnas */}
+          <div className="col-span-2">
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Receipt className="w-5 h-5 text-orange-600" />
+                      Gastos del Día
+                    </CardTitle>
+                    <div className="text-sm text-orange-600 mt-1">
+                      <span className="font-medium">{user?.name}</span> • {getSelectedDateInfo().dayName} {getSelectedDateInfo().day} de {getSelectedDateInfo().month}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Dialog open={isExpenseModalOpen} onOpenChange={setIsExpenseModalOpen}>
+                      <DialogTrigger asChild>
+                        <Button size="sm" className="bg-orange-600 hover:bg-orange-700">
+                          <Plus className="w-4 h-4 mr-1" />
+                          Agregar
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[400px]">
+                        <DialogHeader>
+                          <DialogTitle>Agregar Gasto</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div>
+                            <Label htmlFor="type">Tipo de Gasto</Label>
+                            <select
+                              id="type"
+                              value={newExpense.type}
+                              onChange={(e) => setNewExpense(prev => ({ ...prev, type: e.target.value as 'fuel' | 'maintenance' | 'peaje' | 'other', customType: '' }))}
+                              className="w-full p-2 border rounded-md"
+                            >
+                              <option value="fuel">Combustible</option>
+                              <option value="maintenance">Mantenimiento</option>
+                              <option value="peaje">Peaje</option>
+                              <option value="other">Otro</option>
+                            </select>
+                          </div>
+
+                          {newExpense.type === 'other' && (
+                            <div>
+                              <Label htmlFor="customType">Especificar Tipo de Gasto *</Label>
+                              <Input
+                                id="customType"
+                                placeholder="Ej: Peaje, Estacionamiento, Herramientas..."
+                                value={newExpense.customType}
+                                onChange={(e) => setNewExpense(prev => ({ ...prev, customType: e.target.value }))}
+                                className="w-full"
+                              />
+                            </div>
+                          )}
+                          <div>
+                            <Label htmlFor="amount">Monto</Label>
+                            <Input
+                              id="amount"
+                              type="number"
+                              placeholder="0"
+                              value={newExpense.amount}
+                              onChange={(e) => setNewExpense(prev => ({ ...prev, amount: e.target.value }))}
+                            />
+                          </div>
+                          {/* Badge informativo */}
+                          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                              <div className="text-sm text-amber-800">
+                                <p className="font-medium">⚠️ Cuidado con los gastos añadidos</p>
+                                <p className="text-xs mt-1">Los gastos no pueden ser eliminados del reporte de liquidación del día una vez añadidos.</p>
+                              </div>
+                            </div>
+                          </div>
+                        
+                          <div>
+                            <Label>Comprobante del Gasto *</Label>
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                              {uploadedReceiptImage ? (
+                                <div className="space-y-3">
+                                  <img
+                                    src={uploadedReceiptImage}
+                                    alt="Comprobante"
+                                    className="max-w-full h-32 object-contain mx-auto rounded-lg"
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setUploadedReceiptImage(null);
+                                      setNewExpense(prev => ({ ...prev, receipt: null }));
+                                    }}
+                                    className="text-red-600 hover:text-red-700"
+                                  >
+                                    <X className="w-4 h-4 mr-1" />
+                                    Eliminar
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="space-y-3">
+                                  <Camera className="w-8 h-8 mx-auto text-gray-400" />
+                                  <p className="text-sm text-gray-600">Toca para seleccionar comprobante</p>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleImageUpload}
+                                    className="hidden"
+                                    id="receipt-upload"
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => document.getElementById('receipt-upload')?.click()}
+                                  >
+                                    <ImageIcon className="w-4 h-4 mr-2" />
+                                    Seleccionar Imagen
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setIsExpenseModalOpen(false);
+                                setUploadedReceiptImage(null);
+                                setNewExpense({
+                                  type: 'fuel',
+                                  amount: '',
+                                  receipt: null,
+                                  customType: ''
+                                });
+                              }}
+                              className="flex-1"
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              onClick={handleAddExpense}
+                              disabled={
+                                !newExpense.amount || 
+                                !newExpense.receipt || 
+                                isAddingExpense ||
+                                (newExpense.type === 'other' && !newExpense.customType.trim())
+                              }
+                              className="flex-1 bg-orange-600 hover:bg-orange-700"
+                            >
+                              {isAddingExpense ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                'Agregar'
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {(() => {
+                  const gastosDelMensajero = gastosReales.find(g => g.mensajero === user?.name);
+                  const gastos = gastosDelMensajero?.gastos || [];
+                  
+                  if (gastos.length === 0) {
+                    return (
+                      <div className="text-center py-4 text-gray-500">
+                        <Receipt className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No hay gastos registrados</p>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <>
+                      {gastos.map((gasto) => (
+                        <div key={gasto.id} className="p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-full ${getExpenseColor(gasto.tipo_gasto)}`}>
+                                {getExpenseIcon(gasto.tipo_gasto)}
+                              </div>
+                              <div>
+                                <p className="font-medium text-sm">{gasto.tipo_gasto}</p>
+                                <p className="text-xs text-gray-500">
+                                  {new Date(gasto.fecha).toLocaleTimeString('es-CR', { 
+                                    hour: '2-digit', 
+                                    minute: '2-digit' 
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                            <p className="font-bold text-orange-600">{formatCurrency(gasto.monto)}</p>
+                          </div>
+                          {gasto.comprobante_link && (
+                            <div className="mt-2">
+                              <a 
+                                href={gasto.comprobante_link} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                                Ver comprobante
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Resumen Financiero del Día - Incluye gastos */}
+          <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-indigo-800">
+                <DollarSign className="w-5 h-5" />
+                Resumen Financiero del Día
+              </CardTitle>
+              <div className="text-sm text-indigo-600">
+                <span className="font-medium">{user?.name}</span> • {getSelectedDateInfo().dayName} {getSelectedDateInfo().day} de {getSelectedDateInfo().month}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Ingresos por Efectivo */}
+                <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Banknote className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-medium text-green-800">Efectivo</span>
+                  </div>
+                  <p className="text-2xl font-bold text-green-700">
+                    {formatCurrency(accountingMetrics.totalCash)}
+                  </p>
+                  <p className="text-xs text-green-600">
+                    {getCashOrders().length} pedidos
+                  </p>
+                </div>
+
+                {/* Ingresos por SINPE */}
+                <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Smartphone className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-800">SINPE</span>
+                  </div>
+                  <p className="text-2xl font-bold text-blue-700">
+                    {formatCurrency(accountingMetrics.totalSinpe)}
+                  </p>
+                  <p className="text-xs text-blue-600">
+                    {getSinpeOrders().length} pedidos
+                  </p>
+                </div>
+
+                {/* Gastos del Día */}
+                <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Receipt className="w-4 h-4 text-orange-600" />
+                    <span className="text-sm font-medium text-orange-800">Gastos</span>
+                  </div>
+                  <p className="text-2xl font-bold text-orange-700">
+                    {formatCurrency(routeData.totalExpenses)}
+                  </p>
+                  <p className="text-xs text-orange-600">
+                    {(() => {
+                      const gastosDelMensajero = gastosReales.find(g => g.mensajero === user?.name);
+                      return gastosDelMensajero?.gastos?.length || 0;
+                    })()} gastos
+                  </p>
+                </div>
+
+                {/* Total General con Gastos */}
+                <div className="text-center p-4 bg-purple-50 rounded-lg border border-purple-200">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <DollarSign className="w-4 h-4 text-purple-600" />
+                    <span className="text-sm font-medium text-purple-800">Total Neto</span>
+                  </div>
+                  <p className="text-2xl font-bold text-purple-700">
+                    {formatCurrency((accountingMetrics.totalCash + accountingMetrics.totalSinpe + accountingMetrics.totalTarjeta) - routeData.totalExpenses)}
+                  </p>
+                  <p className="text-xs text-purple-600">
+                    Ingresos - Gastos
+                  </p>
+                  <div className="mt-2 text-xs text-gray-500">
+                    <p>Ingresos: {formatCurrency(accountingMetrics.totalCash + accountingMetrics.totalSinpe + accountingMetrics.totalTarjeta)}</p>
+                    <p>Gastos: {formatCurrency(routeData.totalExpenses)}</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          </TabsContent>
+        </Tabs>
 
       {/* Modal para subir comprobante */}
       <Dialog open={isReceiptModalOpen} onOpenChange={setIsReceiptModalOpen}>
         <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
+            <DialogHeader>
             <DialogTitle>Subir Comprobante</DialogTitle>
-          </DialogHeader>
+            </DialogHeader>
           {selectedOrder && (
             <div className="space-y-4">
               <div className="bg-gray-50 p-3 rounded-lg">
@@ -2615,8 +2731,8 @@ export default function MiRutaHoy() {
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
 
       {/* Modal para actualizar estado */}
       <Dialog open={isUpdateStatusModalOpen} onOpenChange={setIsUpdateStatusModalOpen}>
@@ -2669,13 +2785,13 @@ export default function MiRutaHoy() {
                   >
                     📅 Reagendado
                   </Button>
-                </div>
-              </div>
+                      </div>
+                      </div>
 
               {/* Sección de método de pago para entregado */}
               {newStatus === 'entregado' && (
                 <div className="space-y-3 p-4 bg-green-50 rounded-lg border border-green-200">
-                  <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                     <Label className="text-sm font-semibold">Confirmar Método de Pago *</Label>
                     <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
                       {selectedOrderForUpdate.paymentMethod === 'efectivo' ? '💵 Efectivo' :
@@ -2683,7 +2799,7 @@ export default function MiRutaHoy() {
                        selectedOrderForUpdate.paymentMethod === 'tarjeta' ? '💳 Tarjeta' :
                        '🔄 Cambio'}
                     </Badge>
-                  </div>
+                      </div>
                   <p className="text-xs text-gray-600">
                     Confirma el método de pago que el cliente está utilizando para esta entrega
                   </p>
@@ -2735,7 +2851,7 @@ export default function MiRutaHoy() {
                     >
                       💰 2 Pagos
                     </Button>
-                  </div>
+                      </div>
                   
                   {/* Comprobante para SINPE o Tarjeta */}
                   {(paymentMethod === 'sinpe' || paymentMethod === 'tarjeta') && (
@@ -2819,20 +2935,20 @@ export default function MiRutaHoy() {
                                 <SelectItem value="efectivo">💵 Efectivo</SelectItem>
                                 <SelectItem value="sinpe">📱 SINPE</SelectItem>
                                 <SelectItem value="tarjeta">💳 Tarjeta</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
+                  </SelectContent>
+                </Select>
+              </div>
+                <div>
                             <Label className="text-xs text-gray-600">Monto (₡)</Label>
-                            <Input
+                  <Input
                               type="number"
                               placeholder="0"
                               value={firstPaymentAmount}
                               onChange={(e) => setFirstPaymentAmount(e.target.value)}
                               className="h-8"
                             />
-                          </div>
-                        </div>
+                </div>
+            </div>
                         
                         {/* Comprobante para primer pago si es SINPE o Tarjeta */}
                         {(firstPaymentMethod === 'sinpe' || firstPaymentMethod === 'tarjeta') && (
@@ -2876,8 +2992,8 @@ export default function MiRutaHoy() {
                                     <ImageIcon className="w-3 h-3 mr-1" />
                                     Subir
                                   </Button>
-                                </div>
-                              )}
+                </div>
+              )}
                             </div>
                           </div>
                         )}
@@ -2887,31 +3003,31 @@ export default function MiRutaHoy() {
                       <div className="space-y-3">
                         <Label className="text-sm font-medium">Segundo Pago</Label>
                         <div className="grid grid-cols-2 gap-2">
-                          <div>
+              <div>
                             <Label className="text-xs text-gray-600">Método</Label>
                             <Select value={secondPaymentMethod} onValueChange={setSecondPaymentMethod}>
                               <SelectTrigger className="h-8">
                                 <SelectValue placeholder="Seleccionar" />
-                              </SelectTrigger>
-                              <SelectContent>
+                  </SelectTrigger>
+                  <SelectContent>
                                 <SelectItem value="efectivo">💵 Efectivo</SelectItem>
                                 <SelectItem value="sinpe">📱 SINPE</SelectItem>
                                 <SelectItem value="tarjeta">💳 Tarjeta</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
                             <Label className="text-xs text-gray-600">Monto (₡)</Label>
-                            <Input
-                              type="number"
-                              placeholder="0"
+                <Input
+                  type="number"
+                  placeholder="0"
                               value={secondPaymentAmount}
                               onChange={(e) => setSecondPaymentAmount(e.target.value)}
                               className="h-8"
-                            />
+                />
                           </div>
-                        </div>
-                        
+              </div>
+
                         {/* Comprobante para segundo pago si es SINPE o Tarjeta */}
                         {(secondPaymentMethod === 'sinpe' || secondPaymentMethod === 'tarjeta') && (
                           <div className="space-y-2">
@@ -2933,14 +3049,14 @@ export default function MiRutaHoy() {
                                     <X className="w-3 h-3 mr-1" />
                                     Eliminar
                                   </Button>
-                                </div>
+              </div>
                               ) : (
-                                <div className="space-y-2">
+                <div className="space-y-2">
                                   <Camera className="w-6 h-6 mx-auto text-gray-400" />
                                   <p className="text-xs text-gray-600">Comprobante del segundo pago</p>
                                   <input
-                                    type="file"
-                                    accept="image/*"
+                    type="file"
+                    accept="image/*"
                                     onChange={(e) => handleDualPaymentFileUpload(e, 'second')}
                                     className="hidden"
                                     id="second-payment-upload"
@@ -3058,10 +3174,10 @@ export default function MiRutaHoy() {
                           src={uploadedEvidence}
                           alt="Comprobante de comunicación"
                           className="max-w-full h-32 object-contain mx-auto rounded-lg"
-                        />
-                        <Button
+                      />
+                      <Button
                           variant="outline"
-                          size="sm"
+                        size="sm"
                           onClick={() => setUploadedEvidence(null)}
                           className="text-red-600 hover:text-red-700"
                         >
@@ -3110,7 +3226,7 @@ export default function MiRutaHoy() {
               <div className="flex-shrink-0 flex gap-2 p-6 pt-4 border-t bg-white">
                 <Button
                   variant="outline"
-                  onClick={() => {
+                        onClick={() => {
                     setIsUpdateStatusModalOpen(false);
                     setSelectedOrderForUpdate(null);
                     resetModalState();
@@ -3148,10 +3264,10 @@ export default function MiRutaHoy() {
                   ) : (
                     'Actualizar'
                   )}
-                </Button>
-              </div>
-            )}
-          </div>
+                      </Button>
+                    </div>
+                  )}
+                </div>
         </DialogContent>
       </Dialog>
 
@@ -3171,7 +3287,7 @@ export default function MiRutaHoy() {
                 <p className="text-sm text-gray-600">{selectedOrderForNotes.customerName}</p>
                 <p className="text-sm text-gray-600">{selectedOrderForNotes.customerProvince} • {selectedOrderForNotes.customerCanton} • {selectedOrderForNotes.customerDistrict}</p>
               </div>
-              
+
               {/* Notas existentes */}
               {selectedOrderForNotes.notes && (
                 <div className="space-y-3">
@@ -3213,18 +3329,18 @@ export default function MiRutaHoy() {
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
 
       {/* Modal del Timeline */}
       <Dialog open={isTimelineModalOpen} onOpenChange={setIsTimelineModalOpen}>
         <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
               <Clock className="w-5 h-5 text-purple-600" />
               Timeline del Pedido
-            </DialogTitle>
-          </DialogHeader>
+              </DialogTitle>
+            </DialogHeader>
           {selectedOrderForTimeline && (
             <div className="space-y-4">
               <div className="bg-gray-50 p-3 rounded-lg">
@@ -3318,8 +3434,8 @@ export default function MiRutaHoy() {
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
 
       {/* Modal de Éxito */}
       <AlertDialog open={isSuccessModalOpen} onOpenChange={setIsSuccessModalOpen}>
@@ -3337,7 +3453,7 @@ export default function MiRutaHoy() {
                 <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
                   <Clock className="w-4 h-4" />
                   <span>Cerrando automáticamente en {countdown} segundos...</span>
-                </div>
+      </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -3554,8 +3670,8 @@ export default function MiRutaHoy() {
                         </a>
                       </div>
                     )}
-                  </div>
-                </div>
+                      </div>
+                      </div>
 
                 {/* Notas Adicionales */}
                 <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
@@ -3574,7 +3690,7 @@ export default function MiRutaHoy() {
                       <div className="bg-orange-50 p-3 rounded border border-orange-200 text-sm leading-relaxed text-orange-900">
                         {selectedOrderForDetails.asesorNotes}
                       </div>
-                    </div>
+              </div>
                   )}
                   
                   {/* Notas Generales */}
@@ -3604,7 +3720,7 @@ export default function MiRutaHoy() {
                   
                   {/* Formulario para añadir nueva nota */}
                   <div className="space-y-3">
-                    <div>
+                <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Añadir nueva nota:
                       </label>
@@ -3640,8 +3756,8 @@ export default function MiRutaHoy() {
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+                </div>
+              )}
 
           <div className="flex justify-end mt-6">
             <Button
@@ -3715,7 +3831,7 @@ export default function MiRutaHoy() {
                         <Bar dataKey="value" fill="#10b981" name="Pedidos" />
                       </BarChart>
                     </ResponsiveContainer>
-                  </div>
+              </div>
                 </CardContent>
               </Card>
 
@@ -3854,7 +3970,7 @@ export default function MiRutaHoy() {
                     <span className="text-sm font-medium text-purple-800">Total</span>
                   </div>
                   <p className="text-xl font-bold text-purple-700 mt-1">
-                    {formatCurrency(accountingMetrics.totalCash + accountingMetrics.totalSinpe)}
+                    {formatCurrency(accountingMetrics.totalCash + accountingMetrics.totalSinpe + accountingMetrics.totalTarjeta)}
                   </p>
                   <p className="text-xs text-purple-600">
                     {getCompletedOrders().length} pedidos
@@ -3889,7 +4005,7 @@ export default function MiRutaHoy() {
                         <Bar dataKey="value" fill="#3b82f6" name="Pedidos" />
                       </BarChart>
                     </ResponsiveContainer>
-                  </div>
+              </div>
                 </CardContent>
               </Card>
 
@@ -3927,39 +4043,6 @@ export default function MiRutaHoy() {
               </Card>
             </div>
 
-            {/* Gráfico de Ingresos por Hora */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Activity className="w-4 h-4 text-green-600" />
-                  Ingresos por Hora del Día
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={getRevenueByHourData()}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="hour" fontSize={12} />
-                      <YAxis fontSize={12} />
-                      <Tooltip 
-                        formatter={(value, name) => [
-                          name === 'revenue' ? formatCurrency(Number(value)) : value,
-                          name === 'revenue' ? 'Ingresos' : 'Pedidos'
-                        ]}
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="revenue" 
-                        stroke="#10b981" 
-                        strokeWidth={2}
-                        dot={{ fill: '#10b981', strokeWidth: 2, r: 3 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </DialogContent>
       </Dialog>
@@ -4113,6 +4196,7 @@ export default function MiRutaHoy() {
                   <TableHead>Cliente</TableHead>
                   <TableHead>Monto</TableHead>
                   <TableHead>Fecha Entrega</TableHead>
+                  <TableHead>Comprobante</TableHead>
                   <TableHead>Estado</TableHead>
                 </TableRow>
               </TableHeader>
@@ -4128,6 +4212,22 @@ export default function MiRutaHoy() {
                       {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString('es-CR') : 'N/A'}
                     </TableCell>
                     <TableCell>
+                      {order.comprobante_sinpe ? (
+                      <Button
+                        size="sm"
+                          variant="outline"
+                          onClick={() => window.open(order.comprobante_sinpe, '_blank')}
+                          className="h-6 px-2 text-xs bg-green-50 border-green-200 hover:bg-green-100 text-green-700"
+                          title="Ver comprobante SINPE"
+                        >
+                          <ExternalLink className="w-3 h-3 mr-1" />
+                          Ver
+                      </Button>
+                      ) : (
+                        <span className="text-xs text-gray-400 italic">Sin comprobante</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
                         Entregado
                       </Badge>
@@ -4136,9 +4236,70 @@ export default function MiRutaHoy() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+                </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal Tarjeta */}
+      <Dialog open={isTarjetaModalOpen} onOpenChange={setIsTarjetaModalOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-purple-600" />
+              Pedidos con Tarjeta - {formatCurrency(accountingMetrics.totalTarjeta)}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-96 overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Monto</TableHead>
+                  <TableHead>Fecha Entrega</TableHead>
+                  <TableHead>Comprobante</TableHead>
+                  <TableHead>Estado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {getTarjetaOrders().map((order) => (
+                  <TableRow key={order.id}>
+                    <TableCell className="font-mono text-sm">{order.id}</TableCell>
+                    <TableCell>{order.customerName}</TableCell>
+                    <TableCell className="font-semibold text-purple-600">
+                      {formatCurrency(order.totalAmount)}
+                    </TableCell>
+                    <TableCell className="text-sm text-gray-500">
+                      {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString('es-CR') : 'N/A'}
+                    </TableCell>
+                    <TableCell>
+                      {order.comprobante_sinpe ? (
+                <Button
+                          size="sm"
+                  variant="outline"
+                          onClick={() => window.open(order.comprobante_sinpe, '_blank')}
+                          className="h-6 px-2 text-xs bg-green-50 border-green-200 hover:bg-green-100 text-green-700"
+                          title="Ver comprobante de tarjeta"
+                        >
+                          <ExternalLink className="w-3 h-3 mr-1" />
+                          Ver
+                </Button>
+                      ) : (
+                        <span className="text-xs text-gray-400 italic">Sin comprobante</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                        Entregado
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            </div>
+          </DialogContent>
+        </Dialog>
 
     </div>
   );

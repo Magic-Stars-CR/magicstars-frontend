@@ -72,8 +72,8 @@ export default function LoginPage() {
         console.log('🔄 Redirigiendo a asesor dashboard');
         router.push('/dashboard/asesor');
       } else if (user?.role === 'mensajero') {
-        console.log('🔄 Redirigiendo a mensajero dashboard');
-        router.push('/dashboard/mensajero');
+        console.log('🔄 Redirigiendo a mi ruta de hoy');
+        router.push('/dashboard/mensajero/mi-ruta-hoy');
       } else {
         console.log('🔄 Redirigiendo a página principal');
         router.push('/');
