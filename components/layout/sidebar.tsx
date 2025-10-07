@@ -32,7 +32,7 @@ const menuItems = {
     { icon: Package, label: 'Pedidos', href: '/dashboard/admin/pedidos' },
     // { icon: Warehouse, label: 'Inventario', href: '/dashboard/admin/inventory' },
     // { icon: Network, label: 'Logística Externa', href: '/dashboard/admin/red-logistic' },
-    // { icon: Truck, label: 'Rutas', href: '/dashboard/admin/routes' },
+    { icon: Truck, label: 'Rutas', href: '/dashboard/admin/routes' },
     // { icon: Route, label: 'Gestión de Rutas', href: '/dashboard/admin/route-management' },
     { icon: DollarSign, label: 'Liquidación', href: '/dashboard/admin/liquidation' },
     { icon: Users, label: 'Usuarios', href: '/dashboard/admin/usuarios' },
@@ -55,6 +55,7 @@ const menuItems = {
   tienda: [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/tienda' },
     { icon: Package, label: 'Pedidos', href: '/dashboard/tienda/orders' },
+    { icon: DollarSign, label: 'Liquidación', href: '/dashboard/tienda/liquidacion' },
     { icon: BarChart3, label: 'Estadísticas', href: '/dashboard/tienda/stats' },
     { icon: User, label: 'Mi Perfil', href: '/dashboard/tienda/profile' },
   ],

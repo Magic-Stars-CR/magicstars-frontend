@@ -1,0 +1,14 @@
+ID,Email,Password,Nombre_Tienda,Telefono,Role,Company_ID,Estado,Avatar,Fecha_Creacion
+20,tienda@paramachos.cr,ParaMachos1234,PARA MACHOS,+506 8888-2000,tienda,1,Activo,https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=150,2024-01-01T10:00:00Z
+21,tienda@crexion.cr,Crexion1234,CREXION,+506 8888-2001,tienda,,Activo,https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=150,2024-01-01T10:00:00Z
+22,tienda@allstars.cr,AllStars1234,ALL STARS,+506 8888-2002,tienda,3,Activo,https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=150,2024-01-01T10:00:00Z
+23,tienda@blix.cr,Blix1234,BLIX,+506 8888-2003,tienda,,Activo,https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=150,2024-01-01T10:00:00Z
+24,tienda@mixmart.cr,Mixmart1234,MIXMART,+506 8888-2004,tienda,,Activo,https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=150,2024-01-01T10:00:00Z
+25,tienda@beststore.cr,BestStore1234,BEST STORE,+506 8888-2005,tienda,,Activo,https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=150,2024-01-01T10:00:00Z
+26,tienda@solutionstore.cr,SolutionStore1234,SOLUTION STORE,+506 8888-2006,tienda,,Activo,https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=150,2024-01-01T10:00:00Z
+27,tienda@vitalelite.cr,VitalElite1234,VITAL ELITE,+506 8888-2007,tienda,,Activo,https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=150,2024-01-01T10:00:00Z
+28,tienda@mancare.cr,Mancare1234,MANCARE,+506 8888-2008,tienda,,Activo,https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=150,2024-01-01T10:00:00Z
+29,tienda@magicbum.cr,MagicBum1234,MAGIC BUM,+506 8888-2009,tienda,,Activo,https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=150,2024-01-01T10:00:00Z
+30,tienda@rutalibre.cr,RutaLibre1234,RUTA LIBRE,+506 8888-2010,tienda,,Activo,https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=150,2024-01-01T10:00:00Z
+31,tienda@ninolandia.cr,Ninolandia1234,NIÑOLANDIA,+506 8888-2011,tienda,,Activo,https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=150,2024-01-01T10:00:00Z
+32,tienda@beautyfan.cr,BeautyFan1234,BEAUTY FAN,+506 8888-2012,tienda,2,Activo,https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=150,2024-01-01T10:00:00Z

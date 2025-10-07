@@ -1,4 +1,5 @@
 import { User } from './types';
+import { mockUsers } from './mock-api';
 
 // Datos simulados de usuarios para testing
 export const mockMessengers: User[] = [
@@ -877,20 +878,24 @@ export const mockLogin = async (emailOrName: string, password: string): Promise<
   console.log('=== INICIO DE AUTENTICACIÓN ===');
   console.log('Email o nombre recibido:', emailOrName);
   console.log('Contraseña recibida:', password ? 'Sí' : 'No');
-  console.log('Total de usuarios disponibles:', mockMessengers.length);
+  
+  // Combinar usuarios de mock-messengers y mock-api
+  const allUsers = [...mockMessengers, ...mockUsers];
+  console.log('Total de usuarios disponibles:', allUsers.length);
   
   // Filtrar usuarios demo (ocultos por defecto)
-  const visibleUsers = mockMessengers.filter(u => 
+  const visibleUsers = allUsers.filter(u => 
     !u.email.toLowerCase().includes('demo') && 
     !u.name.toLowerCase().includes('demo')
   );
   
   console.log('Usuarios visibles (sin demo):', visibleUsers.length);
   
-  // Buscar usuario por email o nombre (insensible a mayúsculas)
+  // Buscar usuario por email, nombre o nombre de tienda (insensible a mayúsculas)
   const user = visibleUsers.find(u => 
     u.email.toLowerCase() === emailOrName.toLowerCase() || 
-    u.name.toLowerCase() === emailOrName.toLowerCase()
+    u.name.toLowerCase() === emailOrName.toLowerCase() ||
+    (u.tiendaName && u.tiendaName.toLowerCase() === emailOrName.toLowerCase())
   );
   
   console.log('Usuario encontrado:', user ? 'Sí' : 'No');
@@ -900,6 +905,7 @@ export const mockLogin = async (emailOrName: string, password: string): Promise<
     console.log('- Nombre:', user.name);
     console.log('- Email:', user.email);
     console.log('- Rol:', user.role);
+    console.log('- Tienda:', user.tiendaName || 'N/A');
     console.log('- Activo:', user.isActive);
   }
   
@@ -939,7 +945,9 @@ export const mockGetUserByToken = async (token: string): Promise<User | null> =>
   const userId = token.replace('mock_token_', '');
   console.log('ID extraído del token:', userId);
   
-  const user = mockMessengers.find(u => u.id === userId);
+  // Combinar usuarios de mock-messengers y mock-api
+  const allUsers = [...mockMessengers, ...mockUsers];
+  const user = allUsers.find(u => u.id === userId);
   console.log('Usuario encontrado por token:', user ? 'Sí' : 'No');
   
   if (user) {

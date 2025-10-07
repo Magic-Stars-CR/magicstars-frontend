@@ -78,6 +78,7 @@ export default function AdminLiquidationPage() {
   const [liquidations, setLiquidations] = useState<RouteLiquidation[]>([]);
   const [stats, setStats] = useState<RouteLiquidationStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isLoadingData, setIsLoadingData] = useState(false); // Estado para bloquear filtros durante carga
   const [filters, setFilters] = useState<RouteLiquidationFilters>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [liquidating, setLiquidating] = useState<string | null>(null);
@@ -125,6 +126,11 @@ export default function AdminLiquidationPage() {
   const [showViewAndLiquidateModal, setShowViewAndLiquidateModal] = useState(false);
   const [selectedViewAndLiquidate, setSelectedViewAndLiquidate] = useState<LiquidationCalculation | null>(null);
   const [showExpensesModal, setShowExpensesModal] = useState(false);
+  const [showPendingOrdersModal, setShowPendingOrdersModal] = useState(false);
+  const [selectedPendingOrders, setSelectedPendingOrders] = useState<{
+    mensajero: string;
+    pedidos: PedidoTest[];
+  } | null>(null);
   const [selectedExpenses, setSelectedExpenses] = useState<{
     mensajero: string;
     gastos: {
@@ -162,15 +168,26 @@ export default function AdminLiquidationPage() {
         const costaRicaDate = getCostaRicaDateISO();
         setSelectedDate(costaRicaDate);
         console.log('📅 Fecha inicializada para Costa Rica:', costaRicaDate);
+        return; // Salir temprano para evitar cargar datos con fecha vacía
       }
+      
+      // Solo cargar datos si ya tenemos una fecha válida
+      loadData();
+      loadCalculations();
+      loadTiendaCalculations();
     };
     
     initializeDate();
-    loadData();
-    loadCalculations();
-    loadTiendaCalculations();
-  }, [filters, selectedDate]);
+  }, [filters]); // Remover selectedDate de las dependencias para evitar bucle infinito
 
+  // useEffect separado para manejar cambios de fecha
+  useEffect(() => {
+    if (selectedDate) {
+      loadData();
+      loadCalculations();
+      loadTiendaCalculations();
+    }
+  }, [selectedDate]);
 
   const loadData = async () => {
     try {
@@ -191,6 +208,9 @@ export default function AdminLiquidationPage() {
   const loadCalculations = async (isReload = false) => {
     try {
       console.log('🚀 Iniciando loadCalculations para fecha:', selectedDate, isReload ? '(recarga)' : '');
+      
+      // Bloquear filtros durante la carga
+      setIsLoadingData(true);
       
       // Solo mostrar loader completo si no es una recarga
       if (!isReload) {
@@ -276,6 +296,7 @@ export default function AdminLiquidationPage() {
       // Cerrar loader (más rápido para recargas)
       setTimeout(() => {
         closeLoader();
+        setIsLoadingData(false); // Desbloquear filtros
         if (isReload) {
           console.log('✅ Datos actualizados correctamente');
         }
@@ -291,6 +312,7 @@ export default function AdminLiquidationPage() {
       // Cerrar loader después de mostrar el error
       setTimeout(() => {
         closeLoader();
+        setIsLoadingData(false); // Desbloquear filtros en caso de error
       }, 3000);
       
       // Fallback a datos vacíos si hay error
@@ -547,7 +569,7 @@ export default function AdminLiquidationPage() {
 💳 Tarjeta: ₡${calculation.tarjetaPayments || 0}
 💸 Gastos: ₡${calculation.totalSpent}
 🏦 Plata Inicial: ₡${calculation.initialAmount}
-📊 Monto Final: ₡${calculation.finalAmount}
+📊 Total a Entregar: ₡${calculation.finalAmount}
 
 📋 LISTA DE PEDIDOS:
 ${pedidosList}
@@ -587,6 +609,19 @@ ${pedidosList}
       });
       setShowExpensesModal(true);
     }
+  };
+
+  const handleViewPendingOrders = (calculation: LiquidationCalculation) => {
+    // Filtrar pedidos que no están entregados (pendientes, devoluciones, reagendados, etc.)
+    const pendingOrders = calculation.orders.filter(pedido => 
+      pedido.estado_pedido !== 'ENTREGADO'
+    );
+    
+    setSelectedPendingOrders({
+      mensajero: calculation.messengerName,
+      pedidos: pendingOrders
+    });
+    setShowPendingOrdersModal(true);
   };
 
   const handleViewSinpeOrders = (calculation: LiquidationCalculation) => {
@@ -897,11 +932,18 @@ ${pedidosList}
           <p className="text-gray-600">Calcula la liquidación diaria de cada mensajero</p>
         </div>
         <div className="flex items-center gap-3">
+          {isLoadingData && (
+            <div className="flex items-center gap-2 text-sm text-blue-600">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Cargando datos...</span>
+            </div>
+          )}
           <Input
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
             className="w-40"
+            disabled={isLoadingData}
           />
           <Button 
             variant="outline"
@@ -909,6 +951,7 @@ ${pedidosList}
               const today = new Date().toISOString().split('T')[0];
               setSelectedDate(today);
             }}
+            disabled={isLoadingData}
           >
             <Calendar className="w-4 h-4 mr-2" />
             Hoy
@@ -937,9 +980,8 @@ ${pedidosList}
         <Alert className="mb-4">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            <strong>Sin liquidaciones para esta fecha:</strong> No se encontraron pedidos entregados para el {selectedDate}. 
-            Se muestran los mensajeros disponibles con liquidaciones en cero. 
-            Verifica que la fecha seleccionada tenga pedidos con estado "entregado".
+            <strong>Sin pedidos entregados:</strong> Los mensajeros mostrados tienen pedidos asignados para el {selectedDate}, pero ninguno ha sido marcado como "entregado". 
+            Verifica que los pedidos hayan sido completados correctamente.
           </AlertDescription>
         </Alert>
       )}
@@ -953,7 +995,7 @@ ${pedidosList}
                 <Truck className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Mensajeros Activos</p>
+                <p className="text-sm font-medium text-muted-foreground">Mensajeros con Pedidos</p>
                 <p className="text-2xl font-bold">{calculations.length}</p>
               </div>
             </div>
@@ -1030,17 +1072,17 @@ ${pedidosList}
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
-                <Tooltip 
-                  formatter={(value, name) => [
-                    `₡${Number(value).toLocaleString()}`, 
-                    name === 'recaudado' ? 'Recaudado' : 
-                    name === 'gastos' ? 'Gastos' : 'Monto Final'
-                  ]}
-                />
-                <Legend />
-                <Bar dataKey="recaudado" fill="#10b981" name="Recaudado" />
-                <Bar dataKey="gastos" fill="#f59e0b" name="Gastos" />
-                <Bar dataKey="final" fill="#8b5cf6" name="Monto Final" />
+                        <Tooltip 
+                          formatter={(value, name) => [
+                            `₡${Number(value).toLocaleString()}`, 
+                            name === 'recaudado' ? 'Total Recaudado' : 
+                            name === 'gastos' ? 'Gastos' : 'Total a Entregar'
+                          ]}
+                        />
+                        <Legend />
+                        <Bar dataKey="recaudado" fill="#10b981" name="Total Recaudado" />
+                        <Bar dataKey="gastos" fill="#f59e0b" name="Gastos" />
+                        <Bar dataKey="final" fill="#8b5cf6" name="Total a Entregar" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -1142,16 +1184,31 @@ ${pedidosList}
                 <TableHead>Pagos SINPE</TableHead>
                 <TableHead>Pagos Efectivo</TableHead>
                 <TableHead>Gastos</TableHead>
-                <TableHead>Monto Final</TableHead>
+                <TableHead>Total a Entregar</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {calculations.map((calculation) => {
-                const calculated = calculateLiquidation(calculation);
-                return (
-                  <TableRow key={calculation.messengerId}>
+              {calculations.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-12">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <Truck className="w-12 h-12 text-gray-400" />
+                      <div>
+                        <p className="text-lg font-medium text-gray-600">No hay mensajeros con pedidos</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          No se encontraron mensajeros con pedidos asignados para la fecha {selectedDate}
+                        </p>
+                      </div>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                calculations.map((calculation) => {
+                  const calculated = calculateLiquidation(calculation);
+                  return (
+                    <TableRow key={calculation.messengerId}>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <User className="w-4 h-4 text-muted-foreground" />
@@ -1244,7 +1301,8 @@ ${pedidosList}
                     </TableCell>
                   </TableRow>
                 );
-              })}
+              })
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -1260,6 +1318,305 @@ ${pedidosList}
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Resumen Comparativo de Todas las Tiendas */}
+            <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200">
+              <h3 className="text-xl font-bold text-blue-900 mb-4 flex items-center gap-2">
+                <BarChart3 className="w-5 h-5" />
+                Resumen Comparativo - Todas las Tiendas
+              </h3>
+              
+              {/* Métricas generales */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="text-center p-3 bg-white rounded-lg shadow-sm">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)}
+                  </div>
+                  <div className="text-sm text-gray-600">Total Pedidos</div>
+                </div>
+                <div className="text-center p-3 bg-white rounded-lg shadow-sm">
+                  <div className="text-2xl font-bold text-green-600">
+                    ₡{tiendaCalculations.reduce((sum, t) => sum + t.totalValue, 0).toLocaleString()}
+                  </div>
+                  <div className="text-sm text-gray-600">Valor Total</div>
+                </div>
+                <div className="text-center p-3 bg-white rounded-lg shadow-sm">
+                  <div className="text-2xl font-bold text-green-600">
+                    ₡{tiendaCalculations.reduce((sum, t) => sum + t.totalCollected, 0).toLocaleString()}
+                  </div>
+                  <div className="text-sm text-gray-600">Recaudado</div>
+                </div>
+                <div className="text-center p-3 bg-white rounded-lg shadow-sm">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {tiendaCalculations.length}
+                  </div>
+                  <div className="text-sm text-gray-600">Tiendas Activas</div>
+                </div>
+              </div>
+
+              {/* Desglose por método de pago */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Banknote className="w-4 h-4 text-green-600" />
+                    <span className="font-semibold text-green-800">Efectivo</span>
+                  </div>
+                  <div className="text-2xl font-bold text-green-900">
+                    ₡{tiendaCalculations.reduce((sum, t) => sum + t.cashPayments, 0).toLocaleString()}
+                  </div>
+                  <div className="text-sm text-green-600 mt-1">
+                    {((tiendaCalculations.reduce((sum, t) => sum + t.cashPayments, 0) / 
+                       tiendaCalculations.reduce((sum, t) => sum + t.totalCollected, 0)) * 100).toFixed(1)}% del total
+                  </div>
+                </div>
+                
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Smartphone className="w-4 h-4 text-blue-600" />
+                    <span className="font-semibold text-blue-800">SINPE</span>
+                  </div>
+                  <div className="text-2xl font-bold text-blue-900">
+                    ₡{tiendaCalculations.reduce((sum, t) => sum + t.sinpePayments, 0).toLocaleString()}
+                  </div>
+                  <div className="text-sm text-blue-600 mt-1">
+                    {((tiendaCalculations.reduce((sum, t) => sum + t.sinpePayments, 0) / 
+                       tiendaCalculations.reduce((sum, t) => sum + t.totalCollected, 0)) * 100).toFixed(1)}% del total
+                  </div>
+                </div>
+                
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CreditCard className="w-4 h-4 text-purple-600" />
+                    <span className="font-semibold text-purple-800">Tarjeta</span>
+                  </div>
+                  <div className="text-2xl font-bold text-purple-900">
+                    ₡{tiendaCalculations.reduce((sum, t) => sum + t.tarjetaPayments, 0).toLocaleString()}
+                  </div>
+                  <div className="text-sm text-purple-600 mt-1">
+                    {((tiendaCalculations.reduce((sum, t) => sum + t.tarjetaPayments, 0) / 
+                       tiendaCalculations.reduce((sum, t) => sum + t.totalCollected, 0)) * 100).toFixed(1)}% del total
+                  </div>
+                </div>
+              </div>
+
+              {/* Contador de pedidos por estado */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <span className="font-semibold text-green-800">Entregados</span>
+                  </div>
+                  <div className="text-2xl font-bold text-green-900">
+                    {tiendaCalculations.reduce((sum, t) => sum + t.deliveredOrders, 0)}
+                  </div>
+                  <div className="text-sm text-green-600 mt-1">
+                    {((tiendaCalculations.reduce((sum, t) => sum + t.deliveredOrders, 0) / 
+                       tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)) * 100).toFixed(1)}% del total
+                  </div>
+                </div>
+                
+                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Clock className="w-4 h-4 text-yellow-600" />
+                    <span className="font-semibold text-yellow-800">Pendientes</span>
+                  </div>
+                  <div className="text-2xl font-bold text-yellow-900">
+                    {tiendaCalculations.reduce((sum, t) => sum + t.pendingOrders, 0)}
+                  </div>
+                  <div className="text-sm text-yellow-600 mt-1">
+                    {((tiendaCalculations.reduce((sum, t) => sum + t.pendingOrders, 0) / 
+                       tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)) * 100).toFixed(1)}% del total
+                  </div>
+                </div>
+                
+                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="w-4 h-4 text-red-600" />
+                    <span className="font-semibold text-red-800">Devoluciones</span>
+                  </div>
+                  <div className="text-2xl font-bold text-red-900">
+                    {tiendaCalculations.reduce((sum, t) => sum + t.returnedOrders, 0)}
+                  </div>
+                  <div className="text-sm text-red-600 mt-1">
+                    {((tiendaCalculations.reduce((sum, t) => sum + t.returnedOrders, 0) / 
+                       tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)) * 100).toFixed(1)}% del total
+                  </div>
+                </div>
+                
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Calendar className="w-4 h-4 text-blue-600" />
+                    <span className="font-semibold text-blue-800">Reagendados</span>
+                  </div>
+                  <div className="text-2xl font-bold text-blue-900">
+                    {tiendaCalculations.reduce((sum, t) => sum + t.rescheduledOrders, 0)}
+                  </div>
+                  <div className="text-sm text-blue-600 mt-1">
+                    {((tiendaCalculations.reduce((sum, t) => sum + t.rescheduledOrders, 0) / 
+                       tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)) * 100).toFixed(1)}% del total
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Gráficos Comparativos de Tiendas */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              {/* Gráfico de Métodos de Pago por Tienda */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-blue-600" />
+                    Métodos de Pago por Tienda
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={tiendaCalculations.map(tienda => ({
+                        tienda: tienda.tienda.length > 10 ? tienda.tienda.substring(0, 10) + '...' : tienda.tienda,
+                        efectivo: tienda.cashPayments,
+                        sinpe: tienda.sinpePayments,
+                        tarjeta: tienda.tarjetaPayments
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="tienda" 
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                          fontSize={12}
+                        />
+                        <YAxis 
+                          tickFormatter={(value) => `₡${(value / 1000).toFixed(0)}k`}
+                          fontSize={12}
+                        />
+                        <Tooltip 
+                          formatter={(value, name) => [
+                            `₡${Number(value).toLocaleString()}`, 
+                            name === 'efectivo' ? 'Efectivo' : 
+                            name === 'sinpe' ? 'SINPE' : 'Tarjeta'
+                          ]}
+                          labelStyle={{ color: '#374151' }}
+                          contentStyle={{ 
+                            backgroundColor: '#f9fafb', 
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="efectivo" fill="#16a34a" name="Efectivo" />
+                        <Bar dataKey="sinpe" fill="#2563eb" name="SINPE" />
+                        <Bar dataKey="tarjeta" fill="#9333ea" name="Tarjeta" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Gráfico de Pedidos por Estado por Tienda */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <PieChart className="w-5 h-5 text-green-600" />
+                    Pedidos por Estado por Tienda
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={tiendaCalculations.map(tienda => ({
+                        tienda: tienda.tienda.length > 10 ? tienda.tienda.substring(0, 10) + '...' : tienda.tienda,
+                        entregados: tienda.deliveredOrders,
+                        pendientes: tienda.pendingOrders,
+                        devoluciones: tienda.returnedOrders,
+                        reagendados: tienda.rescheduledOrders
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="tienda" 
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                          fontSize={12}
+                        />
+                        <YAxis fontSize={12} />
+                        <Tooltip 
+                          formatter={(value, name) => [
+                            `${Number(value)} pedidos`, 
+                            name === 'entregados' ? 'Entregados' : 
+                            name === 'pendientes' ? 'Pendientes' : 
+                            name === 'devoluciones' ? 'Devoluciones' : 'Reagendados'
+                          ]}
+                          labelStyle={{ color: '#374151' }}
+                          contentStyle={{ 
+                            backgroundColor: '#f9fafb', 
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="entregados" fill="#16a34a" name="Entregados" />
+                        <Bar dataKey="pendientes" fill="#eab308" name="Pendientes" />
+                        <Bar dataKey="devoluciones" fill="#dc2626" name="Devoluciones" />
+                        <Bar dataKey="reagendados" fill="#2563eb" name="Reagendados" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Gráfico de Comparación de Valores Totales */}
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-purple-600" />
+                  Comparación de Valores Totales por Tienda
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={tiendaCalculations.map(tienda => ({
+                      tienda: tienda.tienda.length > 12 ? tienda.tienda.substring(0, 12) + '...' : tienda.tienda,
+                      valorTotal: tienda.totalValue,
+                      valorRecaudado: tienda.totalCollected,
+                      promedio: tienda.averageOrderValue
+                    }))}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="tienda" 
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                        fontSize={12}
+                      />
+                      <YAxis 
+                        tickFormatter={(value) => `₡${(value / 1000).toFixed(0)}k`}
+                        fontSize={12}
+                      />
+                      <Tooltip 
+                        formatter={(value, name) => [
+                          `₡${Number(value).toLocaleString()}`, 
+                          name === 'valorTotal' ? 'Valor Total' : 
+                          name === 'valorRecaudado' ? 'Valor Recaudado' : 'Promedio por Pedido'
+                        ]}
+                        labelStyle={{ color: '#374151' }}
+                        contentStyle={{ 
+                          backgroundColor: '#f9fafb', 
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px'
+                        }}
+                      />
+                      <Legend />
+                      <Bar dataKey="valorTotal" fill="#059669" name="Valor Total" />
+                      <Bar dataKey="valorRecaudado" fill="#0d9488" name="Valor Recaudado" />
+                      <Bar dataKey="promedio" fill="#0891b2" name="Promedio por Pedido" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
             <div className="space-y-6">
               {tiendaCalculations.map((tiendaCalculation) => {
                 return (
@@ -1309,6 +1666,51 @@ ${pedidosList}
                       <div>
                         <span className="font-medium">Distrito principal:</span>
                         <span className="ml-2">{tiendaCalculation.topDistrict}</span>
+                      </div>
+                    </div>
+
+                    {/* Desglose por método de pago */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                      <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Banknote className="w-4 h-4 text-green-600" />
+                          <span className="font-semibold text-green-800">Efectivo</span>
+                        </div>
+                        <div className="text-lg font-bold text-green-900">
+                          ₡{tiendaCalculation.cashPayments.toLocaleString()}
+                        </div>
+                        <div className="text-xs text-green-600">
+                          {tiendaCalculation.totalCollected > 0 ? 
+                            ((tiendaCalculation.cashPayments / tiendaCalculation.totalCollected) * 100).toFixed(1) : 0}% del total
+                        </div>
+                      </div>
+                      
+                      <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Smartphone className="w-4 h-4 text-blue-600" />
+                          <span className="font-semibold text-blue-800">SINPE</span>
+                        </div>
+                        <div className="text-lg font-bold text-blue-900">
+                          ₡{tiendaCalculation.sinpePayments.toLocaleString()}
+                        </div>
+                        <div className="text-xs text-blue-600">
+                          {tiendaCalculation.totalCollected > 0 ? 
+                            ((tiendaCalculation.sinpePayments / tiendaCalculation.totalCollected) * 100).toFixed(1) : 0}% del total
+                        </div>
+                      </div>
+                      
+                      <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                        <div className="flex items-center gap-2 mb-1">
+                          <CreditCard className="w-4 h-4 text-purple-600" />
+                          <span className="font-semibold text-purple-800">Tarjeta</span>
+                        </div>
+                        <div className="text-lg font-bold text-purple-900">
+                          ₡{tiendaCalculation.tarjetaPayments.toLocaleString()}
+                        </div>
+                        <div className="text-xs text-purple-600">
+                          {tiendaCalculation.totalCollected > 0 ? 
+                            ((tiendaCalculation.tarjetaPayments / tiendaCalculation.totalCollected) * 100).toFixed(1) : 0}% del total
+                        </div>
                       </div>
                     </div>
                     
@@ -1379,7 +1781,7 @@ ${pedidosList}
                                         {pedido.estado_pedido || 'PENDIENTE'}
                                       </Badge>
                                     </TableCell>
-                                    <TableCell>₡{pedido.valor_total.toLocaleString()}</TableCell>
+                                    <TableCell>₡{(pedido.valor_total || 0).toLocaleString()}</TableCell>
                                     <TableCell>
                                       <Badge variant="outline">
                                         {pedido.metodo_pago || 'SIN_METODO'}
@@ -1540,7 +1942,7 @@ ${pedidosList}
                             </div>
                             <div className="text-sm text-gray-600 space-y-1">
                               <div>Cliente: {pedido.cliente_nombre}</div>
-                              <div>Valor: ₡{pedido.valor_total.toLocaleString()}</div>
+                              <div>Valor: ₡{(pedido.valor_total || 0).toLocaleString()}</div>
                               <div>Método: {pedido.metodo_pago || 'N/A'}</div>
                               <div>Distrito: {pedido.distrito}</div>
                             </div>
@@ -1723,7 +2125,7 @@ ${pedidosList}
                           <Calculator className="w-5 h-5 text-purple-600" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-muted-foreground">Monto Final</p>
+                          <p className="text-sm font-medium text-muted-foreground">Total a Entregar</p>
                           <p className="text-xl font-bold text-purple-600">
                             {formatCurrency(selectedRouteDetail.finalAmount)}
                           </p>
@@ -2241,6 +2643,25 @@ ${pedidosList}
                         </div>
                       </div>
                       
+                      {/* Pedidos a Devolver */}
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Pedidos a Devolver</h4>
+                        <div 
+                          className="bg-orange-50 p-3 rounded-lg cursor-pointer hover:bg-orange-100 transition-colors duration-200"
+                          onClick={() => handleViewPendingOrders(selectedViewAndLiquidate)}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <Package className="w-4 h-4 text-orange-600" />
+                            <span className="text-sm font-medium text-orange-800">Pedidos Pendientes</span>
+                            <Eye className="w-3 h-3 text-orange-500 ml-auto" />
+                          </div>
+                          <p className="text-lg font-bold text-orange-900">
+                            {selectedViewAndLiquidate.orders.filter(p => p.estado_pedido !== 'ENTREGADO').length}
+                          </p>
+                          <p className="text-xs text-orange-600 mt-1">Click para ver detalles</p>
+                        </div>
+                      </div>
+                      
                       {/* Desglose por método de pago - Filtros clickeables */}
                       <div className="space-y-2">
                         <h4 className="text-sm font-semibold text-gray-700 mb-2">Filtros por Método de Pago</h4>
@@ -2450,7 +2871,7 @@ ${pedidosList}
                                 <span className="font-bold text-red-600">{formatCurrency(selectedViewAndLiquidate.totalSpent)}</span>
                               </div>
                               <div className="border-t pt-2 flex items-center justify-between">
-                                <span className="text-gray-800 font-semibold">= Monto Final:</span>
+                                <span className="text-gray-800 font-semibold">= Total a Entregar:</span>
                                 <span className="font-bold text-purple-600 text-base">
                                   {formatCurrency((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.cashPayments - selectedViewAndLiquidate.totalSpent)}
                                 </span>
@@ -2467,7 +2888,7 @@ ${pedidosList}
                             <Calculator className="w-6 h-6 text-purple-600" />
                           </div>
                           <div>
-                            <h3 className="text-lg font-bold text-purple-800">Monto Final a Entregar</h3>
+                            <h3 className="text-lg font-bold text-purple-800">Total a Entregar</h3>
                             <p className="text-sm text-purple-600">El mensajero debe entregar este monto en bodega</p>
                           </div>
                         </div>
@@ -2490,7 +2911,7 @@ ${pedidosList}
                             </div>
                             <div className="border-t border-gray-200 pt-2">
                               <div className="flex justify-between items-center">
-                                <span className="font-bold text-gray-800">= Monto Final:</span>
+                                <span className="font-bold text-gray-800">= Total a Entregar:</span>
                                 <span className="font-bold text-purple-600">₡{((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.cashPayments - selectedViewAndLiquidate.totalSpent).toLocaleString()}</span>
                               </div>
                             </div>
@@ -2974,6 +3395,101 @@ ${pedidosList}
         </Dialog>
       )}
 
+      {/* Modal de Pedidos Pendientes */}
+      {showPendingOrdersModal && selectedPendingOrders && (
+        <Dialog open={showPendingOrdersModal} onOpenChange={setShowPendingOrdersModal}>
+          <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Package className="w-5 h-5 text-orange-600" />
+                Pedidos a Devolver - {selectedPendingOrders.mensajero}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {selectedPendingOrders.pedidos.length === 0 ? (
+                <div className="text-center py-8">
+                  <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">No hay pedidos pendientes para este mensajero</p>
+                </div>
+              ) : (
+                <>
+                  {/* Resumen de pedidos pendientes */}
+                  <div className="bg-orange-50 p-4 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold text-orange-800">Total de Pedidos Pendientes</h3>
+                        <p className="text-sm text-orange-600">
+                          {selectedPendingOrders.pedidos.length} {selectedPendingOrders.pedidos.length === 1 ? 'pedido' : 'pedidos'} sin entregar
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-orange-900">
+                          {selectedPendingOrders.pedidos.length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tabla de pedidos pendientes */}
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>ID Pedido</TableHead>
+                          <TableHead>Cliente</TableHead>
+                          <TableHead>Estado</TableHead>
+                          <TableHead>Valor</TableHead>
+                          <TableHead>Método Pago</TableHead>
+                          <TableHead>Distrito</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedPendingOrders.pedidos.map((pedido) => (
+                          <TableRow key={pedido.id_pedido}>
+                            <TableCell className="font-mono text-sm">
+                              {pedido.id_pedido}
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium">{pedido.cliente_nombre}</p>
+                                <p className="text-xs text-gray-500">{pedido.cliente_telefono}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge 
+                                variant={
+                                  pedido.estado_pedido === 'PENDIENTE' ? 'secondary' :
+                                  pedido.estado_pedido === 'DEVOLUCION' ? 'destructive' :
+                                  pedido.estado_pedido === 'REAGENDADO' ? 'outline' : 'secondary'
+                                }
+                              >
+                                {pedido.estado_pedido || 'PENDIENTE'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-semibold text-green-600">
+                              ₡{(pedido.valor_total || 0).toLocaleString()}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {pedido.metodo_pago || 'SIN_METODO'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {pedido.distrito || 'N/A'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Modal de pedidos SINPE */}
       {showSinpeModal && selectedSinpeOrders && (
         <Dialog open={showSinpeModal} onOpenChange={setShowSinpeModal}>
@@ -3003,7 +3519,7 @@ ${pedidosList}
                       </div>
                       <div className="text-right">
                         <p className="text-2xl font-bold text-blue-900">
-                          ₡{selectedSinpeOrders.reduce((sum, pedido) => sum + pedido.valor_total, 0).toLocaleString()}
+                          ₡{selectedSinpeOrders.reduce((sum, pedido) => sum + (pedido.valor_total || 0), 0).toLocaleString()}
                         </p>
                       </div>
                     </div>
@@ -3024,7 +3540,7 @@ ${pedidosList}
                           </div>
                           <div className="text-right">
                             <p className="text-lg font-bold text-blue-600">
-                              ₡{pedido.valor_total.toLocaleString()}
+                              ₡{(pedido.valor_total || 0).toLocaleString()}
                             </p>
                           </div>
                         </div>
@@ -3080,7 +3596,7 @@ ${pedidosList}
                       </div>
                       <div className="text-right">
                         <p className="text-2xl font-bold text-purple-900">
-                          ₡{selectedTarjetaOrders.reduce((sum, pedido) => sum + pedido.valor_total, 0).toLocaleString()}
+                          ₡{selectedTarjetaOrders.reduce((sum, pedido) => sum + (pedido.valor_total || 0), 0).toLocaleString()}
                         </p>
                       </div>
                     </div>
@@ -3101,7 +3617,7 @@ ${pedidosList}
                           </div>
                           <div className="text-right">
                             <p className="text-lg font-bold text-purple-600">
-                              ₡{pedido.valor_total.toLocaleString()}
+                              ₡{(pedido.valor_total || 0).toLocaleString()}
                             </p>
                           </div>
                         </div>
@@ -3139,7 +3655,7 @@ ${pedidosList}
               <div className="bg-gray-50 p-3 rounded-lg">
                 <p className="text-sm font-medium">Pedido: {selectedOrderForUpdate.id_pedido}</p>
                 <p className="text-sm text-gray-600">{selectedOrderForUpdate.cliente_nombre}</p>
-                <p className="text-sm text-gray-600">Valor: ₡{selectedOrderForUpdate.valor_total.toLocaleString()}</p>
+                <p className="text-sm text-gray-600">Valor: ₡{(selectedOrderForUpdate.valor_total || 0).toLocaleString()}</p>
                 <p className="text-sm text-gray-600">Estado actual: {selectedOrderForUpdate.estado_pedido || 'PENDIENTE'}</p>
               </div>
               
@@ -3249,7 +3765,7 @@ ${pedidosList}
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-500">Valor Total</Label>
-                    <p className="text-lg font-semibold text-green-600">₡{selectedOrderForDetails.valor_total.toLocaleString()}</p>
+                    <p className="text-lg font-semibold text-green-600">₡{(selectedOrderForDetails.valor_total || 0).toLocaleString()}</p>
                   </div>
                 </div>
                 

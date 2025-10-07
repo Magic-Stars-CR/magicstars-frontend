@@ -214,7 +214,8 @@ const normalizePedidoData = (pedido: any): PedidoTest => {
     provincia: pedido.provincia ? pedido.provincia.toUpperCase().trim() : 'SIN_PROVINCIA',
     canton: pedido.canton ? pedido.canton.toUpperCase().trim() : 'SIN_CANTON',
     distrito: pedido.distrito ? pedido.distrito.toUpperCase().trim() : 'SIN_DISTRITO',
-    cliente_nombre: pedido.cliente_nombre ? pedido.cliente_nombre.toUpperCase().trim() : 'SIN_NOMBRE'
+    cliente_nombre: pedido.cliente_nombre ? pedido.cliente_nombre.toUpperCase().trim() : 'SIN_NOMBRE',
+    valor_total: pedido.valor_total ? Number(pedido.valor_total) : 0
   };
 };
 
@@ -858,7 +859,7 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
     
     // Obtener mensajeros únicos
     const mensajeros = await getMensajerosUnicos();
-    console.log(`📋 Mensajeros encontrados: ${mensajeros.length}`);
+    console.log(`📋 Mensajeros totales en el sistema: ${mensajeros.length}`);
     
     // Obtener gastos para todos los mensajeros
     const gastosData = await getGastosMensajeros(fecha);
@@ -866,7 +867,7 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
     
     const liquidaciones = [];
     
-    // Procesar todos los mensajeros, incluso si no tienen pedidos
+    // Procesar mensajeros y filtrar solo los que tienen pedidos
     for (const mensajero of mensajeros) {
       // Obtener pedidos del día para este mensajero
       const pedidosRaw = await getPedidosDelDiaByMensajeroEspecifico(mensajero, fecha);
@@ -874,11 +875,19 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
       // Normalizar todos los pedidos a mayúsculas
       const pedidos = pedidosRaw.map(normalizePedidoData);
       
+      // FILTRO: Saltar mensajeros sin pedidos en la fecha seleccionada
+      if (pedidos.length === 0) {
+        console.log(`⚠️ Mensajero ${mensajero} no tiene pedidos en la fecha ${fecha} - OMITIDO`);
+        continue;
+      }
+      
+      console.log(`✅ Procesando mensajero ${mensajero} con ${pedidos.length} pedidos`);
+      
       // Buscar gastos del mensajero
       const gastosDelMensajero = gastosData.find(g => g.mensajero === mensajero);
       const gastos = gastosDelMensajero?.gastos || [];
       
-      // Calcular totales (incluso si no hay pedidos) - usando valores normalizados
+      // Calcular totales - usando valores normalizados
       const totalCollected = pedidos.reduce((sum, pedido) => {
         if (pedido.estado_pedido === 'ENTREGADO') {
           return sum + pedido.valor_total;
@@ -926,7 +935,7 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
       });
     }
     
-    console.log(`✅ Liquidaciones generadas: ${liquidaciones.length}`);
+    console.log(`✅ Liquidaciones generadas: ${liquidaciones.length} mensajeros con pedidos en la fecha ${fecha}`);
     return liquidaciones;
   } catch (error) {
     console.error('❌ Error en getLiquidacionesReales:', error);
@@ -1462,5 +1471,230 @@ export const getLiquidacionesRealesByTienda = async (fecha: string): Promise<{
   } catch (error) {
     console.error('❌ Error en getLiquidacionesRealesByTienda:', error);
     return [];
+  }
+};
+
+// ===== FUNCIONES ESPECÍFICAS PARA TIENDAS =====
+
+// Función para crear un nuevo pedido desde la tienda
+export const crearPedidoTienda = async (pedidoData: Omit<PedidoTest, 'id_pedido' | 'fecha_creacion'>): Promise<{ success: boolean, pedido?: PedidoTest, error?: string }> => {
+  try {
+    console.log('🆕 Creando nuevo pedido desde tienda:', pedidoData);
+
+    // Generar ID único para el pedido
+    const id_pedido = `TS${Date.now()}${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+    
+    const nuevoPedido = {
+      ...pedidoData,
+      id_pedido,
+      fecha_creacion: new Date().toISOString(),
+      estado_pedido: 'pendiente', // Estado inicial
+      mensajero_asignado: null,
+      mensajero_concretado: null,
+      fecha_entrega: null,
+      notas: pedidoData.notas || '',
+      nota_asesor: pedidoData.nota_asesor || ''
+    };
+
+    const { data, error } = await supabasePedidos
+      .from('pedidos')
+      .insert([nuevoPedido])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error al crear pedido:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ Pedido creado exitosamente:', data);
+    return { success: true, pedido: data };
+  } catch (error) {
+    console.error('❌ Error en crearPedidoTienda:', error);
+    return { success: false, error: 'Error interno del servidor' };
+  }
+};
+
+// Función para confirmar un pedido (cambiar estado a confirmado)
+export const confirmarPedidoTienda = async (pedidoId: string, usuario: string): Promise<{ success: boolean, error?: string }> => {
+  try {
+    console.log(`✅ Confirmando pedido ${pedidoId} por usuario: ${usuario}`);
+
+    const { error } = await supabasePedidos
+      .from('pedidos')
+      .update({ 
+        estado_pedido: 'confirmado',
+        nota_asesor: `Confirmado por ${usuario} el ${new Date().toLocaleString('es-CR')}`
+      })
+      .eq('id_pedido', pedidoId);
+
+    if (error) {
+      console.error('❌ Error al confirmar pedido:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ Pedido confirmado exitosamente');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error en confirmarPedidoTienda:', error);
+    return { success: false, error: 'Error interno del servidor' };
+  }
+};
+
+// Función para desconfirmar un pedido (cambiar estado a pendiente)
+export const desconfirmarPedidoTienda = async (pedidoId: string, usuario: string, motivo?: string): Promise<{ success: boolean, error?: string }> => {
+  try {
+    console.log(`❌ Desconfirmando pedido ${pedidoId} por usuario: ${usuario}`);
+
+    const nota = motivo 
+      ? `Desconfirmado por ${usuario} el ${new Date().toLocaleString('es-CR')}. Motivo: ${motivo}`
+      : `Desconfirmado por ${usuario} el ${new Date().toLocaleString('es-CR')}`;
+
+    const { error } = await supabasePedidos
+      .from('pedidos')
+      .update({ 
+        estado_pedido: 'pendiente',
+        nota_asesor: nota
+      })
+      .eq('id_pedido', pedidoId);
+
+    if (error) {
+      console.error('❌ Error al desconfirmar pedido:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ Pedido desconfirmado exitosamente');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error en desconfirmarPedidoTienda:', error);
+    return { success: false, error: 'Error interno del servidor' };
+  }
+};
+
+// Función para eliminar un pedido (soft delete)
+export const eliminarPedidoTienda = async (pedidoId: string, usuario: string, motivo?: string): Promise<{ success: boolean, error?: string }> => {
+  try {
+    console.log(`🗑️ Eliminando pedido ${pedidoId} por usuario: ${usuario}`);
+
+    const nota = motivo 
+      ? `Eliminado por ${usuario} el ${new Date().toLocaleString('es-CR')}. Motivo: ${motivo}`
+      : `Eliminado por ${usuario} el ${new Date().toLocaleString('es-CR')}`;
+
+    const { error } = await supabasePedidos
+      .from('pedidos')
+      .update({ 
+        estado_pedido: 'eliminado',
+        nota_asesor: nota
+      })
+      .eq('id_pedido', pedidoId);
+
+    if (error) {
+      console.error('❌ Error al eliminar pedido:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ Pedido eliminado exitosamente');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error en eliminarPedidoTienda:', error);
+    return { success: false, error: 'Error interno del servidor' };
+  }
+};
+
+// Función para obtener liquidación de la tienda
+export const getLiquidacionTienda = async (tiendaName: string, fecha?: string): Promise<{
+  tienda: string;
+  fecha: string;
+  totalPedidos: number;
+  pedidosConfirmados: number;
+  pedidosEntregados: number;
+  pedidosPendientes: number;
+  pedidosEliminados: number;
+  valorTotal: number;
+  valorRecaudado: number;
+  valorPendiente: number;
+  metodosPago: {
+    efectivo: number;
+    sinpe: number;
+    tarjeta: number;
+    dosPagos: number;
+  };
+  pedidos: PedidoTest[];
+}> => {
+  try {
+    console.log(`💰 Obteniendo liquidación de tienda: ${tiendaName} para fecha: ${fecha || 'hoy'}`);
+
+    const fechaFiltro = fecha || new Date().toISOString().split('T')[0];
+    
+    // Obtener todos los pedidos para la fecha específica (mismo flujo que useTiendaPedidos)
+    const { data: pedidos, error } = await supabasePedidos
+      .from('pedidos')
+      .select('*')
+      .eq('fecha_creacion', fechaFiltro);
+
+    if (error) {
+      console.error('❌ Error al obtener pedidos para liquidación:', error);
+      throw new Error(`Error de Supabase: ${error.message}`);
+    }
+
+    console.log(`📊 Total de pedidos obtenidos para fecha ${fechaFiltro}: ${(pedidos || []).length}`);
+
+    // Filtrar por tienda usando la misma lógica que useTiendaPedidos
+    const pedidosTienda = (pedidos || []).filter(pedido => {
+      const pedidoTienda = (pedido.tienda || '').toLowerCase().trim();
+      const tiendaFiltro = tiendaName.toLowerCase().trim();
+      const matches = pedidoTienda === tiendaFiltro;
+      if (matches) {
+        console.log(`✅ Pedido ${pedido.id_pedido} coincide con tienda ${tiendaName}`);
+      }
+      return matches;
+    });
+    
+    console.log(`🏪 Pedidos de la tienda ${tiendaName}: ${pedidosTienda.length}`);
+    
+    // Calcular estadísticas
+    const totalPedidos = pedidosTienda.length;
+    const pedidosConfirmados = pedidosTienda.filter(p => p.estado_pedido === 'confirmado').length;
+    const pedidosEntregados = pedidosTienda.filter(p => p.estado_pedido === 'entregado').length;
+    const pedidosPendientes = pedidosTienda.filter(p => p.estado_pedido === 'pendiente').length;
+    const pedidosEliminados = pedidosTienda.filter(p => p.estado_pedido === 'eliminado').length;
+    
+    const valorTotal = pedidosTienda.reduce((sum, p) => sum + p.valor_total, 0);
+    const valorRecaudado = pedidosTienda
+      .filter(p => p.estado_pedido === 'entregado')
+      .reduce((sum, p) => sum + p.valor_total, 0);
+    const valorPendiente = pedidosTienda
+      .filter(p => ['pendiente', 'confirmado'].includes(p.estado_pedido || ''))
+      .reduce((sum, p) => sum + p.valor_total, 0);
+
+    const metodosPago = {
+      efectivo: pedidosTienda.filter(p => p.metodo_pago?.toLowerCase() === 'efectivo').length,
+      sinpe: pedidosTienda.filter(p => p.metodo_pago?.toLowerCase() === 'sinpe').length,
+      tarjeta: pedidosTienda.filter(p => p.metodo_pago?.toLowerCase() === 'tarjeta').length,
+      dosPagos: pedidosTienda.filter(p => 
+        p.metodo_pago?.toLowerCase() === '2pagos' || p.metodo_pago?.toLowerCase() === '2 pagos'
+      ).length
+    };
+
+    const liquidacion = {
+      tienda: tiendaName,
+      fecha: fechaFiltro,
+      totalPedidos,
+      pedidosConfirmados,
+      pedidosEntregados,
+      pedidosPendientes,
+      pedidosEliminados,
+      valorTotal,
+      valorRecaudado,
+      valorPendiente,
+      metodosPago,
+      pedidos: pedidosTienda
+    };
+
+    console.log('✅ Liquidación calculada:', liquidacion);
+    return liquidacion;
+  } catch (error) {
+    console.error('❌ Error en getLiquidacionTienda:', error);
+    throw error;
   }
 };
