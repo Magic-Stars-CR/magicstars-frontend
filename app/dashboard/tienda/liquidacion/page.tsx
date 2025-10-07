@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/auth-context';
 import { getLiquidacionesRealesByTienda, getCostaRicaDateISO } from '@/lib/supabase-pedidos';
 import { PedidoTest } from '@/lib/types';
@@ -32,7 +33,9 @@ import {
   User,
   Calculator,
   FileText,
-  Receipt
+  Receipt,
+  Target,
+  AlertTriangle
 } from 'lucide-react';
 
 interface LiquidacionTiendaData {
@@ -63,6 +66,10 @@ export default function TiendaLiquidacion() {
   
   const [liquidacion, setLiquidacion] = useState<LiquidacionTiendaData | null>(null);
   const [loading, setLoading] = useState(false);
+  
+  // Filtros para la tabla
+  const [filtroEstado, setFiltroEstado] = useState<string>('todos');
+  const [filtroMetodoPago, setFiltroMetodoPago] = useState<string>('todos');
 
   useEffect(() => {
     if (user?.tiendaName) {
@@ -84,7 +91,7 @@ export default function TiendaLiquidacion() {
       
       // Filtrar solo la liquidación de la tienda actual
       const liquidacionTienda = liquidaciones.find(l => 
-        l.tienda.toLowerCase().trim() === user.tiendaName.toLowerCase().trim()
+        l.tienda.toLowerCase().trim() === user.tiendaName?.toLowerCase().trim()
       );
       
       if (liquidacionTienda) {
@@ -125,7 +132,7 @@ export default function TiendaLiquidacion() {
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string | null | undefined) => {
     switch (status) {
       case 'entregado': return 'bg-green-100 text-green-800';
       case 'pendiente': return 'bg-yellow-100 text-yellow-800';
@@ -135,6 +142,63 @@ export default function TiendaLiquidacion() {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  // Calcular métricas adicionales
+  const metricasAdicionales = useMemo(() => {
+    if (!liquidacion) return null;
+
+    const totalPedidos = liquidacion.pedidos.length;
+    const pedidosEntregados = liquidacion.deliveredOrders;
+    const pedidosAsignados = liquidacion.pedidos.filter(p => p.mensajero_asignado).length;
+    
+    // Tasa de conversión (entregados / asignados)
+    const tasaConversion = pedidosAsignados > 0 ? (pedidosEntregados / pedidosAsignados) * 100 : 0;
+    
+    // Pedidos restantes (asignados - entregados)
+    const pedidosRestantes = pedidosAsignados - pedidosEntregados;
+    
+    // Desglose de pedidos restantes por estado
+    const pedidosRestantesDesglose = liquidacion.pedidos
+      .filter(p => p.mensajero_asignado && p.estado_pedido !== 'entregado')
+      .reduce((acc, pedido) => {
+        const estado = pedido.estado_pedido || 'pendiente';
+        acc[estado] = (acc[estado] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+    return {
+      tasaConversion,
+      pedidosRestantes,
+      pedidosAsignados,
+      pedidosRestantesDesglose
+    };
+  }, [liquidacion]);
+
+  // Filtrar pedidos según los filtros seleccionados
+  const pedidosFiltrados = useMemo(() => {
+    if (!liquidacion) return [];
+
+    return liquidacion.pedidos.filter(pedido => {
+      const cumpleEstado = filtroEstado === 'todos' || pedido.estado_pedido === filtroEstado;
+      const cumpleMetodoPago = filtroMetodoPago === 'todos' || 
+        (pedido.metodo_pago?.toLowerCase() === filtroMetodoPago.toLowerCase());
+      
+      return cumpleEstado && cumpleMetodoPago;
+    });
+  }, [liquidacion, filtroEstado, filtroMetodoPago]);
+
+  // Obtener opciones únicas para los filtros
+  const opcionesEstado = useMemo(() => {
+    if (!liquidacion) return [];
+    const estados = Array.from(new Set(liquidacion.pedidos.map(p => p.estado_pedido).filter(Boolean)));
+    return estados.sort();
+  }, [liquidacion]);
+
+  const opcionesMetodoPago = useMemo(() => {
+    if (!liquidacion) return [];
+    const metodos = Array.from(new Set(liquidacion.pedidos.map(p => p.metodo_pago).filter(Boolean)));
+    return metodos.sort();
+  }, [liquidacion]);
 
   if (loading) {
     return (
@@ -434,6 +498,139 @@ export default function TiendaLiquidacion() {
             </Card>
           </div>
 
+          {/* Nuevas Métricas de Conversión y Pedidos Restantes */}
+          {metricasAdicionales && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <Card className="border-l-4 border-l-emerald-500 shadow-sm hover:shadow-md transition-shadow">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                        <Target className="w-5 h-5 text-emerald-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Tasa de Conversión</p>
+                        <p className="text-2xl font-bold text-emerald-600">
+                          {Math.round(metricasAdicionales.tasaConversion)}%
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-medium text-emerald-600">
+                        {liquidacion.deliveredOrders}/{metricasAdicionales.pedidosAsignados}
+                      </p>
+                      <p className="text-xs text-muted-foreground">entregados/asignados</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-l-4 border-l-amber-500 shadow-sm hover:shadow-md transition-shadow">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                        <AlertTriangle className="w-5 h-5 text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Pedidos Restantes</p>
+                        <p className="text-2xl font-bold text-amber-600">
+                          {metricasAdicionales.pedidosRestantes}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-medium text-amber-600">
+                        {metricasAdicionales.pedidosRestantes}
+                      </p>
+                      <p className="text-xs text-muted-foreground">por entregar</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-l-4 border-l-indigo-500 shadow-sm hover:shadow-md transition-shadow">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                        <Package className="w-5 h-5 text-indigo-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Asignados</p>
+                        <p className="text-2xl font-bold text-indigo-600">
+                          {metricasAdicionales.pedidosAsignados}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-medium text-indigo-600">
+                        {liquidacion.pedidos.length > 0 ? Math.round((metricasAdicionales.pedidosAsignados / liquidacion.pedidos.length) * 100) : 0}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">del total</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-l-4 border-l-rose-500 shadow-sm hover:shadow-md transition-shadow">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-rose-100 rounded-lg flex items-center justify-center">
+                        <Clock className="w-5 h-5 text-rose-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Sin Asignar</p>
+                        <p className="text-2xl font-bold text-rose-600">
+                          {liquidacion.pedidos.length - metricasAdicionales.pedidosAsignados}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-medium text-rose-600">
+                        {liquidacion.pedidos.length > 0 ? Math.round(((liquidacion.pedidos.length - metricasAdicionales.pedidosAsignados) / liquidacion.pedidos.length) * 100) : 0}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">del total</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Desglose de Pedidos Restantes */}
+          {metricasAdicionales && metricasAdicionales.pedidosRestantes > 0 && (
+            <Card className="border-l-4 border-l-amber-500 shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-amber-700">
+                  <AlertTriangle className="w-5 h-5" />
+                  Desglose de Pedidos Restantes por Estado
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {Object.entries(metricasAdicionales.pedidosRestantesDesglose).map(([estado, cantidad]) => (
+                    <div key={estado} className="flex items-center justify-between p-3 bg-amber-50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Badge className={getStatusColor(estado)}>
+                          {estado.toUpperCase()}
+                        </Badge>
+                      </div>
+                      <span className="text-lg font-bold text-amber-700">{cantidad}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 p-3 bg-amber-100 rounded-lg">
+                  <p className="text-sm text-amber-800">
+                    <strong>Total de pedidos restantes:</strong> {metricasAdicionales.pedidosRestantes} pedidos 
+                    que requieren seguimiento para completar la entrega del día.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Resumen de Pedidos por Estado */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card className="border-l-4 border-l-blue-500 shadow-sm hover:shadow-md transition-shadow">
@@ -653,8 +850,128 @@ export default function TiendaLiquidacion() {
                 </Button>
               </div>
             </CardHeader>
+            
+            {/* Filtros para la tabla */}
+            <div className="px-6 pb-4 border-b">
+              <div className="space-y-4">
+                {/* Filtro por Estado */}
+                <div>
+                  <Label className="text-sm font-medium text-gray-700 mb-3 block">
+                    Filtrar por Estado
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant={filtroEstado === 'todos' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFiltroEstado('todos')}
+                      className="flex items-center gap-2"
+                    >
+                      Todos
+                      <Badge variant="secondary" className="ml-1">
+                        {liquidacion?.pedidos.length || 0}
+                      </Badge>
+                    </Button>
+                    {opcionesEstado.map(estado => {
+                      const cantidad = liquidacion?.pedidos.filter(p => p.estado_pedido === estado).length || 0;
+                      return (
+                        <Button
+                          key={estado}
+                          variant={filtroEstado === estado ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setFiltroEstado(estado || 'todos')}
+                          className="flex items-center gap-2"
+                        >
+                          <Badge className={`${getStatusColor(estado || 'pendiente')} text-xs`}>
+                            {(estado || 'pendiente').charAt(0).toUpperCase() + (estado || 'pendiente').slice(1)}
+                          </Badge>
+                          <Badge variant="secondary" className="ml-1">
+                            {cantidad}
+                          </Badge>
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Filtro por Método de Pago */}
+                <div>
+                  <Label className="text-sm font-medium text-gray-700 mb-3 block">
+                    Filtrar por Método de Pago
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant={filtroMetodoPago === 'todos' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFiltroMetodoPago('todos')}
+                      className="flex items-center gap-2"
+                    >
+                      Todos
+                      <Badge variant="secondary" className="ml-1">
+                        {liquidacion?.pedidos.length || 0}
+                      </Badge>
+                    </Button>
+                    {opcionesMetodoPago.map(metodo => {
+                      const cantidad = liquidacion?.pedidos.filter(p => p.metodo_pago?.toLowerCase() === (metodo || '').toLowerCase()).length || 0;
+                      const getMetodoColor = (metodo: string) => {
+                        switch (metodo.toLowerCase()) {
+                          case 'efectivo': return 'bg-green-100 text-green-800';
+                          case 'sinpe': return 'bg-blue-100 text-blue-800';
+                          case 'tarjeta': return 'bg-purple-100 text-purple-800';
+                          case '2pagos':
+                          case '2 pagos': return 'bg-orange-100 text-orange-800';
+                          default: return 'bg-gray-100 text-gray-800';
+                        }
+                      };
+                      return (
+                        <Button
+                          key={metodo}
+                          variant={filtroMetodoPago === metodo ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setFiltroMetodoPago(metodo || 'todos')}
+                          className="flex items-center gap-2"
+                        >
+                          <Badge className={`${getMetodoColor(metodo || 'sin_metodo')} text-xs`}>
+                            {(metodo || 'sin_metodo').charAt(0).toUpperCase() + (metodo || 'sin_metodo').slice(1)}
+                          </Badge>
+                          <Badge variant="secondary" className="ml-1">
+                            {cantidad}
+                          </Badge>
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Resumen y acciones */}
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <div className="flex items-center gap-4">
+                    <div className="text-sm text-muted-foreground">
+                      Mostrando <span className="font-semibold text-gray-900">{pedidosFiltrados.length}</span> de{' '}
+                      <span className="font-semibold text-gray-900">{liquidacion?.pedidos.length || 0}</span> pedidos
+                    </div>
+                    {(filtroEstado !== 'todos' || filtroMetodoPago !== 'todos') && (
+                      <div className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                        Filtros activos
+                      </div>
+                    )}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      setFiltroEstado('todos');
+                      setFiltroMetodoPago('todos');
+                    }}
+                    disabled={filtroEstado === 'todos' && filtroMetodoPago === 'todos'}
+                  >
+                    <Filter className="w-4 h-4 mr-2" />
+                    Limpiar Filtros
+                  </Button>
+                </div>
+              </div>
+            </div>
             <CardContent>
-              {liquidacion.pedidos && liquidacion.pedidos.length > 0 ? (
+              {pedidosFiltrados && pedidosFiltrados.length > 0 ? (
                 <div className="rounded-md border overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full">
@@ -693,7 +1010,7 @@ export default function TiendaLiquidacion() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {liquidacion.pedidos.map((pedido) => (
+                        {pedidosFiltrados.map((pedido) => (
                           <tr key={pedido.id_pedido} className="hover:bg-gray-50 transition-colors">
                             <td className="px-4 py-4 whitespace-nowrap">
                               <div className="flex items-center gap-2">
@@ -712,7 +1029,9 @@ export default function TiendaLiquidacion() {
                               </div>
                             </td>
                             <td className="px-4 py-4 whitespace-nowrap">
-                              <Badge className={getStatusColor(pedido.estado_pedido)}>
+                              <Badge 
+                                className={`${getStatusColor(pedido.estado_pedido)} font-semibold px-3 py-1`}
+                              >
                                 {pedido.estado_pedido?.toUpperCase() || 'PENDIENTE'}
                               </Badge>
                             </td>
@@ -826,7 +1145,11 @@ export default function TiendaLiquidacion() {
                   {/* Resumen de la tabla */}
                   <div className="bg-gray-50 px-4 py-3 border-t">
                     <div className="flex items-center justify-between text-sm text-gray-600">
-                      <span>Mostrando {liquidacion.pedidos.length} pedidos del {formatDate(selectedDate)}</span>
+                      <span>
+                        Mostrando {pedidosFiltrados.length} de {liquidacion.pedidos.length} pedidos del {formatDate(selectedDate)}
+                        {filtroEstado !== 'todos' && ` (filtrado por estado: ${filtroEstado})`}
+                        {filtroMetodoPago !== 'todos' && ` (filtrado por método: ${filtroMetodoPago})`}
+                      </span>
                       <div className="flex items-center gap-4">
                         <span>Total Recaudado: {formatCurrency(liquidacion.totalCollected)}</span>
                         <span>Efectivo: {formatCurrency(liquidacion.cashPayments)}</span>
@@ -839,19 +1162,44 @@ export default function TiendaLiquidacion() {
               ) : (
                 <div className="text-center py-12 text-muted-foreground">
                   <Package className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <h3 className="text-lg font-semibold mb-2">No hay pedidos para esta fecha</h3>
-                  <p className="mb-4">No se encontraron pedidos para el {formatDate(selectedDate)}</p>
+                  <h3 className="text-lg font-semibold mb-2">
+                    {liquidacion?.pedidos.length === 0 
+                      ? "No hay pedidos para esta fecha" 
+                      : "No hay pedidos que coincidan con los filtros"
+                    }
+                  </h3>
+                  <p className="mb-4">
+                    {liquidacion?.pedidos.length === 0 
+                      ? `No se encontraron pedidos para el ${formatDate(selectedDate)}`
+                      : `No se encontraron pedidos que coincidan con los filtros seleccionados`
+                    }
+                  </p>
                   <div className="flex gap-2 justify-center">
-                    <Button asChild>
-                      <Link href="/dashboard/tienda/orders/new">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Crear Primer Pedido
-                      </Link>
-                    </Button>
-                    <Button variant="outline" onClick={loadLiquidacion}>
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Actualizar
-                    </Button>
+                    {liquidacion?.pedidos.length === 0 ? (
+                      <>
+                        <Button asChild>
+                          <Link href="/dashboard/tienda/orders/new">
+                            <Plus className="w-4 h-4 mr-2" />
+                            Crear Primer Pedido
+                          </Link>
+                        </Button>
+                        <Button variant="outline" onClick={loadLiquidacion}>
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Actualizar
+                        </Button>
+                      </>
+                    ) : (
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          setFiltroEstado('todos');
+                          setFiltroMetodoPago('todos');
+                        }}
+                      >
+                        <Filter className="w-4 h-4 mr-2" />
+                        Limpiar Filtros
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}
