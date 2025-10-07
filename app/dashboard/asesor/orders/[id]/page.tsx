@@ -283,7 +283,7 @@ export default function AdvisorOrderDetailPage() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Método de Pago</p>
-                  <p className="font-medium capitalize">{order.paymentMethod}</p>
+                  <p className="font-medium">{order.paymentMethod.charAt(0).toUpperCase() + order.paymentMethod.slice(1)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total</p>

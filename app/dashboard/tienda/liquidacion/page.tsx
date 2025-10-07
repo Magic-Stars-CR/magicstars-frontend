@@ -1060,8 +1060,8 @@ export default function TiendaLiquidacion() {
                                 {pedido.metodo_pago?.toLowerCase() === 'sinpe' && <Smartphone className="w-4 h-4 text-blue-600" />}
                                 {pedido.metodo_pago?.toLowerCase() === 'tarjeta' && <CreditCard className="w-4 h-4 text-purple-600" />}
                                 {(pedido.metodo_pago?.toLowerCase() === '2pagos' || pedido.metodo_pago?.toLowerCase() === '2 pagos') && <TrendingUp className="w-4 h-4 text-orange-600" />}
-                                <span className="text-sm text-gray-900 capitalize">
-                                  {pedido.metodo_pago || 'Sin método'}
+                                <span className="text-sm text-gray-900">
+                                  {(pedido.metodo_pago || 'Sin método').charAt(0).toUpperCase() + (pedido.metodo_pago || 'Sin método').slice(1)}
                                 </span>
                               </div>
                             </td>

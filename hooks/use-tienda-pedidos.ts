@@ -16,6 +16,7 @@ export interface TiendaPedidosFilters {
   statusFilter: string;
   distritoFilter: string;
   mensajeroFilter: string;
+  tiendaFilter: string;
   dateFilter: string;
   specificDate: string;
   dateRange: { start: string; end: string };
@@ -49,6 +50,7 @@ const initialFilters: TiendaPedidosFilters = {
   statusFilter: 'all',
   distritoFilter: 'all',
   mensajeroFilter: 'all',
+  tiendaFilter: 'all',
   dateFilter: 'all',
   specificDate: '',
   dateRange: { start: '', end: '' },
@@ -113,6 +115,7 @@ export function useTiendaPedidos(tiendaName: string) {
     const hasFilters = filters.statusFilter !== 'all' || 
            filters.distritoFilter !== 'all' || 
            filters.mensajeroFilter !== 'all' || 
+           filters.tiendaFilter !== 'all' ||
            filters.dateFilter !== 'all' || 
            filters.specificDate !== '' || 
            (filters.dateRange.start !== '' && filters.dateRange.end !== '') || 
@@ -152,6 +155,7 @@ export function useTiendaPedidos(tiendaName: string) {
       // Filtros simples
       const matchesDistrito = filters.distritoFilter === 'all' || pedido.distrito === filters.distritoFilter;
       const matchesMensajero = filters.mensajeroFilter === 'all' || pedido.mensajero_asignado === filters.mensajeroFilter;
+      const matchesTiendaFilter = filters.tiendaFilter === 'all' || pedido.tienda === filters.tiendaFilter;
       const matchesMetodoPago = filters.metodoPagoFilter === 'all' || 
         (pedido.metodo_pago && pedido.metodo_pago.toLowerCase() === filters.metodoPagoFilter.toLowerCase()) ||
         (filters.metodoPagoFilter === '2pagos' && pedido.metodo_pago && 
@@ -226,7 +230,7 @@ export function useTiendaPedidos(tiendaName: string) {
       }
 
       const matches = matchesSearch && matchesStatus && matchesDistrito && matchesMensajero && 
-                     matchesDate && matchesMetodoPago;
+                     matchesTiendaFilter && matchesDate && matchesMetodoPago;
       
       return matches;
     });
@@ -358,11 +362,13 @@ export function useTiendaPedidos(tiendaName: string) {
   const filterOptions = useMemo(() => {
     const distritos = Array.from(new Set(allPedidos.map(p => p.distrito).filter(Boolean))).sort() as string[];
     const mensajerosAsignados = Array.from(new Set(allPedidos.map(p => p.mensajero_asignado).filter(Boolean))).sort() as string[];
+    const tiendas = Array.from(new Set(allPedidos.map(p => p.tienda).filter(Boolean))).sort() as string[];
     const metodosPago = Array.from(new Set(allPedidos.map(p => p.metodo_pago).filter(Boolean))).sort() as string[];
 
     return {
       distritos,
       mensajeros: mensajerosAsignados,
+      tiendas,
       metodosPago,
     };
   }, [allPedidos]);

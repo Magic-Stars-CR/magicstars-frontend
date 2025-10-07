@@ -1427,8 +1427,8 @@ export default function AsesorDashboard() {
                           <div className="font-bold text-gray-900">
                             {formatCurrency(order.totalAmount)}
                           </div>
-                          <div className="text-xs text-gray-500 capitalize">
-                            {order.paymentMethod}
+                          <div className="text-xs text-gray-500">
+                            {order.paymentMethod.charAt(0).toUpperCase() + order.paymentMethod.slice(1)}
                           </div>
                         </div>
                       </TableCell>

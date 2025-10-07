@@ -56,8 +56,8 @@ const menuItems = {
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/tienda' },
     { icon: Package, label: 'Pedidos', href: '/dashboard/tienda/orders' },
     { icon: DollarSign, label: 'Liquidación', href: '/dashboard/tienda/liquidacion' },
-    { icon: BarChart3, label: 'Estadísticas', href: '/dashboard/tienda/stats' },
-    { icon: User, label: 'Mi Perfil', href: '/dashboard/tienda/profile' },
+    // { icon: BarChart3, label: 'Estadísticas', href: '/dashboard/tienda/stats' },
+    // { icon: User, label: 'Mi Perfil', href: '/dashboard/tienda/profile' },
   ],
 };
 

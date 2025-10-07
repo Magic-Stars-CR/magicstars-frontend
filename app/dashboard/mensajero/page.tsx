@@ -1252,8 +1252,8 @@ export default function MensajeroDashboard() {
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <CreditCard className="w-4 h-4 text-gray-500" />
-                    <span className="text-gray-600 capitalize">
-                      {order.paymentMethod === '2pagos' ? '💰 2 Pagos' : (order.metodoPagoOriginal || 'No especificado')}
+                    <span className="text-gray-600">
+                      {order.paymentMethod === '2pagos' ? '💰 2 Pagos' : (order.metodoPagoOriginal || 'No especificado').charAt(0).toUpperCase() + (order.metodoPagoOriginal || 'No especificado').slice(1)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">

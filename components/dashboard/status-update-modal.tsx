@@ -27,7 +27,7 @@ interface StatusUpdateModalProps {
   pedido: PedidoTest | null;
   onUpdate: (updates: Partial<PedidoTest>) => Promise<boolean>;
   updating: boolean;
-  userRole?: 'admin' | 'mensajero';
+  userRole?: 'admin' | 'mensajero' | 'tienda';
 }
 
 export function StatusUpdateModal({

@@ -104,6 +104,7 @@ export default function TiendaOrdersPage() {
 
   // Estados para creación de pedido
   const [createForm, setCreateForm] = useState({
+    idx: 0,
     cliente_nombre: '',
     cliente_telefono: '',
     direccion: '',
@@ -114,7 +115,18 @@ export default function TiendaOrdersPage() {
     metodo_pago: '',
     productos: '',
     notas: '',
-    tienda: user?.tiendaName || ''
+    tienda: user?.tiendaName || '',
+    link_ubicacion: null,
+    nota_asesor: null,
+    jornada_ruta: '',
+    estado_pedido: null,
+    fecha_entrega: null,
+    comprobante_sinpe: null,
+    numero_sinpe: null,
+    efectivo_2_pagos: null,
+    sinpe_2_pagos: null,
+    mensajero_asignado: null,
+    mensajero_concretado: null
   });
 
   // Estados para confirmación/eliminación
@@ -158,6 +170,7 @@ export default function TiendaOrdersPage() {
   // Funciones de gestión de pedidos
   const handleCreatePedido = () => {
     setCreateForm({
+      idx: 0,
       cliente_nombre: '',
       cliente_telefono: '',
       direccion: '',
@@ -168,7 +181,18 @@ export default function TiendaOrdersPage() {
       metodo_pago: '',
       productos: '',
       notas: '',
-      tienda: user?.tiendaName || ''
+      tienda: user?.tiendaName || '',
+      link_ubicacion: null,
+      nota_asesor: null,
+      jornada_ruta: '',
+      estado_pedido: null,
+      fecha_entrega: null,
+      comprobante_sinpe: null,
+      numero_sinpe: null,
+      efectivo_2_pagos: null,
+      sinpe_2_pagos: null,
+      mensajero_asignado: null,
+      mensajero_concretado: null
     });
     setIsCreateModalOpen(true);
   };
@@ -192,6 +216,7 @@ export default function TiendaOrdersPage() {
     if (result.success) {
       setIsCreateModalOpen(false);
       setCreateForm({
+        idx: 0,
         cliente_nombre: '',
         cliente_telefono: '',
         direccion: '',
@@ -202,7 +227,18 @@ export default function TiendaOrdersPage() {
         metodo_pago: '',
         productos: '',
         notas: '',
-        tienda: user?.tiendaName || ''
+        tienda: user?.tiendaName || '',
+        link_ubicacion: null,
+        nota_asesor: null,
+        jornada_ruta: '',
+        estado_pedido: null,
+        fecha_entrega: null,
+        comprobante_sinpe: null,
+        numero_sinpe: null,
+        efectivo_2_pagos: null,
+        sinpe_2_pagos: null,
+        mensajero_asignado: null,
+        mensajero_concretado: null
       });
     }
   };
@@ -638,7 +674,7 @@ export default function TiendaOrdersPage() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="max-w-xs">
-                        <p className="text-sm text-gray-700 truncate" title={pedido.notas || pedido.nota_asesor}>
+                        <p className="text-sm text-gray-700 truncate" title={pedido.notas || pedido.nota_asesor || undefined}>
                           {pedido.notas || pedido.nota_asesor || 'Sin notas'}
                         </p>
                       </div>

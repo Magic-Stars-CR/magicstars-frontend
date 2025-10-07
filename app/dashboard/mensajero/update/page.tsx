@@ -181,8 +181,8 @@ export default function UpdateOrderPage() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Método de Pago</p>
-                    <Badge variant="outline" className="capitalize">
-                      {order.paymentMethod}
+                    <Badge variant="outline">
+                      {order.paymentMethod.charAt(0).toUpperCase() + order.paymentMethod.slice(1)}
                     </Badge>
                   </div>
                   <div>

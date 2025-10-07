@@ -328,7 +328,7 @@ export default function TiendaDashboard() {
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
-                    <Badge className={getStatusColor(pedido.estado_pedido)}>
+                    <Badge className={getStatusColor(pedido.estado_pedido || 'pendiente')}>
                       {pedido.estado_pedido?.toUpperCase() || 'PENDIENTE'}
                     </Badge>
                     <div className="text-right">

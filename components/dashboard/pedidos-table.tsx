@@ -326,7 +326,9 @@ export function PedidosTable({
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {getPaymentMethodIcon(pedido.metodo_pago || 'efectivo')}
-                        <span className="text-xs capitalize">{pedido.metodo_pago || 'Efectivo'}</span>
+                        <span className="text-xs">
+                          {(pedido.metodo_pago || 'Efectivo').charAt(0).toUpperCase() + (pedido.metodo_pago || 'Efectivo').slice(1)}
+                        </span>
                       </div>
                     </TableCell>
                     
