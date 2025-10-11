@@ -870,8 +870,8 @@ export const mockMessengers: User[] = [
   },
   {
     id: 'msg-033',
-    email: 'jeferson@magicstars.com',
-    name: 'Jeferson',
+    email: 'jefferson@magicstars.com',
+    name: 'Jefferson',
     role: 'mensajero',
     phone: '+506 8888-0033',
     company: {
