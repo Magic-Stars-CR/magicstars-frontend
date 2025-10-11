@@ -868,6 +868,26 @@ export const mockMessengers: User[] = [
     isActive: true,
     createdAt: '2025-01-15T08:00:00Z',
   },
+  {
+    id: 'msg-033',
+    email: 'jeferson@magicstars.com',
+    name: 'Jeferson',
+    role: 'mensajero',
+    phone: '+506 8888-0033',
+    company: {
+      id: 'company-1',
+      name: 'Magic Stars',
+      taxId: '123456789',
+      address: 'San José, Costa Rica',
+      phone: '+506 0000-0000',
+      email: 'info@magicstars.com',
+      isActive: true,
+      createdAt: '2024-01-01T08:00:00Z',
+      updatedAt: '2024-01-01T08:00:00Z',
+    },
+    isActive: true,
+    createdAt: '2025-10-11T08:00:00Z',
+  },
 ];
 
 // Funciones de autenticación simuladas
