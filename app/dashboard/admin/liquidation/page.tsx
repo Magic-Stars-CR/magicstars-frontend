@@ -2602,70 +2602,382 @@ ${pedidosList}
           </DialogHeader>
           
           {selectedViewAndLiquidate && (
-            <div className="flex-1">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 p-1">
-                
-                {/* Columna Izquierda - Resumen y Cálculos */}
-                <div className="lg:col-span-1 space-y-4">
+            <div className="flex-1 overflow-y-auto">
+              {/* Layout Bento Optimizado - Sección Superior Compacta */}
+              <div className="space-y-3 mb-4">
+                {/* Fila 1: Resumen Financiero Principal */}
+                <div className="grid grid-cols-12 gap-2 p-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border">
+                  {/* Total a Entregar - Destacado */}
+                  <div className="col-span-3 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-3 border-2 border-purple-300 shadow-sm">
+                    <div className="flex items-center gap-2 mb-1">
+                      <CheckCircle className="w-4 h-4 text-purple-600" />
+                      <span className="font-bold text-purple-700 text-xs">Total a Entregar</span>
+                    </div>
+                    <p className="text-xl font-bold text-purple-600">
+                      {formatCurrency(selectedViewAndLiquidate.finalAmount)}
+                    </p>
+                    <p className="text-[10px] text-purple-600 mt-0.5">(Efectivo - Gastos)</p>
+                  </div>
+
+                  {/* Gastos */}
+                  <div 
+                    className="col-span-2 bg-red-50 rounded-lg p-3 border border-red-200 cursor-pointer hover:shadow-md transition-all"
+                    onClick={() => handleViewExpenses(selectedViewAndLiquidate)}
+                  >
+                    <div className="flex items-center gap-1 mb-1">
+                      <Minus className="w-3 h-3 text-red-600" />
+                      <span className="font-semibold text-red-700 text-xs">Gastos</span>
+                    </div>
+                    <p className="text-lg font-bold text-red-600">
+                      {formatCurrency(selectedViewAndLiquidate.totalSpent)}
+                    </p>
+                    <p className="text-[10px] text-red-600 hover:underline">Ver detalles</p>
+                  </div>
+
+                  {/* Total Recaudado con Desglose */}
+                  <div className="col-span-4 bg-blue-50 rounded-lg p-3 border border-blue-200">
+                    <div className="flex items-center gap-1 mb-1">
+                      <DollarSign className="w-3 h-3 text-blue-600" />
+                      <span className="font-semibold text-blue-700 text-xs">Total Recaudado</span>
+                    </div>
+                    <p className="text-lg font-bold text-blue-600 mb-1">
+                      {formatCurrency(selectedViewAndLiquidate.totalCollected)}
+                    </p>
+                    <div className="space-y-0.5 text-[10px]">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Efectivo:</span>
+                        <span className="font-semibold text-green-600">{formatCurrency(selectedViewAndLiquidate.cashPayments)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">SINPE:</span>
+                        <span className="font-semibold text-blue-600">{formatCurrency(selectedViewAndLiquidate.sinpePayments)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Tarjeta:</span>
+                        <span className="font-semibold text-purple-600">{formatCurrency(selectedViewAndLiquidate.tarjetaPayments || 0)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filtros de Pago como Botones Compactos */}
+                  <div className="col-span-3 flex flex-col gap-1">
+                    <button
+                      onClick={() => setOrderPaymentFilter(orderPaymentFilter === 'EFECTIVO' ? 'all' : 'EFECTIVO')}
+                      className={`p-1.5 rounded text-left transition-all text-xs ${
+                        orderPaymentFilter === 'EFECTIVO' 
+                          ? 'bg-green-200 border-2 border-green-400 font-bold' 
+                          : 'bg-green-50 border border-green-200 hover:bg-green-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <Banknote className="w-3 h-3" />
+                          <span>Efectivo</span>
+                        </div>
+                        <span className="font-bold">{formatCurrency(selectedViewAndLiquidate.cashPayments)}</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setOrderPaymentFilter(orderPaymentFilter === 'SINPE' ? 'all' : 'SINPE')}
+                      className={`p-1.5 rounded text-left transition-all text-xs ${
+                        orderPaymentFilter === 'SINPE' 
+                          ? 'bg-blue-200 border-2 border-blue-400 font-bold' 
+                          : 'bg-blue-50 border border-blue-200 hover:bg-blue-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <Smartphone className="w-3 h-3" />
+                          <span>SINPE</span>
+                          {selectedViewAndLiquidate.sinpePayments > 0 && (
+                            <Eye 
+                              className="w-3 h-3 cursor-pointer hover:scale-110" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewSinpeOrders(selectedViewAndLiquidate);
+                              }}
+                            />
+                          )}
+                        </div>
+                        <span className="font-bold">{formatCurrency(selectedViewAndLiquidate.sinpePayments)}</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setOrderPaymentFilter(orderPaymentFilter === 'TARJETA' ? 'all' : 'TARJETA')}
+                      className={`p-1.5 rounded text-left transition-all text-xs ${
+                        orderPaymentFilter === 'TARJETA' 
+                          ? 'bg-purple-200 border-2 border-purple-400 font-bold' 
+                          : 'bg-purple-50 border border-purple-200 hover:bg-purple-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <CreditCard className="w-3 h-3" />
+                          <span>Tarjeta</span>
+                          {(selectedViewAndLiquidate.tarjetaPayments || 0) > 0 && (
+                            <Eye 
+                              className="w-3 h-3 cursor-pointer hover:scale-110" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewTarjetaOrders(selectedViewAndLiquidate);
+                              }}
+                            />
+                          )}
+                        </div>
+                        <span className="font-bold">{formatCurrency(selectedViewAndLiquidate.tarjetaPayments || 0)}</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Fila 2: Métricas de Pedidos y Filtros */}
+                <div className="grid grid-cols-12 gap-2 p-2 bg-gray-50 rounded-lg border">
+                  {/* Métricas Compactas */}
+                  <div className="col-span-8 grid grid-cols-6 gap-1.5">
+                    <div className="text-center p-1.5 bg-blue-50 rounded">
+                      <p className="font-bold text-blue-600 text-sm">{selectedViewAndLiquidate.orders.length}</p>
+                      <p className="text-[10px] text-gray-600">Total</p>
+                    </div>
+                    <div className="text-center p-1.5 bg-green-50 rounded">
+                      <p className="font-bold text-green-600 text-sm">{selectedViewAndLiquidate.orders.filter(o => o.estado_pedido === 'ENTREGADO').length}</p>
+                      <p className="text-[10px] text-gray-600">Entregados</p>
+                    </div>
+                    <div className="text-center p-1.5 bg-red-50 rounded">
+                      <p className="font-bold text-red-600 text-sm">{selectedViewAndLiquidate.orders.filter(o => o.estado_pedido === 'DEVOLUCION').length}</p>
+                      <p className="text-[10px] text-gray-600">Devueltos</p>
+                    </div>
+                    <div className="text-center p-1.5 bg-orange-50 rounded">
+                      <p className="font-bold text-orange-600 text-sm">{selectedViewAndLiquidate.orders.filter(o => o.estado_pedido === 'REAGENDADO').length}</p>
+                      <p className="text-[10px] text-gray-600">Reagendados</p>
+                    </div>
+                    <div 
+                      className="text-center p-1.5 bg-yellow-50 rounded cursor-pointer hover:shadow-md transition-all"
+                      onClick={() => handleViewPendingOrders(selectedViewAndLiquidate)}
+                    >
+                      <p className="font-bold text-yellow-600 text-sm">{selectedViewAndLiquidate.orders.filter(o => o.estado_pedido === 'PENDIENTE').length}</p>
+                      <p className="text-[10px] text-gray-600">Pendientes</p>
+                    </div>
+                    <div className="text-center p-1.5 bg-gray-100 rounded">
+                      <p className="font-bold text-gray-600 text-sm">{selectedViewAndLiquidate.orders.filter(o => !o.mensajero_asignado).length}</p>
+                      <p className="text-[10px] text-gray-600">Sin Asignar</p>
+                    </div>
+                  </div>
                   
-                  {/* Resumen Financiero */}
-                  <Card className="border-2 border-blue-200">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <DollarSign className="w-5 h-5 text-green-600" />
-                        Resumen Financiero
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-green-50 p-3 rounded-lg">
-                          <div className="flex items-center gap-2 mb-1">
-                            <TrendingUp className="w-4 h-4 text-green-600" />
-                            <span className="text-sm font-medium text-green-800">Total Recaudado</span>
-                          </div>
-                          <p className="text-xl font-bold text-green-900">
-                            {formatCurrency(selectedViewAndLiquidate.totalCollected)}
-                          </p>
-                        </div>
-                        <div 
-                          className="bg-red-50 p-3 rounded-lg cursor-pointer hover:bg-red-100 transition-colors duration-200"
-                          onClick={() => handleViewExpenses(selectedViewAndLiquidate)}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <Minus className="w-4 h-4 text-red-600" />
-                            <span className="text-sm font-medium text-red-800">Gastos</span>
-                            <Eye className="w-3 h-3 text-red-500 ml-auto" />
-                          </div>
-                          <p className="text-xl font-bold text-red-900">
-                            {formatCurrency(selectedViewAndLiquidate.totalSpent)}
-                          </p>
-                          <p className="text-xs text-red-600 mt-1">Click para ver detalles</p>
-                        </div>
-                      </div>
-                      
-                      {/* Pedidos a Devolver */}
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Pedidos a Devolver</h4>
-                        <div 
-                          className="bg-orange-50 p-3 rounded-lg cursor-pointer hover:bg-orange-100 transition-colors duration-200"
-                          onClick={() => handleViewPendingOrders(selectedViewAndLiquidate)}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <Package className="w-4 h-4 text-orange-600" />
-                            <span className="text-sm font-medium text-orange-800">Pedidos Pendientes</span>
-                            <Eye className="w-3 h-3 text-orange-500 ml-auto" />
-                          </div>
-                          <p className="text-lg font-bold text-orange-900">
-                            {selectedViewAndLiquidate.orders.filter(p => p.estado_pedido !== 'ENTREGADO').length}
-                          </p>
-                          <p className="text-xs text-orange-600 mt-1">Click para ver detalles</p>
-                        </div>
-                      </div>
-                      
-                      {/* Desglose por método de pago - Filtros clickeables */}
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Filtros por Método de Pago</h4>
-                        <div className="grid grid-cols-3 gap-2">
+                  {/* Filtros de Estado */}
+                  <div className="col-span-4 flex items-center justify-end gap-2">
+                    <Select value={orderStatusFilter} onValueChange={setOrderStatusFilter}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Estado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="ENTREGADO">Entregados</SelectItem>
+                        <SelectItem value="PENDIENTE">Pendientes</SelectItem>
+                        <SelectItem value="DEVOLUCION">Devueltos</SelectItem>
+                        <SelectItem value="REAGENDADO">Reagendados</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabla de Pedidos Optimizada */}
+              <div className="border rounded-lg">
+                <div className="p-2 border-b bg-gray-50">
+                  <h3 className="font-semibold text-sm">Detalle de Pedidos ({selectedViewAndLiquidate.orders.filter(pedido => {
+                    const statusMatch = orderStatusFilter === 'all' || pedido.estado_pedido === orderStatusFilter;
+                    const paymentMatch = orderPaymentFilter === 'all' || pedido.metodo_pago === orderPaymentFilter;
+                    return statusMatch && paymentMatch;
+                  }).length})</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="text-xs">
+                        <TableHead className="py-1 text-xs w-16">ID</TableHead>
+                        <TableHead className="py-1 text-xs w-24">Cliente</TableHead>
+                        <TableHead className="py-1 text-xs w-32">Producto</TableHead>
+                        <TableHead className="py-1 text-xs w-20">Valor</TableHead>
+                        <TableHead className="py-1 text-xs w-20">Método</TableHead>
+                        <TableHead className="py-1 text-xs w-20">Estado</TableHead>
+                        <TableHead className="py-1 text-xs w-20">Fecha</TableHead>
+                        <TableHead className="py-1 text-xs w-24">Acciones</TableHead>
+                        <TableHead className="py-1 text-xs min-w-32">Dirección</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedViewAndLiquidate.orders
+                        .filter(pedido => {
+                          const statusMatch = orderStatusFilter === 'all' || pedido.estado_pedido === orderStatusFilter;
+                          const paymentMatch = orderPaymentFilter === 'all' || pedido.metodo_pago === orderPaymentFilter;
+                          return statusMatch && paymentMatch;
+                        })
+                        .map((pedido) => (
+                          <TableRow key={pedido.id_pedido} className="text-xs">
+                            <TableCell className="py-1 font-medium text-xs">{pedido.id_pedido}</TableCell>
+                            <TableCell className="py-1 max-w-24 truncate text-xs">{pedido.cliente_nombre}</TableCell>
+                            <TableCell className="py-1 max-w-32 truncate text-xs">{pedido.productos || 'N/A'}</TableCell>
+                            <TableCell className="py-1 font-medium text-xs">{formatCurrency(pedido.valor_total)}</TableCell>
+                            <TableCell className="py-1">
+                              <div className="flex items-center gap-1">
+                                {pedido.metodo_pago === 'SINPE' && <Smartphone className="w-3 h-3 text-blue-600" />}
+                                {pedido.metodo_pago === 'EFECTIVO' && <Banknote className="w-3 h-3 text-green-600" />}
+                                {pedido.metodo_pago === 'TARJETA' && <CreditCard className="w-3 h-3 text-purple-600" />}
+                                <span className="text-[10px]">
+                                  {pedido.metodo_pago === 'SINPE' ? 'SINPE' :
+                                   pedido.metodo_pago === 'EFECTIVO' ? 'EFE' :
+                                   pedido.metodo_pago === 'TARJETA' ? 'TAR' : 'N/A'}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="py-1">
+                              <div className="flex items-center gap-1">
+                                {pedido.estado_pedido === 'ENTREGADO' && <CheckCircle className="w-3 h-3 text-green-600" />}
+                                {pedido.estado_pedido === 'PENDIENTE' && <Clock className="w-3 h-3 text-yellow-600" />}
+                                {pedido.estado_pedido === 'DEVOLUCION' && <XCircle className="w-3 h-3 text-red-600" />}
+                                {pedido.estado_pedido === 'REAGENDADO' && <RefreshCw className="w-3 h-3 text-orange-600" />}
+                                <span className="text-[10px]">
+                                  {pedido.estado_pedido === 'ENTREGADO' ? 'ENT' :
+                                   pedido.estado_pedido === 'PENDIENTE' ? 'PEN' :
+                                   pedido.estado_pedido === 'DEVOLUCION' ? 'DEV' :
+                                   pedido.estado_pedido === 'REAGENDADO' ? 'REA' : 'N/A'}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="py-1 text-[10px]">
+                              {new Date(pedido.fecha_creacion).toLocaleDateString('es-CR', { day: '2-digit', month: '2-digit' })}
+                            </TableCell>
+                            <TableCell className="py-1">
+                              <div className="flex flex-col gap-0.5">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleEditOrderStatus(pedido)}
+                                  className="text-[10px] px-1 py-0.5 h-5 w-full"
+                                >
+                                  Editar
+                                </Button>
+                                {pedido.estado_pedido !== 'ENTREGADO' && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedOrderForUpdate(pedido);
+                                      setNewStatus('REAGENDADO');
+                                      setShowUpdateStatusModal(true);
+                                    }}
+                                    className="bg-orange-600 hover:bg-orange-700 text-white text-[10px] px-1 py-0.5 h-5 w-full"
+                                  >
+                                    Reagendar
+                                  </Button>
+                                )}
+                                {pedido.estado_pedido === 'PENDIENTE' && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedOrderForUpdate(pedido);
+                                      setNewStatus('ENTREGADO');
+                                      setShowUpdateStatusModal(true);
+                                    }}
+                                    className="bg-green-600 hover:bg-green-700 text-white text-[10px] px-1 py-0.5 h-5 w-full"
+                                  >
+                                    Entrega
+                                  </Button>
+                                )}
+                                {pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago && pedido.metodo_pago !== 'EFECTIVO' && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleViewPedidoComprobante(pedido)}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-1 py-0.5 h-5 w-full"
+                                  >
+                                    Comprobante
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="py-1 max-w-32 truncate text-[10px]">{pedido.direccion}</TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              {/* Botón de Confirmar Liquidación */}
+              <div className="flex justify-end mt-3 pt-3 border-t">
+                <Button 
+                  size="lg" 
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => {
+                    alert(`Liquidación confirmada para ${selectedViewAndLiquidate.messengerName}. Total a entregar: ${formatCurrency(selectedViewAndLiquidate.finalAmount)}`);
+                    setShowLiquidationModal(false);
+                  }}
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Confirmar Liquidación
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Progress Loader */}
+      <ProgressLoader
+                <Card className="border-2 border-blue-200">
+                <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-green-600" />
+                Resumen Financiero
+                </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                <div className="bg-green-50 p-3 rounded-lg">
+                <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-medium text-green-800">Total Recaudado</span>
+                </div>
+                <p className="text-xl font-bold text-green-900">
+                {formatCurrency(selectedViewAndLiquidate.totalCollected)}
+                </p>
+                </div>
+                <div 
+                className="bg-red-50 p-3 rounded-lg cursor-pointer hover:bg-red-100 transition-colors duration-200"
+                onClick={() => handleViewExpenses(selectedViewAndLiquidate)}
+                >
+                <div className="flex items-center gap-2 mb-1">
+                <Minus className="w-4 h-4 text-red-600" />
+                <span className="text-sm font-medium text-red-800">Gastos</span>
+                <Eye className="w-3 h-3 text-red-500 ml-auto" />
+                </div>
+                <p className="text-xl font-bold text-red-900">
+                {formatCurrency(selectedViewAndLiquidate.totalSpent)}
+                </p>
+                <p className="text-xs text-red-600 mt-1">Click para ver detalles</p>
+                </div>
+                </div>
+                
+                <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Pedidos a Devolver</h4>
+                <div 
+                className="bg-orange-50 p-3 rounded-lg cursor-pointer hover:bg-orange-100 transition-colors duration-200"
+                onClick={() => handleViewPendingOrders(selectedViewAndLiquidate)}
+                >
+                <div className="flex items-center gap-2 mb-1">
+                <Package className="w-4 h-4 text-orange-600" />
+                <span className="text-sm font-medium text-orange-800">Pedidos Pendientes</span>
+                <Eye className="w-3 h-3 text-orange-500 ml-auto" />
+                </div>
+                <p className="text-lg font-bold text-orange-900">
+                {selectedViewAndLiquidate.orders.filter(p => p.estado_pedido !== 'ENTREGADO').length}
+                </p>
+                <p className="text-xs text-orange-600 mt-1">Click para ver detalles</p>
+                </div>
+                </div>
+                
+                <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Filtros por Método de Pago</h4>
+                <div className="grid grid-cols-3 gap-2">
                           <div 
                             className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
                               orderPaymentFilter === 'EFECTIVO' 
