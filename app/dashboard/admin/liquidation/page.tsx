@@ -54,7 +54,7 @@ import {
   Wrench,
   Car,
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
+import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
 interface LiquidationCalculation {
@@ -1047,122 +1047,6 @@ ${pedidosList}
                 </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Gráficas de Comparación */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Gráfica de Barras - Comparación por Mensajero */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5" />
-              Recaudación por Mensajero
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={calculations.map(calc => ({
-                name: calc.messengerName.split(' ')[0], // Solo primer nombre
-                recaudado: calc.totalCollected,
-                gastos: calc.totalSpent,
-                final: calc.finalAmount
-              }))}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                        <Tooltip 
-                          formatter={(value, name) => [
-                            `₡${Number(value).toLocaleString()}`, 
-                            name === 'recaudado' ? 'Total Recaudado' : 
-                            name === 'gastos' ? 'Gastos' : 'Total a Entregar'
-                          ]}
-                        />
-                        <Legend />
-                        <Bar dataKey="recaudado" fill="#10b981" name="Total Recaudado" />
-                        <Bar dataKey="gastos" fill="#f59e0b" name="Gastos" />
-                        <Bar dataKey="final" fill="#8b5cf6" name="Total a Entregar" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Gráfica de Pie - Distribución de Pagos */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PieChart className="w-5 h-5" />
-              Distribución de Métodos de Pago
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const pieData = [
-                {
-                  name: 'Efectivo',
-                  value: calculations.reduce((sum, calc) => 
-                    sum + calc.orders.filter(o => o.metodo_pago === 'EFECTIVO').length, 0
-                  ),
-                  color: '#10b981'
-                },
-                {
-                  name: 'SINPE',
-                  value: calculations.reduce((sum, calc) => 
-                    sum + calc.orders.filter(o => o.metodo_pago === 'SINPE').length, 0
-                  ),
-                  color: '#3b82f6'
-                },
-                {
-                  name: 'Tarjeta',
-                  value: calculations.reduce((sum, calc) => 
-                    sum + calc.orders.filter(o => o.metodo_pago === 'TARJETA').length, 0
-                  ),
-                  color: '#8b5cf6'
-                },
-                {
-                  name: '2 Pagos',
-                  value: calculations.reduce((sum, calc) => 
-                    sum + calc.orders.filter(o => o.metodo_pago === '2PAGOS').length, 0
-                  ),
-                  color: '#f59e0b'
-                }
-              ].filter(item => item.value > 0);
-
-              if (pieData.length === 0) {
-                return (
-                  <div className="flex items-center justify-center h-[300px] text-gray-500">
-                    <div className="text-center">
-                      <PieChart className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                      <p>No hay datos de métodos de pago</p>
-                    </div>
-                  </div>
-                );
-              }
-
-              return (
-                <ResponsiveContainer width="100%" height={300}>
-                  <RechartsPieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </RechartsPieChart>
-                </ResponsiveContainer>
-              );
-            })()}
           </CardContent>
         </Card>
       </div>
