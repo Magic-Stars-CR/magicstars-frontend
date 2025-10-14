@@ -48,7 +48,7 @@ export function StatusUpdateModal({
   const [firstPaymentMethod, setFirstPaymentMethod] = useState<string>('efectivo');
   const [firstPaymentAmount, setFirstPaymentAmount] = useState('');
   const [firstPaymentReceipt, setFirstPaymentReceipt] = useState<string | null>(null);
-  const [secondPaymentMethod, setSecondPaymentMethod] = useState<string>('efectivo');
+  const [secondPaymentMethod, setSecondPaymentMethod] = useState<string>(''); // Vacío por defecto
   const [secondPaymentAmount, setSecondPaymentAmount] = useState('');
   const [secondPaymentReceipt, setSecondPaymentReceipt] = useState<string | null>(null);
   
@@ -68,10 +68,11 @@ export function StatusUpdateModal({
       setPaymentMethod(pedido.metodo_pago || 'efectivo');
       setStatusComment('');
       setIsDualPayment(pedido.metodo_pago === '2pagos');
-      setFirstPaymentMethod('efectivo');
+      // Cuando se abre el modal con 2pagos, establecer primer método como efectivo
+      setFirstPaymentMethod(pedido.metodo_pago === '2pagos' ? 'efectivo' : 'efectivo');
       setFirstPaymentAmount('');
       setFirstPaymentReceipt(null);
-      setSecondPaymentMethod('efectivo');
+      setSecondPaymentMethod(''); // Segundo método vacío para que el usuario lo seleccione
       setSecondPaymentAmount('');
       setSecondPaymentReceipt(null);
       setReagendadoDate(undefined);
@@ -131,7 +132,7 @@ export function StatusUpdateModal({
     setFirstPaymentMethod('efectivo');
     setFirstPaymentAmount('');
     setFirstPaymentReceipt(null);
-    setSecondPaymentMethod('efectivo');
+    setSecondPaymentMethod(''); // Segundo método vacío por defecto
     setSecondPaymentAmount('');
     setSecondPaymentReceipt(null);
     setReagendadoDate(undefined);
@@ -309,6 +310,8 @@ export function StatusUpdateModal({
                     onClick={() => {
                       setPaymentMethod('2pagos');
                       setIsDualPayment(true);
+                      setFirstPaymentMethod('efectivo'); // Por defecto el primer pago es efectivo
+                      setSecondPaymentMethod(''); // El segundo método debe ser seleccionado por el usuario
                     }}
                     className={`h-10 text-xs font-medium ${
                       paymentMethod === '2pagos' 
@@ -394,16 +397,15 @@ export function StatusUpdateModal({
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <Label className="text-xs text-gray-600">Método</Label>
-                          <Select value={firstPaymentMethod} onValueChange={setFirstPaymentMethod}>
-                            <SelectTrigger className="h-8">
+                          <Select value={firstPaymentMethod} onValueChange={() => {}} disabled>
+                            <SelectTrigger className="h-8 bg-gray-100">
                               <SelectValue placeholder="Seleccionar" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="efectivo">💵 Efectivo</SelectItem>
-                              <SelectItem value="sinpe">📱 SINPE</SelectItem>
-                              <SelectItem value="tarjeta">💳 Tarjeta</SelectItem>
                             </SelectContent>
                           </Select>
+                          <p className="text-xs text-gray-500 mt-1">El primer pago siempre es efectivo</p>
                         </div>
                         <div>
                           <Label className="text-xs text-gray-600">Monto (₡)</Label>

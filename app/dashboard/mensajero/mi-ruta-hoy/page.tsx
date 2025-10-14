@@ -179,9 +179,9 @@ export default function MiRutaHoy() {
   
   // Estados para pagos múltiples
   const [isDualPayment, setIsDualPayment] = useState(false);
-  const [firstPaymentMethod, setFirstPaymentMethod] = useState<string>('');
+  const [firstPaymentMethod, setFirstPaymentMethod] = useState<string>('efectivo'); // Por defecto efectivo
   const [firstPaymentAmount, setFirstPaymentAmount] = useState<string>('');
-  const [secondPaymentMethod, setSecondPaymentMethod] = useState<string>('');
+  const [secondPaymentMethod, setSecondPaymentMethod] = useState<string>(''); // Vacío para que el usuario seleccione
   const [secondPaymentAmount, setSecondPaymentAmount] = useState<string>('');
   const [firstPaymentReceipt, setFirstPaymentReceipt] = useState<string | null>(null);
   const [secondPaymentReceipt, setSecondPaymentReceipt] = useState<string | null>(null);
@@ -1249,9 +1249,9 @@ export default function MiRutaHoy() {
       setUploadedEvidence(null);
     setIsUploading(false);
     setIsDualPayment(false);
-    setFirstPaymentMethod('');
+    setFirstPaymentMethod('efectivo'); // Resetear a efectivo
     setFirstPaymentAmount('');
-    setSecondPaymentMethod('');
+    setSecondPaymentMethod(''); // Resetear a vacío
     setSecondPaymentAmount('');
     setFirstPaymentReceipt(null);
     setSecondPaymentReceipt(null);
@@ -2842,6 +2842,8 @@ export default function MiRutaHoy() {
                       onClick={() => {
                         setPaymentMethod('2pagos');
                         setIsDualPayment(true);
+                        setFirstPaymentMethod('efectivo'); // Por defecto el primer pago es efectivo
+                        setSecondPaymentMethod(''); // El segundo método debe ser seleccionado por el usuario
                       }}
                       className={`h-10 text-xs font-medium ${
                         paymentMethod === '2pagos' 
@@ -2927,17 +2929,16 @@ export default function MiRutaHoy() {
                         <div className="grid grid-cols-2 gap-2">
                           <div>
                             <Label className="text-xs text-gray-600">Método</Label>
-                            <Select value={firstPaymentMethod} onValueChange={setFirstPaymentMethod}>
-                              <SelectTrigger className="h-8">
+                            <Select value={firstPaymentMethod} onValueChange={() => {}} disabled>
+                              <SelectTrigger className="h-8 bg-gray-100">
                                 <SelectValue placeholder="Seleccionar" />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="efectivo">💵 Efectivo</SelectItem>
-                                <SelectItem value="sinpe">📱 SINPE</SelectItem>
-                                <SelectItem value="tarjeta">💳 Tarjeta</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-gray-500 mt-1">El primer pago siempre es efectivo</p>
+                          </div>
                 <div>
                             <Label className="text-xs text-gray-600">Monto (₡)</Label>
                   <Input

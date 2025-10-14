@@ -2,72 +2,60 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { mockApi } from '@/lib/mock-api';
 import { RouteLiquidation, RouteLiquidationStats, RouteLiquidationFilters, PedidoTest, TiendaLiquidationCalculation } from '@/lib/types';
-import { getLiquidacionesReales, getMensajerosUnicos, debugTablaPedidos, debugFechasConDatos, getLiquidacionesRealesByTienda } from '@/lib/supabase-pedidos';
-import { supabasePedidos } from '@/lib/supabase-pedidos';
+import { getLiquidacionesReales, getLiquidacionesRealesByTienda } from '@/lib/supabase-pedidos';
 import { ProgressLoader, useProgressLoader } from '@/components/ui/progress-loader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Truck,
-  Package,
   DollarSign,
   CheckCircle,
   Clock,
   AlertCircle,
-  Search,
-  Filter,
-  Eye,
   Calendar,
   User,
-  MapPin,
-  TrendingUp,
-  Loader2,
   Building2,
   Calculator,
-  Edit3,
-  Save,
-  X,
-  Plus,
-  Minus,
-  Receipt,
-  CreditCard,
-  Banknote,
-  Smartphone,
-  Lock,
-  Unlock,
+  Eye,
   AlertTriangle,
   CheckCircle2,
-  MessageSquare,
-  BarChart3,
-  PieChart,
-  Fuel,
-  Wrench,
-  Car,
+  XCircle,
+  Banknote,
+  CreditCard,
+  Smartphone,
+  Minus,
+  Loader2,
+  Package,
+  Camera,
+  ImageIcon,
+  X,
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
+import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
 interface LiquidationCalculation {
   messengerId: string;
   messengerName: string;
   routeDate: string;
-  initialAmount: number; // Plata entregada en la mañana
-  totalCollected: number; // Total recaudado
-  totalSpent: number; // Gastos del mensajero
-  sinpePayments: number; // Pagos en SINPE
-  cashPayments: number; // Pagos en efectivo
-  tarjetaPayments: number; // Pagos en tarjeta
-  finalAmount: number; // Monto final a entregar
+  initialAmount: number;
+  totalCollected: number;
+  totalSpent: number;
+  sinpePayments: number;
+  cashPayments: number;
+  tarjetaPayments: number;
+  finalAmount: number;
   orders: PedidoTest[];
   isLiquidated: boolean;
   canEdit: boolean;
@@ -75,62 +63,27 @@ interface LiquidationCalculation {
 
 export default function AdminLiquidationPage() {
   const { user } = useAuth();
-  const [liquidations, setLiquidations] = useState<RouteLiquidation[]>([]);
-  const [stats, setStats] = useState<RouteLiquidationStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isLoadingData, setIsLoadingData] = useState(false); // Estado para bloquear filtros durante carga
-  const [filters, setFilters] = useState<RouteLiquidationFilters>({});
-  const [searchTerm, setSearchTerm] = useState('');
-  const [liquidating, setLiquidating] = useState<string | null>(null);
-  const [adminNotes, setAdminNotes] = useState('');
-  
-  // Estados para el módulo de liquidación mejorado
   const [calculations, setCalculations] = useState<LiquidationCalculation[]>([]);
   const [tiendaCalculations, setTiendaCalculations] = useState<TiendaLiquidationCalculation[]>([]);
-  
-  // Estados para filtros y paginación de tiendas
-  const [tiendaStatusFilter, setTiendaStatusFilter] = useState<string>('TODOS');
-  const [tiendaCurrentPage, setTiendaCurrentPage] = useState<{ [key: string]: number }>({});
-  
-  // Estados para acciones de actualización de estado
-  const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
-  const [isUpdateStatusModalOpen, setIsUpdateStatusModalOpen] = useState(false);
-  const [selectedOrderForUpdate, setSelectedOrderForUpdate] = useState<PedidoTest | null>(null);
-  const [newStatus, setNewStatus] = useState<string>('ENTREGADO');
-  const [statusComment, setStatusComment] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<string>('efectivo');
-  
-  // Estados para modal de detalles
-  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-  const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<PedidoTest | null>(null);
   const [selectedDate, setSelectedDate] = useState('');
-  const [editingInitialAmount, setEditingInitialAmount] = useState<string | null>(null);
-  const [newInitialAmount, setNewInitialAmount] = useState('');
-  const [isEditingRestricted, setIsEditingRestricted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  
+  // Estados para modal de pedidos pendientes
+  const [isPendingOrdersModalOpen, setIsPendingOrdersModalOpen] = useState(false);
+  
+  // Estados para modal de liquidación
   const [showLiquidationModal, setShowLiquidationModal] = useState(false);
   const [selectedLiquidation, setSelectedLiquidation] = useState<LiquidationCalculation | null>(null);
-  const [showRouteDetailModal, setShowRouteDetailModal] = useState(false);
-  const [selectedRouteDetail, setSelectedRouteDetail] = useState<LiquidationCalculation | null>(null);
-  const [orderStatusFilter, setOrderStatusFilter] = useState('all');
-  const [orderPaymentFilter, setOrderPaymentFilter] = useState('all');
-  const [statusCounts, setStatusCounts] = useState({
-    total: 0,
-    entregados: 0,
-    devoluciones: 0,
-    reagendados: 0,
-    pendientes: 0
-  });
-  const [showNotesModal, setShowNotesModal] = useState(false);
-  const [selectedOrderNotes, setSelectedOrderNotes] = useState<PedidoTest | null>(null);
-  const [hasRealData, setHasRealData] = useState(false);
-  const [showViewAndLiquidateModal, setShowViewAndLiquidateModal] = useState(false);
-  const [selectedViewAndLiquidate, setSelectedViewAndLiquidate] = useState<LiquidationCalculation | null>(null);
+  
+  // Estados para modales adicionales
   const [showExpensesModal, setShowExpensesModal] = useState(false);
   const [showPendingOrdersModal, setShowPendingOrdersModal] = useState(false);
-  const [selectedPendingOrders, setSelectedPendingOrders] = useState<{
-    mensajero: string;
-    pedidos: PedidoTest[];
-  } | null>(null);
+  const [showSinpeModal, setShowSinpeModal] = useState(false);
+  const [showTarjetaModal, setShowTarjetaModal] = useState(false);
+  const [showUpdateStatusModal, setShowUpdateStatusModal] = useState(false);
+  
+  // Estados para datos de modales
   const [selectedExpenses, setSelectedExpenses] = useState<{
     mensajero: string;
     gastos: {
@@ -141,12 +94,51 @@ export default function AdminLiquidationPage() {
       fecha: string;
     }[];
   } | null>(null);
-  const [showSinpeModal, setShowSinpeModal] = useState(false);
-  const [showTarjetaModal, setShowTarjetaModal] = useState(false);
+  
+  const [selectedPendingOrders, setSelectedPendingOrders] = useState<{
+    mensajero: string;
+    pedidos: PedidoTest[];
+  } | null>(null);
+  
   const [selectedSinpeOrders, setSelectedSinpeOrders] = useState<PedidoTest[]>([]);
   const [selectedTarjetaOrders, setSelectedTarjetaOrders] = useState<PedidoTest[]>([]);
-  const [isLiquidationCompleted, setIsLiquidationCompleted] = useState(false);
-  const [initialAmountInput, setInitialAmountInput] = useState('0');
+  
+  // Estados para actualizar pedido
+  const [selectedOrderForUpdate, setSelectedOrderForUpdate] = useState<PedidoTest | null>(null);
+  const [newStatus, setNewStatus] = useState<string>('ENTREGADO');
+  const [statusComment, setStatusComment] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('efectivo');
+  const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
+  
+  // Estados adicionales para el modal completo de actualización
+  const [uploadedReceipts, setUploadedReceipts] = useState<string[]>([]);
+  const [uploadedEvidence, setUploadedEvidence] = useState<string | null>(null);
+  const [isDualPayment, setIsDualPayment] = useState(false);
+  const [firstPaymentMethod, setFirstPaymentMethod] = useState<string>('efectivo');
+  const [secondPaymentMethod, setSecondPaymentMethod] = useState<string>('');
+  const [firstPaymentAmount, setFirstPaymentAmount] = useState<string>('');
+  const [secondPaymentAmount, setSecondPaymentAmount] = useState<string>('');
+  const [firstPaymentReceipt, setFirstPaymentReceipt] = useState<string | null>(null);
+  const [secondPaymentReceipt, setSecondPaymentReceipt] = useState<string | null>(null);
+  const [reagendadoDate, setReagendadoDate] = useState<Date | null>(null);
+  const [isReagendadoDatePickerOpen, setIsReagendadoDatePickerOpen] = useState(false);
+  const [isReagendadoAsChange, setIsReagendadoAsChange] = useState(false);
+  
+  // Estados para filtros en el modal
+  const [orderStatusFilter, setOrderStatusFilter] = useState('all');
+  const [orderPaymentFilter, setOrderPaymentFilter] = useState('all');
+  
+  // Estados para modal de liquidación de tienda
+  const [showStoreLiquidationModal, setShowStoreLiquidationModal] = useState(false);
+  const [selectedStoreLiquidation, setSelectedStoreLiquidation] = useState<TiendaLiquidationCalculation | null>(null);
+  
+  // Estados para filtros en el modal de tienda
+  const [storeOrderStatusFilter, setStoreOrderStatusFilter] = useState('all');
+  const [storeOrderPaymentFilter, setStoreOrderPaymentFilter] = useState('all');
+  
+  // Estados para paginación de tiendas
+  const [currentStorePage, setCurrentStorePage] = useState(1);
+  const storesPerPage = 30;
   
   // Progress loader
   const {
@@ -161,58 +153,27 @@ export default function AdminLiquidationPage() {
   } = useProgressLoader();
 
   useEffect(() => {
-    // Inicializar con la fecha de Costa Rica si no está definida
     const initializeDate = async () => {
       if (!selectedDate) {
         const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
         const costaRicaDate = getCostaRicaDateISO();
         setSelectedDate(costaRicaDate);
-        console.log('📅 Fecha inicializada para Costa Rica:', costaRicaDate);
-        return; // Salir temprano para evitar cargar datos con fecha vacía
+        return;
       }
-      
-      // Solo cargar datos si ya tenemos una fecha válida
-      loadData();
-      loadCalculations();
-      loadTiendaCalculations();
+      setLoading(true);
+      await loadCalculations();
+      await loadTiendaCalculations();
     };
     
     initializeDate();
-  }, [filters]); // Remover selectedDate de las dependencias para evitar bucle infinito
-
-  // useEffect separado para manejar cambios de fecha
-  useEffect(() => {
-    if (selectedDate) {
-      loadData();
-      loadCalculations();
-      loadTiendaCalculations();
-    }
   }, [selectedDate]);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [liquidationsData, statsData] = await Promise.all([
-        mockApi.getRouteLiquidations(filters),
-        mockApi.getRouteLiquidationStats(),
-      ]);
-      setLiquidations(liquidationsData);
-      setStats(statsData);
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadCalculations = async (isReload = false) => {
     try {
-      console.log('🚀 Iniciando loadCalculations para fecha:', selectedDate, isReload ? '(recarga)' : '');
+      console.log('🚀 Cargando liquidaciones para fecha:', selectedDate);
       
-      // Bloquear filtros durante la carga
       setIsLoadingData(true);
       
-      // Solo mostrar loader completo si no es una recarga
       if (!isReload) {
         startLoader('Procesando Liquidaciones', [
           { id: 'mensajeros', label: 'Obteniendo mensajeros únicos', status: 'pending' },
@@ -222,44 +183,33 @@ export default function AdminLiquidationPage() {
         ]);
       }
       
-      // Paso 1: Obtener liquidaciones reales
       setStepStatus('mensajeros', 'loading', 'Buscando mensajeros en la base de datos...');
       
-      // Asegurar que tenemos una fecha válida
       let fechaParaUsar = selectedDate;
       if (!fechaParaUsar) {
         const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
         fechaParaUsar = getCostaRicaDateISO();
-        console.log('📅 Usando fecha de Costa Rica por defecto:', fechaParaUsar);
       }
       
       const liquidacionesReales = await getLiquidacionesReales(fechaParaUsar);
       console.log('✅ Liquidaciones reales obtenidas:', liquidacionesReales.length);
-      console.log('📅 Fecha usada para la consulta:', fechaParaUsar);
-      
-      // Debug: mostrar fechas de los primeros pedidos
-      if (liquidacionesReales.length > 0 && liquidacionesReales[0].pedidos.length > 0) {
-        console.log('🔍 Primeros pedidos encontrados:');
-        liquidacionesReales[0].pedidos.slice(0, 3).forEach((pedido, index) => {
-          console.log(`  ${index + 1}. ID: ${pedido.id_pedido}, Fecha: ${pedido.fecha_creacion}`);
-        });
-      }
-      
-      // Log básico de liquidaciones cargadas
-      console.log(`✅ Liquidaciones cargadas: ${liquidacionesReales.length} mensajeros`);
       
       setStepStatus('mensajeros', 'completed', `${liquidacionesReales.length} mensajeros encontrados`);
       setProgress(30);
       
-      // Paso 2: Procesar pedidos
+      // Pequeño delay para mostrar el progreso
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       setStepStatus('pedidos', 'loading', 'Recopilando pedidos por mensajero...');
+      await new Promise(resolve => setTimeout(resolve, 300));
       setStepStatus('pedidos', 'completed', 'Pedidos cargados correctamente');
       setProgress(60);
       
-      // Paso 3: Calcular liquidaciones
+      // Pequeño delay para mostrar el progreso
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       setStepStatus('calculations', 'loading', 'Procesando totales y montos...');
       
-      // Convertir a formato LiquidationCalculation
       const calculations: LiquidationCalculation[] = liquidacionesReales.map((liquidation, index) => ({
         messengerId: `msg-${index + 1}`,
         messengerName: liquidation.mensajero,
@@ -272,59 +222,48 @@ export default function AdminLiquidationPage() {
         tarjetaPayments: liquidation.tarjetaPayments || 0,
         finalAmount: liquidation.finalAmount,
         orders: liquidation.pedidos,
-        isLiquidated: false,
-        canEdit: true
+        isLiquidated: liquidation.isLiquidated,
+        canEdit: !liquidation.isLiquidated
       }));
       
       console.log('✅ Calculations generadas:', calculations.length);
+      // Pequeño delay para mostrar el progreso
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       setStepStatus('calculations', 'completed', 'Liquidaciones calculadas correctamente');
       setProgress(90);
       
-      // Paso 4: Finalizar
       setStepStatus('finalization', 'loading', 'Preparando datos para mostrar...');
+      await new Promise(resolve => setTimeout(resolve, 300));
       setCalculations(calculations);
-      setHasRealData(calculations.some(c => c.orders.length > 0));
       setStepStatus('finalization', 'completed', 'Proceso completado');
       setProgress(100);
       
-      // Verificar estados de liquidación para todos los mensajeros
-      setTimeout(async () => {
-        await checkAllLiquidationStatuses(calculations);
-      }, 1000);
-      
-      
-      // Cerrar loader (más rápido para recargas)
       setTimeout(() => {
         closeLoader();
-        setIsLoadingData(false); // Desbloquear filtros
-        if (isReload) {
-          console.log('✅ Datos actualizados correctamente');
-        }
-      }, isReload ? 500 : 1000);
+        setIsLoadingData(false);
+        setLoading(false);
+      }, isReload ? 1000 : 2000);
       
     } catch (error) {
       console.error('❌ Error loading calculations:', error);
-      
-      // Marcar pasos como error
       setStepStatus('calculations', 'error', 'Error en el cálculo');
       setStepStatus('finalization', 'error', 'Proceso falló');
       
-      // Cerrar loader después de mostrar el error
       setTimeout(() => {
         closeLoader();
-        setIsLoadingData(false); // Desbloquear filtros en caso de error
+        setIsLoadingData(false);
+        setLoading(false);
       }, 3000);
       
-      // Fallback a datos vacíos si hay error
       setCalculations([]);
     }
   };
 
   const loadTiendaCalculations = async () => {
     try {
-      console.log('🚀 Iniciando loadTiendaCalculations para fecha:', selectedDate);
+      console.log('🚀 Cargando liquidaciones por tienda para fecha:', selectedDate);
       
-      // Iniciar loader
       startLoader('Procesando Liquidaciones por Tienda', [
         { id: 'tiendas', label: 'Obteniendo tiendas únicas', status: 'pending' },
         { id: 'pedidos', label: 'Cargando pedidos del día', status: 'pending' },
@@ -332,33 +271,26 @@ export default function AdminLiquidationPage() {
         { id: 'finalization', label: 'Finalizando proceso', status: 'pending' }
       ]);
       
-      // Paso 1: Obtener liquidaciones reales por tienda
       setStepStatus('tiendas', 'loading', 'Buscando tiendas en la base de datos...');
       
-      // Asegurar que tenemos una fecha válida
       let fechaParaUsar = selectedDate;
       if (!fechaParaUsar) {
         const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
         fechaParaUsar = getCostaRicaDateISO();
-        console.log('📅 Usando fecha de Costa Rica por defecto:', fechaParaUsar);
       }
       
       const liquidacionesReales = await getLiquidacionesRealesByTienda(fechaParaUsar);
       console.log('✅ Liquidaciones por tienda obtenidas:', liquidacionesReales.length);
-      console.log('📅 Fecha usada para la consulta:', fechaParaUsar);
       
       setStepStatus('tiendas', 'completed', `${liquidacionesReales.length} tiendas encontradas`);
       setProgress(30);
       
-      // Paso 2: Procesar pedidos
       setStepStatus('pedidos', 'loading', 'Recopilando pedidos por tienda...');
       setStepStatus('pedidos', 'completed', 'Pedidos cargados correctamente');
       setProgress(60);
       
-      // Paso 3: Calcular liquidaciones
       setStepStatus('calculations', 'loading', 'Procesando totales y montos...');
       
-      // Los datos ya vienen calculados de Supabase
       const calculations: TiendaLiquidationCalculation[] = liquidacionesReales.map((liquidation, index) => ({
         tienda: liquidation.tienda,
         routeDate: selectedDate,
@@ -386,36 +318,29 @@ export default function AdminLiquidationPage() {
       setStepStatus('calculations', 'completed', 'Liquidaciones calculadas correctamente');
       setProgress(90);
       
-      // Paso 4: Finalizar
       setStepStatus('finalization', 'loading', 'Preparando datos para mostrar...');
       setTiendaCalculations(calculations);
       setStepStatus('finalization', 'completed', 'Proceso completado');
       setProgress(100);
       
-      // Cerrar loader
       setTimeout(() => {
         closeLoader();
       }, 1000);
       
     } catch (error) {
       console.error('❌ Error loading tienda calculations:', error);
-      
-      // Marcar pasos como error
       setStepStatus('calculations', 'error', 'Error en el cálculo');
       setStepStatus('finalization', 'error', 'Proceso falló');
       
-      // Cerrar loader después de mostrar el error
       setTimeout(() => {
         closeLoader();
       }, 3000);
       
-      // Fallback a datos vacíos si hay error
       setTiendaCalculations([]);
     }
   };
 
   const calculateLiquidation = (calculation: LiquidationCalculation): LiquidationCalculation => {
-    // Los datos ya vienen calculados de Supabase, pero podemos recalcular si es necesario
     const totalCollected = calculation.orders.reduce((sum, order) => {
       if (order.estado_pedido === 'ENTREGADO') {
         return sum + order.valor_total;
@@ -444,8 +369,8 @@ export default function AdminLiquidationPage() {
       return sum;
     }, 0);
 
-    const totalSpent = calculation.totalSpent; // Usar el valor ya calculado
-    // El mensajero solo debe entregar el efectivo recaudado, no el total de todos los pagos
+    const totalSpent = calculation.totalSpent;
+    // Total a entregar = Plata inicial + Efectivo recaudado - Gastos (SINPE no se entrega físicamente)
     const finalAmount = calculation.initialAmount + cashPayments - totalSpent;
 
     return {
@@ -459,329 +384,6 @@ export default function AdminLiquidationPage() {
     };
   };
 
-  const handleLiquidateRoute = async (liquidationId: string) => {
-    try {
-      setLiquidating(liquidationId);
-      await mockApi.liquidateRoute(liquidationId, adminNotes);
-      setAdminNotes('');
-      await loadData();
-    } catch (error) {
-      console.error('Error liquidating route:', error);
-      alert('Error al liquidar la ruta: ' + (error as Error).message);
-    } finally {
-      setLiquidating(null);
-    }
-  };
-
-  const handleEditInitialAmount = (messengerId: string, currentAmount: number) => {
-    setEditingInitialAmount(messengerId);
-    setNewInitialAmount(currentAmount.toString());
-  };
-
-  const handleSaveInitialAmount = (messengerId: string) => {
-    const amount = parseFloat(newInitialAmount);
-    if (isNaN(amount) || amount < 0) {
-      alert('Por favor ingrese un monto válido');
-      return;
-    }
-
-    setCalculations(prev => 
-      prev.map(calc => 
-        calc.messengerId === messengerId 
-          ? { ...calc, initialAmount: amount }
-          : calc
-      )
-    );
-    setEditingInitialAmount(null);
-    setNewInitialAmount('');
-  };
-
-  const handleCancelEdit = () => {
-    setEditingInitialAmount(null);
-    setNewInitialAmount('');
-  };
-
-  const handleLiquidateMessenger = (calculation: LiquidationCalculation) => {
-    setSelectedLiquidation(calculation);
-    setShowLiquidationModal(true);
-  };
-
-  const handleViewRouteDetail = (calculation: LiquidationCalculation) => {
-    setSelectedRouteDetail(calculation);
-    setShowRouteDetailModal(true);
-  };
-
-  const handleViewAndLiquidate = async (calculation: LiquidationCalculation) => {
-    // Verificar si la liquidación ya está completada
-    try {
-      const { checkLiquidationStatus } = await import('@/lib/supabase-pedidos');
-      const fechaParaVerificar = selectedDate || calculation.routeDate;
-      const isCompleted = await checkLiquidationStatus(calculation.messengerName, fechaParaVerificar);
-      setIsLiquidationCompleted(isCompleted);
-      
-      // Actualizar el estado en el cálculo para que se refleje en la tabla
-      if (isCompleted) {
-        setCalculations(prev => 
-          prev.map(calc => 
-            calc.messengerId === calculation.messengerId 
-              ? { ...calc, isLiquidated: true }
-              : calc
-          )
-        );
-        // Recargar datos para sincronizar con la base de datos
-        console.log('🔄 Recargando datos después de verificar liquidación...');
-        await loadCalculations(true);
-      }
-      
-      console.log(`🔍 Liquidación para ${calculation.messengerName} en ${fechaParaVerificar}: ${isCompleted ? 'COMPLETADA' : 'PENDIENTE'}`);
-    } catch (error) {
-      console.error('❌ Error verificando estado de liquidación:', error);
-      setIsLiquidationCompleted(false);
-    }
-
-    // Calcular contadores de estado
-    const counts = {
-      total: calculation.orders.length,
-      entregados: calculation.orders.filter(p => p.estado_pedido === 'ENTREGADO').length,
-      devoluciones: calculation.orders.filter(p => p.estado_pedido === 'DEVOLUCION').length,
-      reagendados: calculation.orders.filter(p => p.estado_pedido === 'REAGENDADO').length,
-      pendientes: calculation.orders.filter(p => p.estado_pedido === 'PENDIENTE' || !p.estado_pedido).length
-    };
-    setStatusCounts(counts);
-
-    // Console.log simplificado y legible
-    const pedidosList = calculation.orders.map((pedido, index) => {
-      const estado = pedido.estado_pedido || 'sin_estado';
-      const metodo = pedido.metodo_pago || 'sin_metodo';
-      const entregado = estado === 'ENTREGADO' ? '✅' : '❌';
-      const cuentaEnRecaudado = estado === 'ENTREGADO' ? 'SÍ' : 'NO';
-      
-      return `${index + 1}. ${pedido.id_pedido} | ${pedido.cliente_nombre} | ${estado} ${entregado} | ${metodo} | ₡${pedido.valor_total} | Cuenta: ${cuentaEnRecaudado}`;
-    }).join('\n');
-
-    console.log(`
-🔍 ===== LIQUIDACIÓN: ${calculation.messengerName} =====
-📅 Fecha: ${calculation.routeDate}
-📦 Total pedidos: ${calculation.orders.length}
-💰 Total Recaudado: ₡${calculation.totalCollected}
-💵 Efectivo: ₡${calculation.cashPayments}
-📱 SINPE: ₡${calculation.sinpePayments}
-💳 Tarjeta: ₡${calculation.tarjetaPayments || 0}
-💸 Gastos: ₡${calculation.totalSpent}
-🏦 Plata Inicial: ₡${calculation.initialAmount}
-📊 Total a Entregar: ₡${calculation.finalAmount}
-
-📋 LISTA DE PEDIDOS:
-${pedidosList}
-
-🔍 ==========================================
-    `);
-    
-    setSelectedViewAndLiquidate(calculation);
-    setInitialAmountInput('0'); // Siempre empezar en 0
-    setShowViewAndLiquidateModal(true);
-  };
-
-  const handleViewNotes = (pedido: PedidoTest) => {
-    setSelectedOrderNotes(pedido);
-    setShowNotesModal(true);
-  };
-
-  const handleViewExpenses = async (calculation: LiquidationCalculation) => {
-    try {
-      // Obtener gastos del mensajero usando la misma lógica que en "Mi Ruta de Hoy"
-      const { getGastosMensajeros } = await import('@/lib/supabase-pedidos');
-      const gastosData = await getGastosMensajeros(calculation.routeDate);
-      
-      // Buscar gastos del mensajero específico
-      const gastosDelMensajero = gastosData.find(g => g.mensajero === calculation.messengerName);
-      
-      setSelectedExpenses({
-        mensajero: calculation.messengerName,
-        gastos: gastosDelMensajero?.gastos || []
-      });
-      setShowExpensesModal(true);
-    } catch (error) {
-      console.error('Error obteniendo gastos:', error);
-      setSelectedExpenses({
-        mensajero: calculation.messengerName,
-        gastos: []
-      });
-      setShowExpensesModal(true);
-    }
-  };
-
-  const handleViewPendingOrders = (calculation: LiquidationCalculation) => {
-    // Filtrar pedidos que no están entregados (pendientes, devoluciones, reagendados, etc.)
-    const pendingOrders = calculation.orders.filter(pedido => 
-      pedido.estado_pedido !== 'ENTREGADO'
-    );
-    
-    setSelectedPendingOrders({
-      mensajero: calculation.messengerName,
-      pedidos: pendingOrders
-    });
-    setShowPendingOrdersModal(true);
-  };
-
-  const handleViewSinpeOrders = (calculation: LiquidationCalculation) => {
-    const sinpeOrders = calculation.orders.filter(pedido => 
-      pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'SINPE'
-    );
-    setSelectedSinpeOrders(sinpeOrders);
-    setShowSinpeModal(true);
-  };
-
-  const handleViewTarjetaOrders = (calculation: LiquidationCalculation) => {
-    const tarjetaOrders = calculation.orders.filter(pedido => 
-      pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'TARJETA'
-    );
-    setSelectedTarjetaOrders(tarjetaOrders);
-    setShowTarjetaModal(true);
-  };
-
-  const handleViewMap = (link: string) => {
-    window.open(link, '_blank', 'noopener,noreferrer');
-  };
-
-  // Funciones para iconos y colores de gastos (igual que en Mi Ruta de Hoy)
-  const getExpenseIcon = (type: string) => {
-    switch (type.toLowerCase()) {
-      case 'combustible': return <Fuel className="w-4 h-4" />;
-      case 'mantenimiento': return <Wrench className="w-4 h-4" />;
-      case 'peaje': return <Car className="w-4 h-4" />;
-      case 'fuel': return <Fuel className="w-4 h-4" />;
-      case 'maintenance': return <Wrench className="w-4 h-4" />;
-      case 'peaje': return <Car className="w-4 h-4" />;
-      default: return <DollarSign className="w-4 h-4" />;
-    }
-  };
-
-  const getExpenseColor = (type: string) => {
-    switch (type.toLowerCase()) {
-      case 'combustible': return 'bg-blue-100 text-blue-600';
-      case 'mantenimiento': return 'bg-orange-100 text-orange-600';
-      case 'peaje': return 'bg-purple-100 text-purple-600';
-      case 'fuel': return 'bg-blue-100 text-blue-600';
-      case 'maintenance': return 'bg-orange-100 text-orange-600';
-      case 'peaje': return 'bg-purple-100 text-purple-600';
-      default: return 'bg-gray-100 text-gray-600';
-    }
-  };
-
-  const handleViewComprobante = (comprobante: string) => {
-    // Aquí podrías implementar la lógica para ver el comprobante
-    alert(`Ver comprobante: ${comprobante}`);
-  };
-
-  // Función para verificar y actualizar el estado de todas las liquidaciones
-  const checkAllLiquidationStatuses = async (calculations: LiquidationCalculation[]) => {
-    try {
-      const { checkLiquidationStatus, getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
-      const fechaParaVerificar = selectedDate || getCostaRicaDateISO();
-      
-      console.log('🔍 Verificando estados de liquidación para todos los mensajeros...');
-      
-      // Verificar cada mensajero y actualizar el estado
-      for (const calc of calculations) {
-        try {
-          const isCompleted = await checkLiquidationStatus(calc.messengerName, fechaParaVerificar);
-          
-          if (isCompleted && !calc.isLiquidated) {
-            // Actualizar el estado en el array de cálculos
-            setCalculations(prev => 
-              prev.map(c => 
-                c.messengerId === calc.messengerId 
-                  ? { ...c, isLiquidated: true }
-                  : c
-              )
-            );
-            console.log(`✅ ${calc.messengerName} marcado como liquidado`);
-          }
-        } catch (error) {
-          console.error(`❌ Error verificando ${calc.messengerName}:`, error);
-        }
-      }
-      
-      console.log('✅ Verificación de estados completada');
-    } catch (error) {
-      console.error('❌ Error en checkAllLiquidationStatuses:', error);
-    }
-  };
-
-
-  const confirmLiquidation = async (calculation: LiquidationCalculation, initialAmount?: number) => {
-    try {
-      // Usar la fecha de la liquidación seleccionada
-      const fechaParaEnviar = selectedDate || calculation.routeDate;
-      
-      // Usar el monto inicial del input o 0 por defecto
-      const plataInicial = initialAmount || 0;
-      
-      // Calcular el monto final correctamente: Plata Inicial + Efectivo Recaudado - Gastos
-      const montoFinal = plataInicial + calculation.cashPayments - calculation.totalSpent;
-      
-      console.log('📊 Datos de liquidación a enviar:', {
-        fecha: fechaParaEnviar,
-        mensajero: calculation.messengerName,
-        plata_inicial: plataInicial,
-        total_recaudado: calculation.totalCollected,
-        pagos_sinpe: calculation.sinpePayments,
-        pagos_efectivo: calculation.cashPayments,
-        gastos: calculation.totalSpent,
-        monto_final: montoFinal
-      });
-      
-      // Enviar al endpoint de liquidación
-      const response = await fetch('https://primary-production-2b25b.up.railway.app/webhook/add-liquidacion', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fecha: fechaParaEnviar,
-          mensajero: calculation.messengerName,
-          plata_inicial: plataInicial,
-          total_recaudado: calculation.totalCollected,
-          pagos_sinpe: calculation.sinpePayments,
-          pagos_efectivo: calculation.cashPayments,
-          gastos: calculation.totalSpent,
-          monto_final: montoFinal
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error al enviar liquidación: ${response.status}`);
-      }
-
-      const responseData = await response.json();
-      console.log('✅ Liquidación enviada exitosamente:', responseData);
-
-      // Marcar como liquidado localmente
-      setCalculations(prev => 
-        prev.map(calc => 
-          calc.messengerId === calculation.messengerId 
-            ? { ...calc, isLiquidated: true, canEdit: false, initialAmount: plataInicial }
-            : calc
-        )
-      );
-      
-      // Restringir edición de pedidos
-      setIsEditingRestricted(true);
-      
-      // Cerrar modales
-      setShowLiquidationModal(false);
-      setShowViewAndLiquidateModal(false);
-      
-      // Recargar datos para sincronizar con la base de datos
-      console.log('🔄 Recargando datos después de liquidación...');
-      await loadCalculations(true);
-    } catch (error) {
-      console.error('Error confirming liquidation:', error);
-      alert('Error al confirmar la liquidación: ' + (error instanceof Error ? error.message : 'Error desconocido'));
-    }
-  };
-
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-CR', {
       style: 'currency',
@@ -790,54 +392,86 @@ ${pedidosList}
     }).format(amount);
   };
 
-  // Funciones auxiliares para filtros y paginación de tiendas
-  const getFilteredOrders = (orders: PedidoTest[], statusFilter: string) => {
-    if (statusFilter === 'TODOS') {
-      return orders;
+  const getStatusBadge = (isLiquidated: boolean) => {
+    if (isLiquidated) {
+      return <Badge className="bg-green-100 text-green-800">Liquidado</Badge>;
     }
-    return orders.filter(pedido => pedido.estado_pedido === statusFilter);
+    return <Badge variant="outline" className="text-yellow-600 border-yellow-300">Pendiente</Badge>;
   };
 
-  const getPaginatedOrders = (orders: PedidoTest[], currentPage: number, pageSize: number = 10) => {
-    const startIndex = (currentPage - 1) * pageSize;
-    const endIndex = startIndex + pageSize;
-    return orders.slice(startIndex, endIndex);
+  const handleViewLiquidation = (calculation: LiquidationCalculation) => {
+    setSelectedLiquidation(calculation);
+    setShowLiquidationModal(true);
   };
 
-  const getTotalPages = (totalOrders: number, pageSize: number = 10) => {
-    return Math.ceil(totalOrders / pageSize);
+  const handleViewExpenses = async (calculation: LiquidationCalculation | TiendaLiquidationCalculation) => {
+    try {
+      const { getGastosMensajeros } = await import('@/lib/supabase-pedidos');
+      const gastosData = await getGastosMensajeros(calculation.routeDate);
+      
+      const nombre = 'messengerName' in calculation ? calculation.messengerName : calculation.tienda;
+      const gastosDelMensajero = gastosData.find(g => g.mensajero === nombre);
+      
+      setSelectedExpenses({
+        mensajero: nombre,
+        gastos: gastosDelMensajero?.gastos || []
+      });
+      setShowExpensesModal(true);
+    } catch (error) {
+      console.error('Error obteniendo gastos:', error);
+      const nombre = 'messengerName' in calculation ? calculation.messengerName : calculation.tienda;
+      setSelectedExpenses({
+        mensajero: nombre,
+        gastos: []
+      });
+      setShowExpensesModal(true);
+    }
   };
 
-  const getCurrentPageForTienda = (tienda: string) => {
-    return tiendaCurrentPage[tienda] || 1;
+  const handleViewPendingOrders = (calculation: LiquidationCalculation | TiendaLiquidationCalculation) => {
+    const pendingOrders = calculation.orders.filter(pedido => 
+      pedido.estado_pedido !== 'ENTREGADO'
+    );
+    
+    const nombre = 'messengerName' in calculation ? calculation.messengerName : calculation.tienda;
+    setSelectedPendingOrders({
+      mensajero: nombre,
+      pedidos: pendingOrders
+    });
+    setShowPendingOrdersModal(true);
   };
 
-  const setCurrentPageForTienda = (tienda: string, page: number) => {
-    setTiendaCurrentPage(prev => ({
-      ...prev,
-      [tienda]: page
-    }));
+  const handleViewSinpeOrders = (calculation: LiquidationCalculation | TiendaLiquidationCalculation) => {
+    const sinpeOrders = calculation.orders.filter(pedido => 
+      pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'SINPE'
+    );
+    setSelectedSinpeOrders(sinpeOrders);
+    setShowSinpeModal(true);
   };
 
-  // Función para actualizar el estado de un pedido
+  const handleViewTarjetaOrders = (calculation: LiquidationCalculation | TiendaLiquidationCalculation) => {
+    const tarjetaOrders = calculation.orders.filter(pedido => 
+      pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'TARJETA'
+    );
+    setSelectedTarjetaOrders(tarjetaOrders);
+    setShowTarjetaModal(true);
+  };
+
   const handleUpdateOrderStatus = async () => {
     if (!selectedOrderForUpdate || !newStatus) return;
     
     try {
       setUpdatingOrder(selectedOrderForUpdate.id_pedido);
       
-      // Preparar datos para el webhook
       const webhookData = {
         idPedido: selectedOrderForUpdate.id_pedido,
         mensajero: selectedOrderForUpdate.mensajero_concretado || selectedOrderForUpdate.mensajero_asignado || 'SIN_ASIGNAR',
-        usuario: user?.name || 'Admin', // Usuario que realiza la acción
+        usuario: 'Admin', // Usuario admin
         
-        // Datos del formulario
         estadoPedido: newStatus === 'REAGENDADO' ? 'REAGENDO' : newStatus,
         metodoPago: newStatus === 'DEVOLUCION' || newStatus === 'REAGENDADO' ? null : paymentMethod,
         nota: statusComment || '',
         
-        // Datos del pedido
         clienteNombre: selectedOrderForUpdate.cliente_nombre,
         clienteTelefono: selectedOrderForUpdate.cliente_telefono || '',
         direccion: selectedOrderForUpdate.direccion || '',
@@ -846,12 +480,25 @@ ${pedidosList}
         distrito: selectedOrderForUpdate.distrito || '',
         valorTotal: selectedOrderForUpdate.valor_total,
         productos: selectedOrderForUpdate.productos || 'No especificados',
-        tienda: selectedOrderForUpdate.tienda || 'ALL STARS'
+        tienda: selectedOrderForUpdate.tienda || 'ALL STARS',
+        
+        // Campos adicionales para el modal completo
+        comprobantes: uploadedReceipts,
+        evidencia_comunicacion: uploadedEvidence,
+        es_reagendado_cambio: isReagendadoAsChange,
+        fecha_reagendado: reagendadoDate ? reagendadoDate.toISOString() : null,
+        
+        // Campos para pagos duales
+        primer_metodo_pago: firstPaymentMethod,
+        segundo_metodo_pago: secondPaymentMethod,
+        primer_monto: firstPaymentAmount ? parseFloat(firstPaymentAmount) : null,
+        segundo_monto: secondPaymentAmount ? parseFloat(secondPaymentAmount) : null,
+        primer_comprobante: firstPaymentReceipt,
+        segundo_comprobante: secondPaymentReceipt
       };
 
       console.log('🔄 Actualizando estado del pedido:', webhookData);
 
-      // Llamar al webhook
       const response = await fetch("https://primary-production-2b25b.up.railway.app/webhook/actualizar-pedido", {
         method: "POST",
         headers: {
@@ -864,16 +511,16 @@ ${pedidosList}
       console.log("📡 Respuesta del webhook:", resultado);
 
       if (response.ok) {
-        // Recargar los datos para reflejar los cambios
-        await loadTiendaCalculations();
         await loadCalculations(true);
         
-        // Cerrar modal y resetear estado
-        setIsUpdateStatusModalOpen(false);
+        setShowUpdateStatusModal(false);
         setSelectedOrderForUpdate(null);
         setNewStatus('ENTREGADO');
         setStatusComment('');
         setPaymentMethod('efectivo');
+        
+        // Resetear todos los estados del modal
+        resetModalState();
         
         alert(`Pedido ${selectedOrderForUpdate.id_pedido} actualizado a ${newStatus} exitosamente`);
       } else {
@@ -887,31 +534,109 @@ ${pedidosList}
     }
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('es-CR', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+  const handleEditOrderStatus = (pedido: PedidoTest) => {
+    setSelectedOrderForUpdate(pedido);
+    setNewStatus(pedido.estado_pedido || 'ENTREGADO');
+    setStatusComment('');
+    setPaymentMethod(pedido.metodo_pago || 'efectivo');
+    setShowUpdateStatusModal(true);
+    resetModalState();
   };
 
-  const getStatusBadge = (isLiquidated: boolean) => {
-    if (isLiquidated) {
-      return <Badge className="bg-green-100 text-green-800">Liquidado</Badge>;
-    }
-    return <Badge variant="outline" className="text-yellow-600 border-yellow-300">Pendiente</Badge>;
+  // Función para resetear el estado del modal
+  const resetModalState = () => {
+    setUploadedReceipts([]);
+    setUploadedEvidence(null);
+    setIsDualPayment(false);
+    setFirstPaymentMethod('efectivo');
+    setSecondPaymentMethod('');
+    setFirstPaymentAmount('');
+    setSecondPaymentAmount('');
+    setFirstPaymentReceipt(null);
+    setSecondPaymentReceipt(null);
+    setReagendadoDate(null);
+    setIsReagendadoDatePickerOpen(false);
+    setIsReagendadoAsChange(false);
   };
 
-  const filteredLiquidations = liquidations.filter(liquidation => {
-    const matchesSearch = 
-      liquidation.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      liquidation.messenger.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      liquidation.routeDate.includes(searchTerm);
+  // Función para manejar subida de archivos
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, type: 'receipt' | 'evidence') => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    const reader = new FileReader();
     
-    return matchesSearch;
-  });
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      if (type === 'receipt') {
+        setUploadedReceipts(prev => [...prev, result]);
+      } else if (type === 'evidence') {
+        setUploadedEvidence(result);
+      }
+    };
+    
+    reader.readAsDataURL(file);
+  };
 
-  if (loading) {
+  // Función para manejar subida de archivos en pagos duales
+  const handleDualPaymentFileUpload = (event: React.ChangeEvent<HTMLInputElement>, type: 'first' | 'second') => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      if (type === 'first') {
+        setFirstPaymentReceipt(result);
+      } else if (type === 'second') {
+        setSecondPaymentReceipt(result);
+      }
+    };
+    
+    reader.readAsDataURL(file);
+  };
+
+  // Funciones para iconos y colores de gastos
+  const getExpenseIcon = (type: string) => {
+    switch (type.toLowerCase()) {
+      case 'combustible': return <Truck className="w-4 h-4" />;
+      case 'mantenimiento': return <Calculator className="w-4 h-4" />;
+      case 'peaje': return <Truck className="w-4 h-4" />;
+      default: return <DollarSign className="w-4 h-4" />;
+    }
+  };
+
+  const getExpenseColor = (type: string) => {
+    switch (type.toLowerCase()) {
+      case 'combustible': return 'bg-blue-100 text-blue-600';
+      case 'mantenimiento': return 'bg-orange-100 text-orange-600';
+      case 'peaje': return 'bg-purple-100 text-purple-600';
+      default: return 'bg-gray-100 text-gray-600';
+    }
+  };
+
+  const handleViewComprobante = (comprobante: string) => {
+    window.open(comprobante, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleViewPedidoComprobante = (pedido: any) => {
+    // Buscar el comprobante del pedido en los datos
+    if (pedido.comprobante_link) {
+      window.open(pedido.comprobante_link, '_blank', 'noopener,noreferrer');
+    } else {
+      alert(`No hay comprobante disponible para el pedido ${pedido.id_pedido}`);
+    }
+  };
+
+  const handleViewStoreLiquidation = (tienda: TiendaLiquidationCalculation) => {
+    setSelectedStoreLiquidation(tienda);
+    setShowStoreLiquidationModal(true);
+  };
+
+  if (loading && !isLoaderVisible) {
     return (
       <div className="flex flex-col items-center justify-center h-64 space-y-4">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
@@ -965,234 +690,260 @@ ${pedidosList}
         </div>
       </div>
 
-      {/* Alert de restricción de edición */}
-      {isEditingRestricted && (
-        <Alert className="border-orange-200 bg-orange-50">
-          <Lock className="w-4 h-4 text-orange-600" />
-          <AlertDescription className="text-orange-800">
-            <strong>Edición restringida:</strong> Los pedidos no pueden ser editados una vez que el día ha sido liquidado o ha pasado al día siguiente.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Mensaje informativo cuando no hay datos reales */}
-      {!hasRealData && calculations.length > 0 && (
-        <Alert className="mb-4">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            <strong>Sin pedidos entregados:</strong> Los mensajeros mostrados tienen pedidos asignados para el {selectedDate}, pero ninguno ha sido marcado como "entregado". 
-            Verifica que los pedidos hayan sido completados correctamente.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Truck className="w-5 h-5 text-blue-600" />
+      {/* Métricas Unificadas */}
+      <div className="mb-6">
+        {/* Primera fila de métricas principales */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Truck className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Mensajeros con Pedidos</p>
+                  <p className="text-lg font-semibold">{calculations.length}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Mensajeros con Pedidos</p>
-                <p className="text-2xl font-bold">{calculations.length}</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
+                  <Clock className="w-4 h-4 text-yellow-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Pendientes por Liquidar</p>
+                  <p className="text-lg font-semibold">{calculations.filter(calc => !calculateLiquidation(calc).isLiquidated).length}</p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                  <DollarSign className="w-4 h-4 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Total Recaudado</p>
+                  <p className="text-lg font-semibold text-green-600">
+                    {formatCurrency(calculations.reduce((sum, calc) => sum + calculateLiquidation(calc).totalCollected, 0))}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <Calculator className="w-4 h-4 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Total a Entregar</p>
+                  <p className="text-lg font-semibold text-purple-600">
+                    {formatCurrency(calculations.reduce((sum, calc) => sum + calculateLiquidation(calc).finalAmount, 0))}
+                  </p>
+                  <p className="text-xs text-gray-500">(Efectivo - Gastos)</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <Clock className="w-5 h-5 text-yellow-600" />
+        {/* Segunda fila de métricas de pedidos */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Pedidos Entregados</p>
+                  <p className="text-lg font-semibold text-green-600">
+                    {calculations.reduce((sum, calc) => sum + calc.orders.filter(o => o.estado_pedido === 'ENTREGADO').length, 0)}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Pendientes por Liquidar</p>
-                <p className="text-2xl font-bold text-yellow-600">
-                  {calculations.filter(c => !c.isLiquidated).length}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Recaudado</p>
-                <p className="text-2xl font-bold">
-                  {formatCurrency(calculations.reduce((sum, c) => sum + c.totalCollected, 0))}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <Calculator className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Total a Entregar</p>
-                <p className="text-2xl font-bold">
-                  {formatCurrency(calculations.reduce((sum, c) => sum + c.finalAmount, 0))}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Gráficas de Comparación */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Gráfica de Barras - Comparación por Mensajero */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5" />
-              Recaudación por Mensajero
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={calculations.map(calc => ({
-                name: calc.messengerName.split(' ')[0], // Solo primer nombre
-                recaudado: calc.totalCollected,
-                gastos: calc.totalSpent,
-                final: calc.finalAmount
-              }))}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                        <Tooltip 
-                          formatter={(value, name) => [
-                            `₡${Number(value).toLocaleString()}`, 
-                            name === 'recaudado' ? 'Total Recaudado' : 
-                            name === 'gastos' ? 'Gastos' : 'Total a Entregar'
-                          ]}
-                        />
-                        <Legend />
-                        <Bar dataKey="recaudado" fill="#10b981" name="Total Recaudado" />
-                        <Bar dataKey="gastos" fill="#f59e0b" name="Gastos" />
-                        <Bar dataKey="final" fill="#8b5cf6" name="Total a Entregar" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Gráfica de Pie - Distribución de Pagos */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PieChart className="w-5 h-5" />
-              Distribución de Métodos de Pago
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const pieData = [
-                {
-                  name: 'Efectivo',
-                  value: calculations.reduce((sum, calc) => 
-                    sum + calc.orders.filter(o => o.metodo_pago === 'EFECTIVO').length, 0
-                  ),
-                  color: '#10b981'
-                },
-                {
-                  name: 'SINPE',
-                  value: calculations.reduce((sum, calc) => 
-                    sum + calc.orders.filter(o => o.metodo_pago === 'SINPE').length, 0
-                  ),
-                  color: '#3b82f6'
-                },
-                {
-                  name: 'Tarjeta',
-                  value: calculations.reduce((sum, calc) => 
-                    sum + calc.orders.filter(o => o.metodo_pago === 'TARJETA').length, 0
-                  ),
-                  color: '#8b5cf6'
-                },
-                {
-                  name: '2 Pagos',
-                  value: calculations.reduce((sum, calc) => 
-                    sum + calc.orders.filter(o => o.metodo_pago === '2PAGOS').length, 0
-                  ),
-                  color: '#f59e0b'
-                }
-              ].filter(item => item.value > 0);
-
-              if (pieData.length === 0) {
-                return (
-                  <div className="flex items-center justify-center h-[300px] text-gray-500">
-                    <div className="text-center">
-                      <PieChart className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                      <p>No hay datos de métodos de pago</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
+                  <Clock className="w-4 h-4 text-yellow-600" />
                     </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Pedidos Pendientes</p>
+                  <p className="text-lg font-semibold text-yellow-600">
+                    {calculations.reduce((sum, calc) => sum + calc.orders.filter(o => o.estado_pedido === 'PENDIENTE').length, 0)}
+                  </p>
+                          </div>
+                            </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                  <XCircle className="w-4 h-4 text-red-600" />
+                            </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Pedidos Devueltos</p>
+                  <p className="text-lg font-semibold text-red-600">
+                    {calculations.reduce((sum, calc) => sum + calc.orders.filter(o => o.estado_pedido === 'DEVOLUCION').length, 0)}
+                  </p>
+                          </div>
+                        </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Calendar className="w-4 h-4 text-blue-600" />
+                        </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Pedidos Reagendados</p>
+                  <p className="text-lg font-semibold text-blue-600">
+                    {calculations.reduce((sum, calc) => sum + calc.orders.filter(o => o.estado_pedido === 'REAGENDADO').length, 0)}
+                  </p>
+                    </div>
+              </div>
+            </CardContent>
+          </Card>
                   </div>
-                );
-              }
 
-              return (
-                <ResponsiveContainer width="100%" height={300}>
-                  <RechartsPieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </RechartsPieChart>
-                </ResponsiveContainer>
-              );
-            })()}
-          </CardContent>
-        </Card>
+        {/* Tercera fila de métricas de pagos */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                  <Banknote className="w-4 h-4 text-green-600" />
+                    </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Pagos en Efectivo</p>
+                  <p className="text-lg font-semibold text-green-600">
+                    {formatCurrency(calculations.reduce((sum, calc) => sum + calculateLiquidation(calc).cashPayments, 0))}
+                  </p>
+                          </div>
+                            </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Smartphone className="w-4 h-4 text-blue-600" />
+                            </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Pagos SINPE</p>
+                  <p className="text-lg font-semibold text-blue-600">
+                    {formatCurrency(calculations.reduce((sum, calc) => sum + calculateLiquidation(calc).sinpePayments, 0))}
+                  </p>
+                          </div>
+                        </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <CreditCard className="w-4 h-4 text-purple-600" />
+                        </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Pagos con Tarjeta</p>
+                  <p className="text-lg font-semibold text-purple-600">
+                    {formatCurrency(calculations.reduce((sum, calc) => sum + (calculateLiquidation(calc).tarjetaPayments || 0), 0))}
+                  </p>
+                    </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                  <Minus className="w-4 h-4 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Total de Gastos</p>
+                  <p className="text-lg font-semibold text-red-600">
+                    {formatCurrency(calculations.reduce((sum, calc) => sum + calculateLiquidation(calc).totalSpent, 0))}
+                  </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+        </div>
+
+        {/* Botón para ver pedidos pendientes */}
+        <div className="flex justify-center mb-4">
+          <Button 
+            onClick={() => setIsPendingOrdersModalOpen(true)}
+            variant="outline"
+            className="border-orange-200 text-orange-700 hover:bg-orange-50"
+          >
+            <AlertTriangle className="w-4 h-4 mr-2" />
+            Ver Pedidos Pendientes y Sin Asignar
+            <Badge variant="secondary" className="ml-2">
+              {(() => {
+                const pedidosPendientes = calculations.flatMap(calc => 
+                  calc.orders.filter(o => o.estado_pedido === 'PENDIENTE')
+                );
+                const pedidosSinAsignar = calculations.flatMap(calc =>
+                  calc.orders.filter(o => !o.mensajero_asignado || o.mensajero_asignado === '')
+                );
+                return pedidosPendientes.length + pedidosSinAsignar.length;
+      })()}
+            </Badge>
+          </Button>
+        </div>
       </div>
 
-      {/* Tabla de Liquidaciones */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calculator className="w-5 h-5" />
-            Liquidaciones por Ruta - {selectedDate}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
+      {/* Tabla de Liquidaciones de Mensajeros */}
+      <div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calculator className="w-5 h-5" />
+              Liquidaciones por Ruta - {selectedDate}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="overflow-x-auto">
+              <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Mensajero</TableHead>
-                <TableHead>Total Recaudado</TableHead>
-                <TableHead>Pagos SINPE</TableHead>
-                <TableHead>Pagos Efectivo</TableHead>
-                <TableHead>Gastos</TableHead>
-                <TableHead>Total a Entregar</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Acciones</TableHead>
+                <TableHead className="text-center py-1 font-semibold text-xs">Mensajero</TableHead>
+                <TableHead className="text-center py-1 font-semibold text-xs">Pedidos</TableHead>
+                <TableHead className="text-center py-1 font-semibold text-xs">Total Recaudado</TableHead>
+                <TableHead className="text-center py-1 font-semibold text-xs">Pagos SINPE</TableHead>
+                <TableHead className="text-center py-1 font-semibold text-xs">Pagos Efectivo</TableHead>
+                <TableHead className="text-center py-1 font-semibold text-xs">Pagos Tarjeta</TableHead>
+                <TableHead className="text-center py-1 font-semibold text-xs">Gastos</TableHead>
+                <TableHead className="text-center py-1 font-semibold text-xs">Total a Entregar</TableHead>
+                <TableHead className="text-center py-1 font-semibold text-xs">Estado</TableHead>
+                <TableHead className="text-center py-1 font-semibold text-xs">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {calculations.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-12">
+                  <TableCell colSpan={11} className="text-center py-12">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <Truck className="w-12 h-12 text-gray-400" />
                       <div>
@@ -1207,109 +958,150 @@ ${pedidosList}
               ) : (
                 calculations.map((calculation) => {
                   const calculated = calculateLiquidation(calculation);
+                  
+                  const pedidosEntregados = calculated.orders.filter(p => p.estado_pedido === 'ENTREGADO').length;
+                  const pedidosPendientes = calculated.orders.filter(p => p.estado_pedido === 'PENDIENTE').length;
+                  const pedidosDevueltos = calculated.orders.filter(p => p.estado_pedido === 'DEVOLUCION').length;
+                  const pedidosReagendados = calculated.orders.filter(p => p.estado_pedido === 'REAGENDADO').length;
+                  
+                  const valorEntregados = calculated.orders
+                    .filter(p => p.estado_pedido === 'ENTREGADO')
+                    .reduce((sum, p) => sum + p.valor_total, 0);
+                  const valorPendientes = calculated.orders
+                    .filter(p => p.estado_pedido === 'PENDIENTE')
+                    .reduce((sum, p) => sum + p.valor_total, 0);
+                  const valorDevueltos = calculated.orders
+                    .filter(p => p.estado_pedido === 'DEVOLUCION')
+                    .reduce((sum, p) => sum + p.valor_total, 0);
+                  
                   return (
                     <TableRow key={calculation.messengerId}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-muted-foreground" />
-                        <div>
-                          <span className="font-medium">{calculation.messengerName}</span>
-                          <div className="text-xs text-muted-foreground">
-                            {calculated.orders.length} pedidos
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-green-600" />
-                        <span className="font-bold text-green-600">
-                          {formatCurrency(calculated.totalCollected)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Smartphone className="w-4 h-4 text-blue-600" />
-                        <span className="font-bold text-blue-600">
-                          {formatCurrency(calculated.sinpePayments)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Banknote className="w-4 h-4 text-green-600" />
-                        <span className="font-bold text-green-600">
-                          {formatCurrency(calculated.cashPayments)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Minus className="w-4 h-4 text-red-600" />
-                        <span className="font-bold text-red-600">
-                          {formatCurrency(calculated.totalSpent)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Calculator className="w-4 h-4 text-purple-600" />
-                        <span className="font-bold text-purple-600">
-                          {formatCurrency(calculated.finalAmount)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      {getStatusBadge(calculated.isLiquidated)}
-                    </TableCell>
-                    
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {!calculated.isLiquidated ? (
-                          <Button
-                            size="sm"
-                            onClick={() => handleViewAndLiquidate(calculated)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
-                          >
-                            <Eye className="w-4 h-4 mr-1" />
-                            Ver y Liquidar
-                          </Button>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              onClick={() => handleViewAndLiquidate(calculated)}
-                              className="bg-green-600 hover:bg-green-700 text-white"
-                            >
-                              <Eye className="w-4 h-4 mr-1" />
-                              Ver
-                            </Button>
-                            <div className="flex items-center gap-1 text-green-600">
-                              <CheckCircle2 className="w-4 h-4" />
-                              <span className="text-sm">Liquidado</span>
+                      <TableCell className="py-1">
+                        <div className="flex items-center gap-1">
+                          <User className="w-3 h-3 text-muted-foreground" />
+                          <div>
+                            <span className="font-semibold text-sm">{calculation.messengerName}</span>
+                            <div className="text-xs text-muted-foreground">
+                              {calculated.orders.length} pedidos
                             </div>
                           </div>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
+                        </div>
+                      </TableCell>
+                      
+                      <TableCell className="py-1">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1">
+                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                            <span className="font-semibold text-green-600 text-xs">{pedidosEntregados}</span>
+                            <span className="text-xs text-muted-foreground">entregados</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full"></div>
+                            <span className="font-semibold text-yellow-600 text-xs">{pedidosPendientes}</span>
+                            <span className="text-xs text-muted-foreground">pendientes</span>
+                          </div>
+                          {pedidosDevueltos > 0 && (
+                            <div className="flex items-center gap-1">
+                              <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                              <span className="font-semibold text-red-600 text-xs">{pedidosDevueltos}</span>
+                              <span className="text-xs text-muted-foreground">devueltos</span>
+                            </div>
+                          )}
+                          {pedidosReagendados > 0 && (
+                            <div className="flex items-center gap-1">
+                              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                              <span className="font-semibold text-blue-600 text-xs">{pedidosReagendados}</span>
+                              <span className="text-xs text-muted-foreground">reagendados</span>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      
+                      <TableCell className="py-1">
+                        <div className="flex items-center gap-1">
+                          <DollarSign className="w-3 h-3 text-green-600" />
+                          <span className="font-bold text-green-600 text-xs">
+                            {formatCurrency(calculated.totalCollected)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      
+                      <TableCell className="py-1">
+                        <div className="flex items-center gap-1">
+                          <Smartphone className="w-3 h-3 text-blue-600" />
+                          <span className="font-bold text-blue-600 text-xs">
+                            {formatCurrency(calculated.sinpePayments)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      
+                      <TableCell className="py-1">
+                        <div className="flex items-center gap-1">
+                          <Banknote className="w-3 h-3 text-green-600" />
+                          <span className="font-bold text-green-600 text-xs">
+                            {formatCurrency(calculated.cashPayments)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      
+                      <TableCell className="py-1">
+                        <div className="flex items-center gap-1">
+                          <CreditCard className="w-3 h-3 text-purple-600" />
+                          <span className="font-bold text-purple-600 text-xs">
+                            {formatCurrency(calculated.tarjetaPayments || 0)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      
+                      <TableCell className="py-1">
+                        <div className="flex items-center gap-1">
+                          <Minus className="w-3 h-3 text-red-600" />
+                          <span className="font-bold text-red-600 text-xs">
+                            {formatCurrency(calculated.totalSpent)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      
+                      <TableCell className="py-1">
+                        <div className="flex items-center gap-1">
+                          <Calculator className="w-3 h-3 text-purple-600" />
+                          <span className="font-bold text-purple-600 text-xs">
+                            {formatCurrency(calculated.finalAmount)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      
+                      <TableCell className="py-1">
+                        <div className="flex justify-center">
+                          {getStatusBadge(calculated.isLiquidated)}
+                        </div>
+                      </TableCell>
+                      
+                      <TableCell className="py-1">
+                        <div className="flex items-center justify-center gap-1">
+                            <Button
+                              size="sm"
+                              onClick={() => handleViewLiquidation(calculated)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 text-xs h-5"
+                              >
+                                <Eye className="w-3 h-3 mr-1" />
+                                Ver
+                              </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
+      </div>
 
-      {/* Liquidaciones por Tienda */}
-      {tiendaCalculations.length > 0 && (
+      {/* Tabla de Liquidaciones por Tienda */}
+      <div>
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -1317,2418 +1109,1836 @@ ${pedidosList}
               Liquidaciones por Tienda - {selectedDate}
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            {/* Resumen Comparativo de Todas las Tiendas */}
-            <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200">
-              <h3 className="text-xl font-bold text-blue-900 mb-4 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5" />
-                Resumen Comparativo - Todas las Tiendas
-              </h3>
-              
-              {/* Métricas generales */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div className="text-center p-3 bg-white rounded-lg shadow-sm">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)}
-                  </div>
-                  <div className="text-sm text-gray-600">Total Pedidos</div>
-                </div>
-                <div className="text-center p-3 bg-white rounded-lg shadow-sm">
-                  <div className="text-2xl font-bold text-green-600">
-                    ₡{tiendaCalculations.reduce((sum, t) => sum + t.totalValue, 0).toLocaleString()}
-                  </div>
-                  <div className="text-sm text-gray-600">Valor Total</div>
-                </div>
-                <div className="text-center p-3 bg-white rounded-lg shadow-sm">
-                  <div className="text-2xl font-bold text-green-600">
-                    ₡{tiendaCalculations.reduce((sum, t) => sum + t.totalCollected, 0).toLocaleString()}
-                  </div>
-                  <div className="text-sm text-gray-600">Recaudado</div>
-                </div>
-                <div className="text-center p-3 bg-white rounded-lg shadow-sm">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {tiendaCalculations.length}
-                  </div>
-                  <div className="text-sm text-gray-600">Tiendas Activas</div>
+            <CardContent className="p-4">
+            <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                    <TableHead className="text-center py-1 font-semibold text-xs">Tienda</TableHead>
+                    <TableHead className="text-center py-1 font-semibold text-xs">Pedidos</TableHead>
+                    <TableHead className="text-center py-1 font-semibold text-xs">Total Valor</TableHead>
+                    <TableHead className="text-center py-1 font-semibold text-xs">Total Recaudado</TableHead>
+                    <TableHead className="text-center py-1 font-semibold text-xs">Pagos SINPE</TableHead>
+                    <TableHead className="text-center py-1 font-semibold text-xs">Pagos Efectivo</TableHead>
+                    <TableHead className="text-center py-1 font-semibold text-xs">Pagos Tarjeta</TableHead>
+                    <TableHead className="text-center py-1 font-semibold text-xs">Gastos</TableHead>
+                    <TableHead className="text-center py-1 font-semibold text-xs">Total a Entregar</TableHead>
+                    <TableHead className="text-center py-1 font-semibold text-xs">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                  {tiendaCalculations.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={11} className="text-center py-12">
+                        <div className="flex flex-col items-center justify-center gap-3">
+                          <Building2 className="w-12 h-12 text-gray-400" />
+                <div>
+                            <p className="text-lg font-medium text-gray-600">No hay tiendas con pedidos</p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              No se encontraron tiendas con pedidos para la fecha {selectedDate}
+                  </p>
                 </div>
               </div>
-
-              {/* Desglose por método de pago */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Banknote className="w-4 h-4 text-green-600" />
-                    <span className="font-semibold text-green-800">Efectivo</span>
-                  </div>
-                  <div className="text-2xl font-bold text-green-900">
-                    ₡{tiendaCalculations.reduce((sum, t) => sum + t.cashPayments, 0).toLocaleString()}
-                  </div>
-                  <div className="text-sm text-green-600 mt-1">
-                    {((tiendaCalculations.reduce((sum, t) => sum + t.cashPayments, 0) / 
-                       tiendaCalculations.reduce((sum, t) => sum + t.totalCollected, 0)) * 100).toFixed(1)}% del total
-                  </div>
-                </div>
-                
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Smartphone className="w-4 h-4 text-blue-600" />
-                    <span className="font-semibold text-blue-800">SINPE</span>
-                  </div>
-                  <div className="text-2xl font-bold text-blue-900">
-                    ₡{tiendaCalculations.reduce((sum, t) => sum + t.sinpePayments, 0).toLocaleString()}
-                  </div>
-                  <div className="text-sm text-blue-600 mt-1">
-                    {((tiendaCalculations.reduce((sum, t) => sum + t.sinpePayments, 0) / 
-                       tiendaCalculations.reduce((sum, t) => sum + t.totalCollected, 0)) * 100).toFixed(1)}% del total
-                  </div>
-                </div>
-                
-                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CreditCard className="w-4 h-4 text-purple-600" />
-                    <span className="font-semibold text-purple-800">Tarjeta</span>
-                  </div>
-                  <div className="text-2xl font-bold text-purple-900">
-                    ₡{tiendaCalculations.reduce((sum, t) => sum + t.tarjetaPayments, 0).toLocaleString()}
-                  </div>
-                  <div className="text-sm text-purple-600 mt-1">
-                    {((tiendaCalculations.reduce((sum, t) => sum + t.tarjetaPayments, 0) / 
-                       tiendaCalculations.reduce((sum, t) => sum + t.totalCollected, 0)) * 100).toFixed(1)}% del total
-                  </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    tiendaCalculations
+                      .slice((currentStorePage - 1) * storesPerPage, currentStorePage * storesPerPage)
+                      .map((tienda, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="py-1">
+                          <div className="flex items-center gap-1">
+                            <Building2 className="w-3 h-3 text-muted-foreground" />
+                <div>
+                              <span className="font-semibold text-sm">{tienda.tienda}</span>
+                              <div className="text-xs text-muted-foreground">
+                                {tienda.totalOrders} pedidos
                 </div>
               </div>
-
-              {/* Contador de pedidos por estado */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                    <span className="font-semibold text-green-800">Entregados</span>
-                  </div>
-                  <div className="text-2xl font-bold text-green-900">
-                    {tiendaCalculations.reduce((sum, t) => sum + t.deliveredOrders, 0)}
-                  </div>
-                  <div className="text-sm text-green-600 mt-1">
-                    {((tiendaCalculations.reduce((sum, t) => sum + t.deliveredOrders, 0) / 
-                       tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)) * 100).toFixed(1)}% del total
-                  </div>
-                </div>
-                
-                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Clock className="w-4 h-4 text-yellow-600" />
-                    <span className="font-semibold text-yellow-800">Pendientes</span>
-                  </div>
-                  <div className="text-2xl font-bold text-yellow-900">
-                    {tiendaCalculations.reduce((sum, t) => sum + t.pendingOrders, 0)}
-                  </div>
-                  <div className="text-sm text-yellow-600 mt-1">
-                    {((tiendaCalculations.reduce((sum, t) => sum + t.pendingOrders, 0) / 
-                       tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)) * 100).toFixed(1)}% del total
-                  </div>
-                </div>
-                
-                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertCircle className="w-4 h-4 text-red-600" />
-                    <span className="font-semibold text-red-800">Devoluciones</span>
-                  </div>
-                  <div className="text-2xl font-bold text-red-900">
-                    {tiendaCalculations.reduce((sum, t) => sum + t.returnedOrders, 0)}
-                  </div>
-                  <div className="text-sm text-red-600 mt-1">
-                    {((tiendaCalculations.reduce((sum, t) => sum + t.returnedOrders, 0) / 
-                       tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)) * 100).toFixed(1)}% del total
-                  </div>
-                </div>
-                
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Calendar className="w-4 h-4 text-blue-600" />
-                    <span className="font-semibold text-blue-800">Reagendados</span>
-                  </div>
-                  <div className="text-2xl font-bold text-blue-900">
-                    {tiendaCalculations.reduce((sum, t) => sum + t.rescheduledOrders, 0)}
-                  </div>
-                  <div className="text-sm text-blue-600 mt-1">
-                    {((tiendaCalculations.reduce((sum, t) => sum + t.rescheduledOrders, 0) / 
-                       tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)) * 100).toFixed(1)}% del total
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Gráficos Comparativos de Tiendas */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-              {/* Gráfico de Métodos de Pago por Tienda */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-blue-600" />
-                    Métodos de Pago por Tienda
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={tiendaCalculations.map(tienda => ({
-                        tienda: tienda.tienda.length > 10 ? tienda.tienda.substring(0, 10) + '...' : tienda.tienda,
-                        efectivo: tienda.cashPayments,
-                        sinpe: tienda.sinpePayments,
-                        tarjeta: tienda.tarjetaPayments
-                      }))}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis 
-                          dataKey="tienda" 
-                          angle={-45}
-                          textAnchor="end"
-                          height={80}
-                          fontSize={12}
-                        />
-                        <YAxis 
-                          tickFormatter={(value) => `₡${(value / 1000).toFixed(0)}k`}
-                          fontSize={12}
-                        />
-                        <Tooltip 
-                          formatter={(value, name) => [
-                            `₡${Number(value).toLocaleString()}`, 
-                            name === 'efectivo' ? 'Efectivo' : 
-                            name === 'sinpe' ? 'SINPE' : 'Tarjeta'
-                          ]}
-                          labelStyle={{ color: '#374151' }}
-                          contentStyle={{ 
-                            backgroundColor: '#f9fafb', 
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '6px'
-                          }}
-                        />
-                        <Legend />
-                        <Bar dataKey="efectivo" fill="#16a34a" name="Efectivo" />
-                        <Bar dataKey="sinpe" fill="#2563eb" name="SINPE" />
-                        <Bar dataKey="tarjeta" fill="#9333ea" name="Tarjeta" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Gráfico de Pedidos por Estado por Tienda */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <PieChart className="w-5 h-5 text-green-600" />
-                    Pedidos por Estado por Tienda
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={tiendaCalculations.map(tienda => ({
-                        tienda: tienda.tienda.length > 10 ? tienda.tienda.substring(0, 10) + '...' : tienda.tienda,
-                        entregados: tienda.deliveredOrders,
-                        pendientes: tienda.pendingOrders,
-                        devoluciones: tienda.returnedOrders,
-                        reagendados: tienda.rescheduledOrders
-                      }))}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis 
-                          dataKey="tienda" 
-                          angle={-45}
-                          textAnchor="end"
-                          height={80}
-                          fontSize={12}
-                        />
-                        <YAxis fontSize={12} />
-                        <Tooltip 
-                          formatter={(value, name) => [
-                            `${Number(value)} pedidos`, 
-                            name === 'entregados' ? 'Entregados' : 
-                            name === 'pendientes' ? 'Pendientes' : 
-                            name === 'devoluciones' ? 'Devoluciones' : 'Reagendados'
-                          ]}
-                          labelStyle={{ color: '#374151' }}
-                          contentStyle={{ 
-                            backgroundColor: '#f9fafb', 
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '6px'
-                          }}
-                        />
-                        <Legend />
-                        <Bar dataKey="entregados" fill="#16a34a" name="Entregados" />
-                        <Bar dataKey="pendientes" fill="#eab308" name="Pendientes" />
-                        <Bar dataKey="devoluciones" fill="#dc2626" name="Devoluciones" />
-                        <Bar dataKey="reagendados" fill="#2563eb" name="Reagendados" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Gráfico de Comparación de Valores Totales */}
-            <Card className="mb-8">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-purple-600" />
-                  Comparación de Valores Totales por Tienda
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={tiendaCalculations.map(tienda => ({
-                      tienda: tienda.tienda.length > 12 ? tienda.tienda.substring(0, 12) + '...' : tienda.tienda,
-                      valorTotal: tienda.totalValue,
-                      valorRecaudado: tienda.totalCollected,
-                      promedio: tienda.averageOrderValue
-                    }))}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis 
-                        dataKey="tienda" 
-                        angle={-45}
-                        textAnchor="end"
-                        height={80}
-                        fontSize={12}
-                      />
-                      <YAxis 
-                        tickFormatter={(value) => `₡${(value / 1000).toFixed(0)}k`}
-                        fontSize={12}
-                      />
-                      <Tooltip 
-                        formatter={(value, name) => [
-                          `₡${Number(value).toLocaleString()}`, 
-                          name === 'valorTotal' ? 'Valor Total' : 
-                          name === 'valorRecaudado' ? 'Valor Recaudado' : 'Promedio por Pedido'
-                        ]}
-                        labelStyle={{ color: '#374151' }}
-                        contentStyle={{ 
-                          backgroundColor: '#f9fafb', 
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '6px'
-                        }}
-                      />
-                      <Legend />
-                      <Bar dataKey="valorTotal" fill="#059669" name="Valor Total" />
-                      <Bar dataKey="valorRecaudado" fill="#0d9488" name="Valor Recaudado" />
-                      <Bar dataKey="promedio" fill="#0891b2" name="Promedio por Pedido" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="space-y-6">
-              {tiendaCalculations.map((tiendaCalculation) => {
-                return (
-                  <div key={tiendaCalculation.tienda} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-lg">{tiendaCalculation.tienda}</h3>
-                      <div className="flex gap-2">
-                        <Badge variant="outline">
-                          {tiendaCalculation.totalOrders} pedidos
-                        </Badge>
-                        <Badge variant="secondary">
-                          ₡{tiendaCalculation.totalValue.toLocaleString()}
-                        </Badge>
-                      </div>
-                    </div>
-                    
-                    {/* Contadores de pedidos por estado */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-green-600">{tiendaCalculation.deliveredOrders}</div>
-                        <div className="text-sm text-gray-600">Entregados</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-yellow-600">{tiendaCalculation.pendingOrders}</div>
-                        <div className="text-sm text-gray-600">Pendientes</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-red-600">{tiendaCalculation.returnedOrders}</div>
-                        <div className="text-sm text-gray-600">Devoluciones</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-blue-600">{tiendaCalculation.rescheduledOrders}</div>
-                        <div className="text-sm text-gray-600">Reagendados</div>
-                      </div>
-                    </div>
-
-                    {/* Información adicional */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 text-sm">
-                      <div>
-                        <span className="font-medium">Valor promedio por pedido:</span>
-                        <span className="ml-2 text-green-600">₡{tiendaCalculation.averageOrderValue.toLocaleString()}</span>
-                      </div>
-                      <div>
-                        <span className="font-medium">Mensajero principal:</span>
-                        <span className="ml-2">{tiendaCalculation.topMessenger}</span>
-                      </div>
-                      <div>
-                        <span className="font-medium">Distrito principal:</span>
-                        <span className="ml-2">{tiendaCalculation.topDistrict}</span>
-                      </div>
-                    </div>
-
-                    {/* Desglose por método de pago */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Banknote className="w-4 h-4 text-green-600" />
-                          <span className="font-semibold text-green-800">Efectivo</span>
-                        </div>
-                        <div className="text-lg font-bold text-green-900">
-                          ₡{tiendaCalculation.cashPayments.toLocaleString()}
-                        </div>
-                        <div className="text-xs text-green-600">
-                          {tiendaCalculation.totalCollected > 0 ? 
-                            ((tiendaCalculation.cashPayments / tiendaCalculation.totalCollected) * 100).toFixed(1) : 0}% del total
-                        </div>
-                      </div>
-                      
-                      <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Smartphone className="w-4 h-4 text-blue-600" />
-                          <span className="font-semibold text-blue-800">SINPE</span>
-                        </div>
-                        <div className="text-lg font-bold text-blue-900">
-                          ₡{tiendaCalculation.sinpePayments.toLocaleString()}
-                        </div>
-                        <div className="text-xs text-blue-600">
-                          {tiendaCalculation.totalCollected > 0 ? 
-                            ((tiendaCalculation.sinpePayments / tiendaCalculation.totalCollected) * 100).toFixed(1) : 0}% del total
-                        </div>
-                      </div>
-                      
-                      <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
-                        <div className="flex items-center gap-2 mb-1">
-                          <CreditCard className="w-4 h-4 text-purple-600" />
-                          <span className="font-semibold text-purple-800">Tarjeta</span>
-                        </div>
-                        <div className="text-lg font-bold text-purple-900">
-                          ₡{tiendaCalculation.tarjetaPayments.toLocaleString()}
-                        </div>
-                        <div className="text-xs text-purple-600">
-                          {tiendaCalculation.totalCollected > 0 ? 
-                            ((tiendaCalculation.tarjetaPayments / tiendaCalculation.totalCollected) * 100).toFixed(1) : 0}% del total
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {tiendaCalculation.orders.length > 0 ? (
-                      <div className="space-y-4">
-                        {/* Filtros */}
-                        <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <Label htmlFor={`status-filter-${tiendaCalculation.tienda}`} className="font-medium">
-                              Filtrar por estado:
-                            </Label>
-                            <Select
-                              value={tiendaStatusFilter}
-                              onValueChange={setTiendaStatusFilter}
-                            >
-                              <SelectTrigger className="w-40">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="TODOS">Todos</SelectItem>
-                                <SelectItem value="ENTREGADO">Entregados</SelectItem>
-                                <SelectItem value="PENDIENTE">Pendientes</SelectItem>
-                                <SelectItem value="DEVOLUCION">Devoluciones</SelectItem>
-                                <SelectItem value="REAGENDADO">Reagendados</SelectItem>
-                              </SelectContent>
-                            </Select>
                           </div>
-                          <div className="text-sm text-gray-600">
-                            Mostrando {getFilteredOrders(tiendaCalculation.orders, tiendaStatusFilter).length} de {tiendaCalculation.orders.length} pedidos
-                          </div>
-                        </div>
+                        </TableCell>
 
-                        {/* Tabla de pedidos */}
-                        <div className="overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>ID Pedido</TableHead>
-                                <TableHead>Cliente</TableHead>
-                                <TableHead>Estado</TableHead>
-                                <TableHead>Valor</TableHead>
-                                <TableHead>Método de Pago</TableHead>
-                                <TableHead>Distrito</TableHead>
-                                <TableHead>Mensajero</TableHead>
-                                <TableHead>Acciones</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {(() => {
-                                const filteredOrders = getFilteredOrders(tiendaCalculation.orders, tiendaStatusFilter);
-                                const currentPage = getCurrentPageForTienda(tiendaCalculation.tienda);
-                                const paginatedOrders = getPaginatedOrders(filteredOrders, currentPage, 10);
-                                
-                                return paginatedOrders.map((pedido) => (
-                                  <TableRow key={pedido.id_pedido}>
-                                    <TableCell className="font-medium">{pedido.id_pedido}</TableCell>
-                                    <TableCell>{pedido.cliente_nombre}</TableCell>
-                                    <TableCell>
-                                      <Badge 
-                                        variant={pedido.estado_pedido === 'ENTREGADO' ? 'default' : 'outline'}
-                                        className={
-                                          pedido.estado_pedido === 'ENTREGADO' ? 'bg-green-100 text-green-800' :
-                                          pedido.estado_pedido === 'PENDIENTE' ? 'bg-yellow-100 text-yellow-800' :
-                                          pedido.estado_pedido === 'DEVOLUCION' ? 'bg-red-100 text-red-800' :
-                                          pedido.estado_pedido === 'REAGENDADO' ? 'bg-blue-100 text-blue-800' : ''
-                                        }
-                                      >
-                                        {pedido.estado_pedido || 'PENDIENTE'}
-                                      </Badge>
+                        <TableCell className="py-1">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1">
+                              <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                              <span className="font-semibold text-green-600 text-xs">{tienda.deliveredOrders}</span>
+                              <span className="text-xs text-muted-foreground">entregados</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full"></div>
+                              <span className="font-semibold text-yellow-600 text-xs">{tienda.pendingOrders}</span>
+                              <span className="text-xs text-muted-foreground">pendientes</span>
+                            </div>
+                            {tienda.returnedOrders > 0 && (
+                              <div className="flex items-center gap-1">
+                              <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                                <span className="font-semibold text-red-600 text-xs">{tienda.returnedOrders}</span>
+                                <span className="text-xs text-muted-foreground">devueltos</span>
+                            </div>
+                            )}
+                            {tienda.rescheduledOrders > 0 && (
+                              <div className="flex items-center gap-1">
+                              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                                <span className="font-semibold text-blue-600 text-xs">{tienda.rescheduledOrders}</span>
+                                <span className="text-xs text-muted-foreground">reagendados</span>
+                            </div>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="py-1">
+                          <div className="flex items-center gap-1">
+                            <DollarSign className="w-3 h-3 text-gray-600" />
+                            <span className="font-bold text-gray-600 text-xs">
+                              {formatCurrency(tienda.totalValue)}
+                          </span>
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="py-1">
+                          <div className="flex items-center gap-1">
+                            <DollarSign className="w-3 h-3 text-green-600" />
+                            <span className="font-bold text-green-600 text-xs">
+                            {formatCurrency(tienda.totalCollected)}
+                          </span>
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="py-1">
+                          <div className="flex items-center gap-1">
+                            <Smartphone className="w-3 h-3 text-blue-600" />
+                            <span className="font-bold text-blue-600 text-xs">
+                            {formatCurrency(tienda.sinpePayments)}
+                          </span>
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="py-1">
+                          <div className="flex items-center gap-1">
+                                      <Banknote className="w-3 h-3 text-green-600" />
+                            <span className="font-bold text-green-600 text-xs">
+                                      {formatCurrency(tienda.cashPayments)}
+                                    </span>
+                                  </div>
+                        </TableCell>
+
+                        <TableCell className="py-1">
+                          <div className="flex items-center gap-1">
+                          <CreditCard className="w-3 h-3 text-purple-600" />
+                            <span className="font-bold text-purple-600 text-xs">
+                              {formatCurrency(tienda.tarjetaPayments || 0)}
+                          </span>
+                        </div>
+                        </TableCell>
+
+                        <TableCell className="py-1">
+                          <div className="flex items-center gap-1">
+                            <Minus className="w-3 h-3 text-red-600" />
+                            <span className="font-bold text-red-600 text-xs">
+                            {formatCurrency(tienda.totalSpent)}
+                          </span>
+                          </div>
                                     </TableCell>
-                                    <TableCell>₡{(pedido.valor_total || 0).toLocaleString()}</TableCell>
-                                    <TableCell>
-                                      <Badge variant="outline">
-                                        {pedido.metodo_pago || 'SIN_METODO'}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell>{pedido.distrito}</TableCell>
-                                    <TableCell>
-                                      <span className="text-sm font-medium">
-                                        {pedido.mensajero_concretado || pedido.mensajero_asignado || 'SIN_ASIGNAR'}
+
+                        <TableCell className="py-1">
+                          <div className="flex items-center gap-1">
+                            <Calculator className="w-3 h-3 text-purple-600" />
+                            <span className="font-bold text-purple-600 text-xs">
+                            {formatCurrency(tienda.finalAmount)}
                                       </span>
+                          </div>
                                     </TableCell>
-                                    <TableCell>
-                                      <div className="flex gap-1">
+
+                        <TableCell className="py-1">
+                          <div className="flex items-center justify-center gap-1">
                                         <Button
                                           size="sm"
-                                          variant="outline"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setSelectedOrderForDetails(pedido);
-                                            setIsDetailsModalOpen(true);
-                                          }}
-                                          className="h-7 w-7 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
-                                          title="Ver Detalles"
-                                        >
-                                          <Eye className="w-4 h-4" />
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setSelectedOrderForUpdate(pedido);
-                                            setNewStatus('ENTREGADO');
-                                            setPaymentMethod(pedido.metodo_pago || 'efectivo');
-                                            setIsUpdateStatusModalOpen(true);
-                                          }}
-                                          className="h-7 w-7 p-0 bg-green-50 border-green-200 hover:bg-green-100 text-green-700"
-                                          disabled={updatingOrder === pedido.id_pedido}
-                                          title="Editar Estado"
-                                        >
-                                          {updatingOrder === pedido.id_pedido ? (
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                          ) : (
-                                            <Edit3 className="w-4 h-4" />
-                                          )}
-                                        </Button>
-                                      </div>
-                                    </TableCell>
+                              onClick={() => handleViewStoreLiquidation(tienda)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 text-xs h-5"
+                            >
+                              <Eye className="w-3 h-3 mr-1" />
+                              Ver
+                            </Button>
+                          </div>
+                        </TableCell>
                                   </TableRow>
-                                ));
-                              })()}
+                    ))
+                  )}
                             </TableBody>
                           </Table>
                         </div>
 
-                        {/* Paginación */}
-                        {(() => {
-                          const filteredOrders = getFilteredOrders(tiendaCalculation.orders, tiendaStatusFilter);
-                          const totalPages = getTotalPages(filteredOrders.length, 10);
-                          const currentPage = getCurrentPageForTienda(tiendaCalculation.tienda);
-                          
-                          if (totalPages <= 1) return null;
-                          
-                          return (
-                            <div className="flex items-center justify-between">
-                              <div className="text-sm text-gray-600">
-                                Página {currentPage} de {totalPages} 
-                                ({filteredOrders.length} pedidos totales)
+                  {/* Paginación para liquidaciones de tienda */}
+                  {tiendaCalculations.length > storesPerPage && (
+                    <div className="flex items-center justify-between mt-4 px-4">
+                      <div className="text-sm text-gray-700">
+                        Mostrando {((currentStorePage - 1) * storesPerPage) + 1} a {Math.min(currentStorePage * storesPerPage, tiendaCalculations.length)} de {tiendaCalculations.length} tiendas
                               </div>
-                              <div className="flex items-center gap-2">
+                      <div className="flex gap-2">
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => setCurrentPageForTienda(tiendaCalculation.tienda, Math.max(1, currentPage - 1))}
-                                  disabled={currentPage <= 1}
+                          onClick={() => setCurrentStorePage(prev => Math.max(1, prev - 1))}
+                          disabled={currentStorePage === 1}
                                 >
                                   Anterior
                                 </Button>
-                                <div className="flex items-center gap-1">
-                                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                                    const pageNum = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
-                                    if (pageNum > totalPages) return null;
-                                    
-                                    return (
-                                      <Button
-                                        key={pageNum}
-                                        variant={pageNum === currentPage ? "default" : "outline"}
-                                        size="sm"
-                                        onClick={() => setCurrentPageForTienda(tiendaCalculation.tienda, pageNum)}
-                                        className="w-8 h-8 p-0"
-                                      >
-                                        {pageNum}
-                                      </Button>
-                                    );
-                                  })}
-                                </div>
+                        <span className="flex items-center px-3 py-1 text-sm">
+                          Página {currentStorePage} de {Math.ceil(tiendaCalculations.length / storesPerPage)}
+                        </span>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => setCurrentPageForTienda(tiendaCalculation.tienda, Math.min(totalPages, currentPage + 1))}
-                                  disabled={currentPage >= totalPages}
+                          onClick={() => setCurrentStorePage(prev => Math.min(Math.ceil(tiendaCalculations.length / storesPerPage), prev + 1))}
+                          disabled={currentStorePage === Math.ceil(tiendaCalculations.length / storesPerPage)}
                                 >
                                   Siguiente
                                 </Button>
                               </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    ) : (
-                      <div className="text-center py-4 text-gray-500">
-                        <Package className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p>No hay pedidos para esta tienda en esta fecha</p>
                       </div>
                     )}
-                  </div>
-                );
-              })}
-            </div>
           </CardContent>
         </Card>
-      )}
+            </div>
 
-      {/* Detalles de Pedidos Reales */}
-      {calculations.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Package className="w-5 h-5" />
-              Detalles de Pedidos Reales - {selectedDate}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+      {/* Modal de Pedidos Pendientes y Sin Asignar */}
+      <Dialog open={isPendingOrdersModalOpen} onOpenChange={setIsPendingOrdersModalOpen}>
+        <DialogContent className="sm:max-w-[1200px] max-h-[85vh] overflow-hidden flex flex-col">
+                              <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-yellow-600" />
+              Pedidos Pendientes y Sin Asignar
+              </DialogTitle>
+                              </DialogHeader>
+          
             <div className="space-y-4">
-              {calculations.map((calculation) => {
-                const calculated = calculateLiquidation(calculation);
+                              {(() => {
+              const pedidosPendientes = calculations.flatMap(calc => 
+                calc.orders.filter(o => o.estado_pedido === 'PENDIENTE')
+              );
+              const pedidosSinAsignar = calculations.flatMap(calc =>
+                calc.orders.filter(o => !o.mensajero_asignado || o.mensajero_asignado === '')
+              );
+                          
                 return (
-                  <div key={calculation.messengerId} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-semibold text-lg">{calculation.messengerName}</h3>
-                      <Badge variant="outline">
-                        {calculated.orders.length} pedidos
-                      </Badge>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Pedidos Pendientes */}
+                  <div className="border rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Clock className="w-5 h-5 text-yellow-600" />
+                      <h3 className="font-semibold text-lg">Pedidos Pendientes</h3>
+                      <Badge variant="secondary">{pedidosPendientes.length}</Badge>
                     </div>
-                    
-                    {calculated.orders.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {calculated.orders.slice(0, 6).map((pedido) => (
-                          <div key={pedido.id_pedido} className="bg-gray-50 p-3 rounded-lg">
-                            <div className="flex items-center justify-between mb-2">
+                    <div className="max-h-80 overflow-y-autospace-y-2">
+                      {pedidosPendientes.map(pedido => (
+                        <div key={pedido.id_pedido} className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <div className="flex items-center justify-between mb-1">
                               <span className="font-medium text-sm">{pedido.id_pedido}</span>
-                              <Badge 
-                                variant={pedido.estado_pedido === 'ENTREGADO' ? 'default' : 'outline'}
-                                className={pedido.estado_pedido === 'ENTREGADO' ? 'bg-green-100 text-green-800' : ''}
-                              >
-                                {pedido.estado_pedido || 'PENDIENTE'}
+                            <Badge variant="outline" className="text-yellow-600">
+                              {formatCurrency(pedido.valor_total)}
                               </Badge>
                             </div>
-                            <div className="text-sm text-gray-600 space-y-1">
-                              <div>Cliente: {pedido.cliente_nombre}</div>
-                              <div>Valor: ₡{(pedido.valor_total || 0).toLocaleString()}</div>
-                              <div>Método: {pedido.metodo_pago || 'N/A'}</div>
-                              <div>Distrito: {pedido.distrito}</div>
+                          <div className="text-xs text-gray-600">
+                                <div className="flex items-center gap-1">
+                              <Building2 className="w-3 h-3" />
+                              <span>{pedido.tienda}</span>
                             </div>
+                            <div className="flex items-center gap-1 mt-1">
+                              <User className="w-3 h-3" />
+                              <span>{pedido.mensajero_asignado || 'Sin asignar'}</span>
                           </div>
-                        ))}
-                        {calculated.orders.length > 6 && (
-                          <div className="bg-blue-50 p-3 rounded-lg flex items-center justify-center">
-                            <span className="text-sm text-blue-600">
-                              +{calculated.orders.length - 6} pedidos más
-                            </span>
                           </div>
-                        )}
                       </div>
-                    ) : (
+                          ))}
+                      {pedidosPendientes.length === 0 && (
                       <div className="text-center py-4 text-gray-500">
-                        <Package className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p>No hay pedidos para este mensajero en esta fecha</p>
+                          No hay pedidos pendientes
                       </div>
                     )}
                   </div>
-                );
-              })}
             </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Modal de Liquidación */}
-      <Dialog open={showLiquidationModal} onOpenChange={setShowLiquidationModal}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Confirmar Liquidación</DialogTitle>
-          </DialogHeader>
-          {selectedLiquidation && (
-            <div className="space-y-4">
-              <Alert>
-                <AlertTriangle className="w-4 h-4" />
-                <AlertDescription>
-                  Al confirmar la liquidación, se restringirá la edición de pedidos para este mensajero.
-                </AlertDescription>
-              </Alert>
-              
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="font-semibold mb-3">Resumen de Liquidación - {selectedLiquidation.messengerName}</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Plata inicial:</span>
-                    <span className="font-bold text-green-600 ml-2">
-                      {formatCurrency(selectedLiquidation.initialAmount)}
-                    </span>
+                  {/* Pedidos Sin Asignar */}
+                  <div className="border rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertTriangle className="w-5 h-5 text-red-600" />
+                      <h3 className="font-semibold text-lg">Sin Asignar</h3>
+                      <Badge variant="destructive">{pedidosSinAsignar.length}</Badge>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Total recaudado:</span>
-                    <span className="font-bold text-green-600 ml-2">
-                      {formatCurrency(selectedLiquidation.totalCollected)}
-                    </span>
+                    <div className="max-h-80 overflow-y-autospace-y-2">
+                      {pedidosSinAsignar.map(pedido => (
+                        <div key={pedido.id_pedido} className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <div className="flex items-center justify-between mb-1">
+                              <span className="font-medium text-sm">{pedido.id_pedido}</span>
+                            <Badge variant="outline" className="text-red-600">
+                              {formatCurrency(pedido.valor_total)}
+                            </Badge>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Pagos SINPE:</span>
-                    <span className="font-bold text-blue-600 ml-2">
-                      {formatCurrency(selectedLiquidation.sinpePayments)}
-                    </span>
+                          <div className="text-xs text-gray-600">
+                            <div className="flex items-center gap-1">
+                              <Building2 className="w-3 h-3" />
+                              <span>{pedido.tienda}</span>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Pagos Efectivo:</span>
-                    <span className="font-bold text-green-600 ml-2">
-                      {formatCurrency(selectedLiquidation.cashPayments)}
-                    </span>
+                            <div className="flex items-center gap-1 mt-1">
+                              <Badge variant="secondary" className="text-xs">
+                                {pedido.estado_pedido || 'PENDIENTE'}
+                              </Badge>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Gastos:</span>
-                    <span className="font-bold text-red-600 ml-2">
-                      {formatCurrency(selectedLiquidation.totalSpent)}
-                    </span>
                   </div>
-                  <div className="col-span-2 border-t pt-2">
-                    <span className="text-muted-foreground font-semibold">Monto final a entregar:</span>
-                    <span className="font-bold text-purple-600 ml-2 text-lg">
-                      {formatCurrency(selectedLiquidation.finalAmount)}
-                    </span>
                   </div>
+                        ))}
+                      {pedidosSinAsignar.length === 0 && (
+                        <div className="text-center py-4 text-gray-500">
+                          Todos los pedidos están asignados
                 </div>
+                        )}
               </div>
-              
-              <div>
-                <Label htmlFor="liquidation-notes">Notas de liquidación (opcional)</Label>
-                <Textarea
-                  id="liquidation-notes"
-                  placeholder="Agrega observaciones sobre la liquidación..."
-                  className="mt-1"
-                />
               </div>
-              
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowLiquidationModal(false)}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={() => confirmLiquidation(selectedLiquidation)}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                  Confirmar Liquidación
-                </Button>
               </div>
+                );
+            })()}
             </div>
-          )}
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Detalle de Ruta */}
-      <Dialog open={showRouteDetailModal} onOpenChange={setShowRouteDetailModal}>
-        <DialogContent className="sm:max-w-[95vw] lg:max-w-[1200px] max-h-[95vh] p-0">
-          <div className="flex flex-col h-full max-h-[90vh]">
-            <DialogHeader className="flex-shrink-0 p-6 pb-4">
-              <DialogTitle className="flex items-center gap-2">
-                <Truck className="w-5 h-5" />
-                Detalle de Ruta - {selectedRouteDetail?.messengerName}
+      {/* Modal de Liquidación de Mensajero - Diseño Completo */}
+      <Dialog open={showLiquidationModal} onOpenChange={setShowLiquidationModal}>
+        <DialogContent className="sm:max-w-[1400px] max-h-[95vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Calculator className="w-6 h-6 text-blue-600" />
+              Liquidación de Mensajero - {selectedLiquidation?.messengerName}
               </DialogTitle>
             </DialogHeader>
-            {selectedRouteDetail && (
-              <div className="flex-1 overflow-y-auto px-6 space-y-6 min-h-0">
-                {/* Resumen Financiero */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          
+          {selectedLiquidation && (
+            <div className="space-y-4">
+              {/* Sección Superior Optimizada - Resumen Completo */}
+              <div className="grid grid-cols-12 gap-3 p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border">
+                {/* Total a Entregar - Destacado (3 columnas) */}
+                <div className="col-span-3 bg-purple-50 rounded-lg p-3 border border-purple-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle className="w-5 h-5 text-purple-600" />
+                    <span className="font-semibold text-purple-700 text-sm">Total a Entregar</span>
+                  </div>
+                  <p className="text-2xl font-bold text-purple-600 mb-1">
+                    {formatCurrency(selectedLiquidation.finalAmount)}
+                  </p>
+                  <p className="text-xs text-purple-700">(Efectivo - Gastos)</p>
+                </div>
+
+                {/* Gastos (2 columnas) */}
+                <div className="col-span-2 bg-red-50 rounded-lg p-3 border border-red-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Minus className="w-4 h-4 text-red-600" />
+                    <span className="font-semibold text-red-700 text-sm">Gastos</span>
+                  </div>
+                  <p className="text-lg font-bold text-red-600 mb-1">
+                    {formatCurrency(selectedLiquidation.totalSpent)}
+                  </p>
+                  <button 
+                    onClick={() => handleViewExpenses(selectedLiquidation)}
+                    className="text-xs text-red-600 hover:text-red-800 underline"
+                  >
+                    Ver detalles
+                  </button>
+                </div>
+
+                {/* Total Recaudado con Fórmula (4 columnas) */}
+                <div className="col-span-4 bg-blue-50 rounded-lg p-3 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <DollarSign className="w-4 h-4 text-blue-600" />
+                    <span className="font-semibold text-blue-700 text-sm">Total Recaudado</span>
+                  </div>
+                  <p className="text-xl font-bold text-blue-600 mb-2">
+                    {formatCurrency(selectedLiquidation.totalCollected)}
+                  </p>
+                  {/* Fórmula desglosada */}
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Efectivo:</span>
+                      <span className="font-medium text-green-600">{formatCurrency(selectedLiquidation.cashPayments)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">SINPE:</span>
+                      <span className="font-medium text-blue-600">{formatCurrency(selectedLiquidation.sinpePayments)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Tarjeta:</span>
+                      <span className="font-medium text-purple-600">{formatCurrency(selectedLiquidation.tarjetaPayments || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filtros por Método de Pago como Botones (3 columnas) */}
+                <div className="col-span-3 space-y-2">
+                  <h4 className="font-semibold text-sm text-gray-700 mb-2">Filtros por Pago</h4>
+                  
+                  {/* Botón Efectivo */}
+                  <button
+                    onClick={() => setOrderPaymentFilter(orderPaymentFilter === 'EFECTIVO' ? 'all' : 'EFECTIVO')}
+                    className={`w-full p-2 rounded-lg border text-left transition-all ${
+                      orderPaymentFilter === 'EFECTIVO' 
+                        ? 'bg-green-100 border-green-300 text-green-700' 
+                        : 'bg-green-50 border-green-200 text-green-600 hover:bg-green-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Banknote className="w-4 h-4" />
+                      <span className="font-medium text-sm">Efectivo</span>
+                    </div>
+                    <p className="text-xs font-bold mt-1">
+                      {formatCurrency(selectedLiquidation.cashPayments)}
+                    </p>
+                  </button>
+
+                  {/* Botón SINPE */}
+                  <button
+                    onClick={() => setOrderPaymentFilter(orderPaymentFilter === 'SINPE' ? 'all' : 'SINPE')}
+                    className={`w-full p-2 rounded-lg border text-left transition-all ${
+                      orderPaymentFilter === 'SINPE' 
+                        ? 'bg-blue-100 border-blue-300 text-blue-700' 
+                        : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="w-4 h-4" />
+                      <span className="font-medium text-sm">SINPE</span>
+                    </div>
+                    <p className="text-xs font-bold mt-1">
+                      {formatCurrency(selectedLiquidation.sinpePayments)}
+                    </p>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewSinpeOrders(selectedLiquidation);
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800 mt-1 underline"
+                    >
+                      Ver comprobantes
+                    </button>
+                  </button>
+
+                  {/* Botón Tarjeta */}
+                  <button
+                    onClick={() => setOrderPaymentFilter(orderPaymentFilter === 'TARJETA' ? 'all' : 'TARJETA')}
+                    className={`w-full p-2 rounded-lg border text-left transition-all ${
+                      orderPaymentFilter === 'TARJETA' 
+                        ? 'bg-purple-100 border-purple-300 text-purple-700' 
+                        : 'bg-purple-50 border-purple-200 text-purple-600 hover:bg-purple-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-4 h-4" />
+                      <span className="font-medium text-sm">Tarjeta</span>
+                    </div>
+                    <p className="text-xs font-bold mt-1">
+                      {formatCurrency(selectedLiquidation.tarjetaPayments || 0)}
+                    </p>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewTarjetaOrders(selectedLiquidation);
+                      }}
+                      className="text-xs text-purple-600 hover:text-purple-800 mt-1 underline"
+                    >
+                      Ver comprobantes
+                    </button>
+                  </button>
+                </div>
+              </div>
+
+              {/* Sección de Métricas y Filtros de Estado */}
+              <div className="grid grid-cols-12 gap-3 p-3 bg-gray-50 rounded-lg border">
+                {/* Métricas de Pedidos (6 columnas) */}
+                <div className="col-span-6 grid grid-cols-3 gap-2">
+                  <div className="text-center p-2 bg-blue-50 rounded text-xs">
+                    <p className="font-bold text-blue-600 text-sm">{selectedLiquidation.orders.length}</p>
+                    <p className="text-xs text-muted-foreground">Total</p>
+                  </div>
+                  <div className="text-center p-2 bg-green-50 rounded text-xs">
+                    <p className="font-bold text-green-600 text-sm">{selectedLiquidation.orders.filter(o => o.estado_pedido === 'ENTREGADO').length}</p>
+                    <p className="text-xs text-muted-foreground">Entregados</p>
+                  </div>
+                  <div className="text-center p-2 bg-red-50 rounded text-xs">
+                    <p className="font-bold text-red-600 text-sm">{selectedLiquidation.orders.filter(o => o.estado_pedido === 'DEVOLUCION').length}</p>
+                    <p className="text-xs text-muted-foreground">Devueltos</p>
+                  </div>
+                  <div className="text-center p-2 bg-orange-50 rounded text-xs">
+                    <p className="font-bold text-orange-600 text-sm">{selectedLiquidation.orders.filter(o => o.estado_pedido === 'REAGENDADO').length}</p>
+                    <p className="text-xs text-muted-foreground">Reagendados</p>
+                  </div>
+                  <div className="text-center p-2 bg-yellow-50 rounded text-xs">
+                    <p className="font-bold text-yellow-600 text-sm">{selectedLiquidation.orders.filter(o => o.estado_pedido === 'PENDIENTE').length}</p>
+                    <p className="text-xs text-muted-foreground">Pendientes</p>
+                  </div>
+                  <div className="text-center p-2 bg-gray-50 rounded text-xs">
+                    <p className="font-bold text-gray-600 text-sm">{selectedLiquidation.orders.filter(o => !o.mensajero_asignado).length}</p>
+                    <p className="text-xs text-muted-foreground">Sin Asignar</p>
+                  </div>
+                </div>
+                
+                {/* Filtros de Estado y Botones (6 columnas) */}
+                <div className="col-span-6 flex items-center justify-end gap-2">
+                  <Select value={orderStatusFilter} onValueChange={setOrderStatusFilter}>
+                    <SelectTrigger className="w-24 h-7 text-xs">
+                      <SelectValue placeholder="Estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="ENTREGADO">Entregados</SelectItem>
+                      <SelectItem value="PENDIENTE">Pendientes</SelectItem>
+                      <SelectItem value="DEVOLUCION">Devueltos</SelectItem>
+                      <SelectItem value="REAGENDADO">Reagendados</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleViewPendingOrders(selectedLiquidation)}
+                    className="h-7 px-2 text-xs"
+                  >
+                    Pendientes
+                  </Button>
+                </div>
+              </div>
+                    
+
+
+                {/* Filtros por Método de Pago */}
                   <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                          <DollarSign className="w-5 h-5 text-green-600" />
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Filtros por Método de Pago</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Banknote className="w-4 h-4 text-green-600" />
+                        <span className="font-semibold text-green-700 text-sm">Efectivo</span>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">Total Recaudado</p>
-                          <p className="text-xl font-bold text-green-600">
-                            {formatCurrency(selectedRouteDetail.totalCollected)}
+                      <p className="text-lg font-bold text-green-600">
+                        {formatCurrency(selectedLiquidation.cashPayments)}
                           </p>
                         </div>
+                      
+                    <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Smartphone className="w-4 h-4 text-blue-600" />
+                        <span className="font-semibold text-blue-700 text-sm">SINPE</span>
+                        </div>
+                      <p className="text-lg font-bold text-blue-600">
+                        {formatCurrency(selectedLiquidation.sinpePayments)}
+                      </p>
+                      <button 
+                        onClick={() => handleViewSinpeOrders(selectedLiquidation)}
+                        className="text-xs text-blue-600 hover:text-blue-800 mt-1 underline"
+                      >
+                        Ver comprobantes
+                      </button>
+                        </div>
+                      
+                    <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                        <div className="flex items-center gap-2 mb-1">
+                          <CreditCard className="w-4 h-4 text-purple-600" />
+                        <span className="font-semibold text-purple-700 text-sm">Tarjeta</span>
+                        </div>
+                      <p className="text-lg font-bold text-purple-600">
+                        {formatCurrency(selectedLiquidation.tarjetaPayments || 0)}
+                      </p>
+                      <button 
+                        onClick={() => handleViewTarjetaOrders(selectedLiquidation)}
+                        className="text-xs text-purple-600 hover:text-purple-800 mt-1 underline"
+                      >
+                        Ver comprobantes
+                      </button>
                       </div>
                     </CardContent>
                   </Card>
 
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                          <Smartphone className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">Pagos SINPE</p>
-                          <p className="text-xl font-bold text-blue-600">
-                            {formatCurrency(selectedRouteDetail.sinpePayments)}
+                {/* Plata Inicial */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <DollarSign className="w-5 h-5" />
+                      + Plata Inicial
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Monto (₡)</label>
+                        <Input 
+                          type="number" 
+                          value={selectedLiquidation.initialAmount} 
+                          disabled
+                          className="w-full mt-1"
+                        />
+                          </div>
+                      <p className="text-sm text-gray-500">
+                        Monto entregado al mensajero en efectivo
                           </p>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+          </CardContent>
+        </Card>
 
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                          <Banknote className="w-5 h-5 text-green-600" />
+                {/* Cálculo Final */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Cálculo Final</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="p-3 bg-green-50 rounded-lg">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-green-700">Plata Inicial</span>
+                        <span className="font-bold text-green-600">{formatCurrency(selectedLiquidation.initialAmount)}</span>
+                          </div>
+                      <p className="text-xs text-gray-600">Monto entregado al mensajero</p>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">Pagos Efectivo</p>
-                          <p className="text-xl font-bold text-green-600">
-                            {formatCurrency(selectedRouteDetail.cashPayments)}
-                          </p>
+              
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-blue-700">Total Recaudado</span>
+                        <span className="font-bold text-blue-600">{formatCurrency(selectedLiquidation.totalCollected)}</span>
+                          </div>
+                      <p className="text-xs text-gray-600">Total recaudado por entregas</p>
+                      
+                      {/* Desglose del total recaudado */}
+                      <div className="mt-2 space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Efectivo:</span>
+                          <span className="font-medium">{formatCurrency(selectedLiquidation.cashPayments)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">SINPE:</span>
+                          <span className="font-medium">{formatCurrency(selectedLiquidation.sinpePayments)}</span>
+                      </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Tarjeta:</span>
+                          <span className="font-medium">{formatCurrency(selectedLiquidation.tarjetaPayments || 0)}</span>
+                    </div>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
+                    
+                    <div className="p-3 bg-red-50 rounded-lg">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-red-700">Gastos</span>
+                        <span className="font-bold text-red-600">{formatCurrency(selectedLiquidation.totalSpent)}</span>
+                        </div>
+                      <p className="text-xs text-gray-600">Gastos reportados por el mensajero</p>
+                        </div>
 
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                          <Calculator className="w-5 h-5 text-purple-600" />
+                    <div className="p-3 bg-green-50 rounded-lg border-2 border-green-300">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-green-700">Efectivo para liquidación</span>
+                        <span className="font-bold text-green-600">{formatCurrency(selectedLiquidation.cashPayments)}</span>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">Total a Entregar</p>
-                          <p className="text-xl font-bold text-purple-600">
-                            {formatCurrency(selectedRouteDetail.finalAmount)}
-                          </p>
+                      <p className="text-xs text-gray-600">Solo el efectivo se entrega físicamente</p>
                         </div>
+                    
+                    <div className="p-4 bg-purple-50 rounded-lg border-2 border-purple-300">
+                      <div className="text-center">
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                          <CheckCircle className="w-5 h-5 text-purple-600" />
+                          <span className="text-lg font-semibold text-purple-700">Total a Entregar</span>
+                        </div>
+                        <p className="text-3xl font-bold text-purple-600">
+                          {formatCurrency(selectedLiquidation.finalAmount)}
+                        </p>
+                        <p className="text-sm text-purple-700 mt-1">Confirmado para entrega</p>
                       </div>
+                    </div>
                     </CardContent>
                   </Card>
                 </div>
 
-                {/* Detalles de Gastos */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Receipt className="w-5 h-5" />
-                      Gastos del Mensajero
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Truck className="w-4 h-4 text-gray-600" />
-                            <span className="font-medium">Combustible</span>
-                          </div>
-                          <p className="text-2xl font-bold text-gray-800">
-                            {formatCurrency(0)}
-                          </p>
-                          <p className="text-sm text-gray-500">Por configurar</p>
-                        </div>
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Package className="w-4 h-4 text-gray-600" />
-                            <span className="font-medium">Otros Gastos</span>
-                          </div>
-                          <p className="text-2xl font-bold text-gray-800">
-                            {formatCurrency(0)}
-                          </p>
-                          <p className="text-sm text-gray-500">Por configurar</p>
-                        </div>
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Minus className="w-4 h-4 text-red-600" />
-                            <span className="font-medium">Total Gastos</span>
-                          </div>
-                          <p className="text-2xl font-bold text-red-600">
-                            {formatCurrency(selectedRouteDetail.totalSpent)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Resumen de Pedidos */}
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2">
-                        <Package className="w-5 h-5" />
-                        Resumen de Pedidos ({selectedRouteDetail.orders.length})
-                      </CardTitle>
-                      <div className="flex flex-wrap gap-2">
-                        {/* Filtros de Estado */}
-                        <div className="flex gap-1">
-                          <Button
-                            size="sm"
-                            variant={orderStatusFilter === 'all' ? 'default' : 'outline'}
-                            onClick={() => setOrderStatusFilter('all')}
-                            className="h-8 text-xs"
-                          >
-                            Todos
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={orderStatusFilter === 'entregado' ? 'default' : 'outline'}
-                            onClick={() => setOrderStatusFilter('entregado')}
-                            className="h-8 text-xs bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
-                          >
-                            Entregados
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={orderStatusFilter === 'pendiente' ? 'default' : 'outline'}
-                            onClick={() => setOrderStatusFilter('pendiente')}
-                            className="h-8 text-xs bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100"
-                          >
-                            Pendientes
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={orderStatusFilter === 'devolucion' ? 'default' : 'outline'}
-                            onClick={() => setOrderStatusFilter('devolucion')}
-                            className="h-8 text-xs bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
-                          >
-                            Devoluciones
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={orderStatusFilter === 'reagendado' ? 'default' : 'outline'}
-                            onClick={() => setOrderStatusFilter('reagendado')}
-                            className="h-8 text-xs bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100"
-                          >
-                            Reagendados
-                          </Button>
-                        </div>
-
-                        {/* Separador */}
-                        <div className="w-px h-6 bg-gray-300 mx-1"></div>
-
-                        {/* Filtros de Pago */}
-                        <div className="flex gap-1">
-                          <Button
-                            size="sm"
-                            variant={orderPaymentFilter === 'all' ? 'default' : 'outline'}
-                            onClick={() => setOrderPaymentFilter('all')}
-                            className="h-8 text-xs"
-                          >
-                            Todos
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={orderPaymentFilter === 'efectivo' ? 'default' : 'outline'}
-                            onClick={() => setOrderPaymentFilter('efectivo')}
-                            className="h-8 text-xs bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
-                          >
-                            💵 Efectivo
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={orderPaymentFilter === 'sinpe' ? 'default' : 'outline'}
-                            onClick={() => setOrderPaymentFilter('sinpe')}
-                            className="h-8 text-xs bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                          >
-                            📱 SINPE
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={orderPaymentFilter === 'tarjeta' ? 'default' : 'outline'}
-                            onClick={() => setOrderPaymentFilter('tarjeta')}
-                            className="h-8 text-xs bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
-                          >
-                            💳 Tarjeta
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={orderPaymentFilter === '2pagos' ? 'default' : 'outline'}
-                            onClick={() => setOrderPaymentFilter('2pagos')}
-                            className="h-8 text-xs bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
-                          >
-                            🔄 2 Pagos
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {/* Estadísticas de pedidos */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-green-600">
-                            {selectedRouteDetail.orders.filter(p => p.estado_pedido === 'entregado').length}
-                          </p>
-                          <p className="text-sm text-gray-600">Entregados</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-yellow-600">
-                            {selectedRouteDetail.orders.filter(p => !p.estado_pedido || p.estado_pedido === 'pendiente').length}
-                          </p>
-                          <p className="text-sm text-gray-600">Pendientes</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-red-600">
-                            {selectedRouteDetail.orders.filter(p => p.estado_pedido === 'devolucion').length}
-                          </p>
-                          <p className="text-sm text-gray-600">Devoluciones</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-orange-600">
-                            {selectedRouteDetail.orders.filter(p => p.estado_pedido === 'reagendado').length}
-                          </p>
-                          <p className="text-sm text-gray-600">Reagendados</p>
-                        </div>
-                      </div>
-
-                      {/* Lista mejorada de pedidos */}
-                      <div className="space-y-3 max-h-96 overflow-y-auto">
-                        {selectedRouteDetail.orders
+              {/* Tabla de Pedidos - Sin Card para maximizar espacio */}
+              <div className="border rounded-lg">
+                <div className="p-3 border-b bg-gray-50">
+                  <h3 className="font-semibold text-sm">Detalle de Pedidos ({selectedLiquidation.orders.length})</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-16">ID</TableHead>
+                        <TableHead className="w-24">Cliente</TableHead>
+                        <TableHead className="w-32">Producto</TableHead>
+                        <TableHead className="w-16">Valor</TableHead>
+                        <TableHead className="w-16">Método</TableHead>
+                        <TableHead className="w-16">Estado</TableHead>
+                        <TableHead className="w-16">Fecha</TableHead>
+                        <TableHead className="w-20">Acciones</TableHead>
+                        <TableHead className="min-w-24">Dirección</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                        <TableBody>
+                          {selectedLiquidation.orders
                           .filter(pedido => {
-                            const statusMatch = orderStatusFilter === 'all' || pedido.estado_pedido === orderStatusFilter || 
-                              (orderStatusFilter === 'pendiente' && (!pedido.estado_pedido || pedido.estado_pedido === 'pendiente'));
+                              const statusMatch = orderStatusFilter === 'all' || pedido.estado_pedido === orderStatusFilter;
                             const paymentMatch = orderPaymentFilter === 'all' || pedido.metodo_pago === orderPaymentFilter;
                             return statusMatch && paymentMatch;
                           })
                           .map((pedido) => (
-                            <div key={pedido.id_pedido} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all duration-200 hover:border-gray-300">
-                              {/* Header del pedido */}
-                              <div className="flex items-start justify-between mb-3">
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                                    <span className="text-sm font-bold text-blue-600">
-                                      {pedido.id_pedido?.slice(-2)}
+                            <TableRow key={pedido.id_pedido} className="text-xs">
+                              <TableCell className="font-medium text-xs">{pedido.id_pedido}</TableCell>
+                              <TableCell className="max-w-24 truncate text-xs">{pedido.cliente_nombre}</TableCell>
+                              <TableCell className="max-w-32 truncate text-xs">{pedido.productos || 'No especificado'}</TableCell>
+                              <TableCell className="font-medium text-xs">{formatCurrency(pedido.valor_total)}</TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-1">
+                                  {pedido.metodo_pago === 'SINPE' && <Smartphone className="w-3 h-3 text-blue-600" />}
+                                  {pedido.metodo_pago === 'EFECTIVO' && <Banknote className="w-3 h-3 text-green-600" />}
+                                  {pedido.metodo_pago === 'TARJETA' && <CreditCard className="w-3 h-3 text-purple-600" />}
+                                  <span className="text-xs">
+                                    {pedido.metodo_pago === 'SINPE' ? 'SINPE' :
+                                     pedido.metodo_pago === 'EFECTIVO' ? 'EFECTIVO' :
+                                     pedido.metodo_pago === 'TARJETA' ? 'TARJETA' :
+                                     'SIN_METODO'}
                                     </span>
                                   </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <span className="font-bold text-base text-gray-900">{pedido.id_pedido}</span>
-                                      <Badge 
-                                        className={`text-xs px-3 py-1 font-medium ${
-                                          pedido.estado_pedido === 'entregado' 
-                                            ? 'bg-green-500 text-white border-green-500' 
-                                            : pedido.estado_pedido === 'devolucion'
-                                            ? 'bg-red-500 text-white border-red-500'
-                                            : pedido.estado_pedido === 'reagendado'
-                                            ? 'bg-orange-500 text-white border-orange-500'
-                                            : 'bg-yellow-500 text-white border-yellow-500'
-                                        }`}
-                                      >
-                                        {pedido.estado_pedido === 'entregado' ? 'ENTREGADO' :
-                                         pedido.estado_pedido === 'devolucion' ? 'DEVOLUCIÓN' :
-                                         pedido.estado_pedido === 'reagendado' ? 'REAGENDADO' :
-                                         'PENDIENTE'}
-                                      </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-1">
+                                  {pedido.estado_pedido === 'ENTREGADO' && <CheckCircle className="w-3 h-3 text-green-600" />}
+                                  {pedido.estado_pedido === 'PENDIENTE' && <Clock className="w-3 h-3 text-yellow-600" />}
+                                  {pedido.estado_pedido === 'DEVOLUCION' && <XCircle className="w-3 h-3 text-red-600" />}
+                                  {pedido.estado_pedido === 'REAGENDADO' && <AlertCircle className="w-3 h-3 text-blue-600" />}
+                                  <span className="text-xs">
+                                    {pedido.estado_pedido === 'ENTREGADO' ? 'ENT' :
+                                     pedido.estado_pedido === 'PENDIENTE' ? 'PEN' :
+                                     pedido.estado_pedido === 'DEVOLUCION' ? 'DEV' :
+                                     pedido.estado_pedido === 'REAGENDADO' ? 'REA' :
+                                     pedido.estado_pedido || 'PEN'}
+                                  </span>
                                     </div>
-                                    <p className="font-semibold text-sm text-gray-800 truncate">{pedido.cliente_nombre}</p>
-                                  </div>
-                                </div>
-                                
-                                {/* Botones de acción */}
-                                <div className="flex gap-1 ml-3">
-                                  {(pedido.notas || pedido.nota_asesor) && (
+                              </TableCell>
+                              <TableCell className="text-xs">{new Date(pedido.fecha_creacion).toLocaleDateString('es-CR')}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-col gap-1">
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      onClick={() => handleViewNotes(pedido)}
-                                      className="h-8 w-8 p-0"
-                                      title="Ver notas"
+                                    onClick={() => handleEditOrderStatus(pedido)}
+                                    className="text-xs px-1 py-0.5 h-5 w-full"
                                     >
-                                      <MessageSquare className="w-4 h-4" />
+                                    Editar
                                     </Button>
-                                  )}
-                                  {pedido.link_ubicacion && (
+                                  {pedido.estado_pedido === 'PENDIENTE' && (
                                     <Button
                                       size="sm"
-                                      variant="outline"
-                                      onClick={() => handleViewMap(pedido.link_ubicacion!)}
-                                      className="h-8 w-8 p-0"
-                                      title="Ver mapa"
+                                      onClick={() => {
+                                        setSelectedOrderForUpdate(pedido);
+                                        setNewStatus('ENTREGADO');
+                                        setShowUpdateStatusModal(true);
+                                      }}
+                                      className="bg-green-600 hover:bg-green-700 text-white text-xs px-1 py-0.5 h-5 w-full"
                                     >
-                                      <MapPin className="w-4 h-4" />
+                                      Entrega
                                     </Button>
                                   )}
-                                  {pedido.comprobante_sinpe && (
+                                  {pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago && pedido.metodo_pago !== 'EFECTIVO' && (
                                     <Button
                                       size="sm"
-                                      variant="outline"
-                                      onClick={() => handleViewComprobante(pedido.comprobante_sinpe!)}
-                                      className="h-8 w-8 p-0"
-                                      title="Ver comprobante"
+                                      onClick={() => handleViewPedidoComprobante(pedido)}
+                                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-1 py-0.5 h-5 w-full"
                                     >
-                                      <Receipt className="w-4 h-4" />
+                                      Comprobante
                                     </Button>
                                   )}
                                 </div>
-                              </div>
-                              
-                              {/* Productos */}
-                              {pedido.productos && (
-                                <div className="mb-3">
-                                  <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded border-l-4 border-blue-400">
-                                    {pedido.productos}
-                                  </p>
-                                </div>
-                              )}
-                              
-                              {/* Información principal en grid */}
-                              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-                                  <div className="text-xs font-medium text-green-700 mb-1">Valor</div>
-                                  <div className="font-bold text-lg text-green-600">{formatCurrency(pedido.valor_total)}</div>
-                                </div>
-                                
-                                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                                  <div className="text-xs font-medium text-blue-700 mb-1">Método de Pago</div>
-                                  <div className="flex items-center gap-1">
-                                    {pedido.metodo_pago === 'efectivo' && '💵'}
-                                    {pedido.metodo_pago === 'sinpe' && '📱'}
-                                    {pedido.metodo_pago === 'tarjeta' && '💳'}
-                                    {pedido.metodo_pago === '2pagos' && '🔄'}
-                                    <span className="font-semibold text-blue-600">
-                                      {pedido.metodo_pago === 'efectivo' ? 'Efectivo' :
-                                       pedido.metodo_pago === 'sinpe' ? 'SINPE' :
-                                       pedido.metodo_pago === 'tarjeta' ? 'Tarjeta' :
-                                       pedido.metodo_pago === '2pagos' ? '2 Pagos' :
-                                       'N/A'}
-                                    </span>
-                                  </div>
-                                </div>
-                                
-                                <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
-                                  <div className="text-xs font-medium text-purple-700 mb-1">Ubicación</div>
-                                  <div className="font-semibold text-purple-600 truncate">{pedido.distrito || 'N/A'}</div>
-                                  <div className="text-xs text-purple-500 truncate">{pedido.canton || 'N/A'}</div>
-                                </div>
-                                
-                                <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
-                                  <div className="text-xs font-medium text-orange-700 mb-1">Teléfono</div>
-                                  <div className="font-semibold text-orange-600 font-mono">{pedido.cliente_telefono || 'N/A'}</div>
-                                </div>
-                              </div>
-                              
-                              {/* Información secundaria */}
-                              <div className="mt-3 pt-3 border-t border-gray-100">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                                  <div className="flex justify-between">
-                                    <span className="text-gray-600">Tienda:</span>
-                                    <span className="font-medium text-gray-800">{pedido.tienda || 'N/A'}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-gray-600">Fecha Creación:</span>
-                                    <span className="font-medium text-gray-800">
-                                      {pedido.fecha_creacion ? (() => {
-                                        if (pedido.fecha_creacion.includes('T')) {
-                                          const datePart = pedido.fecha_creacion.split('T')[0];
-                                          const parts = datePart.split('-');
-                                          if (parts.length === 3) {
-                                            const year = parts[0];
-                                            const month = parts[1];
-                                            const day = parts[2];
-                                            return `${day}/${month}/${year}`;
-                                          }
-                                        }
-                                        if (pedido.fecha_creacion.includes('-') && !pedido.fecha_creacion.includes('T')) {
-                                          const parts = pedido.fecha_creacion.split('-');
-                                          if (parts.length === 3) {
-                                            const year = parts[0];
-                                            const month = parts[1].padStart(2, '0');
-                                            const day = parts[2].padStart(2, '0');
-                                            return `${day}/${month}/${year}`;
-                                          }
-                                        }
-                                        return new Date(pedido.fecha_creacion).toLocaleDateString('es-CR');
-                                      })() : 'N/A'}
-                                    </span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-gray-600">Mensajero:</span>
-                                    <span className="font-medium text-gray-800 truncate">
-                                      {pedido.mensajero_concretado || pedido.mensajero_asignado || 'N/A'}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
+                              </TableCell>
+                              <TableCell className="max-w-24 truncate text-xs">{pedido.direccion}</TableCell>
+                            </TableRow>
                           ))}
-                      </div>
+                        </TableBody>
+                      </Table>
                     </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
+                  </div>
             
-            <div className="flex-shrink-0 p-6 pt-4 border-t">
+                {/* Botón de Confirmar Liquidación */}
               <div className="flex justify-end">
                 <Button 
-                  variant="outline" 
-                  onClick={() => setShowRouteDetailModal(false)}
-                >
-                  Cerrar
+                    size="lg" 
+                    className="bg-green-600 hover:bg-green-700 text-white px-8 py-3"
+                    onClick={() => {
+                      alert(`Liquidación confirmada para ${selectedLiquidation.messengerName}. Total a entregar: ${formatCurrency(selectedLiquidation.finalAmount)}`);
+                      setShowLiquidationModal(false);
+                    }}
+                  >
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    Confirmar Liquidación
                 </Button>
               </div>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal de Notas */}
-      <Dialog open={showNotesModal} onOpenChange={setShowNotesModal}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageSquare className="w-5 h-5" />
-              Notas del Pedido - {selectedOrderNotes?.id_pedido}
-            </DialogTitle>
-          </DialogHeader>
-          {selectedOrderNotes && (
-            <div className="space-y-4">
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="font-semibold mb-2">Información del Pedido</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-600">Cliente:</span>
-                    <span className="font-medium ml-2">{selectedOrderNotes.cliente_nombre}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Valor:</span>
-                    <span className="font-medium ml-2">{formatCurrency(selectedOrderNotes.valor_total)}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Estado:</span>
-                    <span className="font-medium ml-2">{selectedOrderNotes.estado_pedido || 'pendiente'}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Método de Pago:</span>
-                    <span className="font-medium ml-2">{selectedOrderNotes.metodo_pago || 'N/A'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {selectedOrderNotes.productos && (
-                <div>
-                  <h4 className="font-semibold mb-2 flex items-center gap-2">
-                    <Package className="w-4 h-4" />
-                    Productos
-                  </h4>
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <p className="text-sm text-gray-700">{selectedOrderNotes.productos}</p>
-                  </div>
-                </div>
-              )}
-
-              {selectedOrderNotes.notas && (
-                <div>
-                  <h4 className="font-semibold mb-2">Notas Generales</h4>
-                  <div className="bg-blue-50 p-3 rounded-lg">
-                    <p className="text-sm text-gray-700">{selectedOrderNotes.notas}</p>
-                  </div>
-                </div>
-              )}
-
-              {selectedOrderNotes.nota_asesor && (
-                <div>
-                  <h4 className="font-semibold mb-2">Notas del Asesor</h4>
-                  <div className="bg-green-50 p-3 rounded-lg">
-                    <p className="text-sm text-gray-700">{selectedOrderNotes.nota_asesor}</p>
-                  </div>
-                </div>
-              )}
-
-              {!selectedOrderNotes.notas && !selectedOrderNotes.nota_asesor && !selectedOrderNotes.productos && (
-                <div className="text-center py-8 text-gray-500">
-                  <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p>No hay notas disponibles para este pedido</p>
-                </div>
-              )}
-
-              <div className="flex justify-end">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowNotesModal(false)}
-                >
-                  Cerrar
-                </Button>
-              </div>
-            </div>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Ver y Liquidar - Diseño Refactorizado */}
-      <Dialog open={showViewAndLiquidateModal} onOpenChange={setShowViewAndLiquidateModal}>
-        <DialogContent className="max-w-[95vw] w-full max-h-[95vh] overflow-y-auto">
-          <DialogHeader className="pb-4 border-b">
-            <DialogTitle className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Calculator className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <span className="text-xl font-bold">Liquidación de Mensajero</span>
-                <p className="text-sm text-gray-600 font-normal">{selectedViewAndLiquidate?.messengerName}</p>
-              </div>
+      {/* Modal de Liquidación de Tienda - Diseño Completo */}
+      <Dialog open={showStoreLiquidationModal} onOpenChange={setShowStoreLiquidationModal}>
+        <DialogContent className="sm:max-w-[1400px] max-h-[95vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Building2 className="w-6 h-6 text-blue-600" />
+              Liquidación de Tienda - {selectedStoreLiquidation?.tienda}
             </DialogTitle>
           </DialogHeader>
           
-          {selectedViewAndLiquidate && (
-            <div className="flex-1">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 p-1">
-                
-                {/* Columna Izquierda - Resumen y Cálculos */}
-                <div className="lg:col-span-1 space-y-4">
+          {selectedStoreLiquidation && (
+            <div className="space-y-4">
+              {/* Sección Superior Optimizada - Resumen Completo */}
+              <div className="grid grid-cols-12 gap-3 p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border">
+                {/* Total a Entregar - Destacado (3 columnas) */}
+                <div className="col-span-3 bg-purple-50 rounded-lg p-3 border border-purple-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle className="w-5 h-5 text-purple-600" />
+                    <span className="font-semibold text-purple-700 text-sm">Total a Entregar</span>
+                  </div>
+                  <p className="text-2xl font-bold text-purple-600 mb-1">
+                    {formatCurrency(selectedStoreLiquidation.finalAmount)}
+                  </p>
+                  <p className="text-xs text-purple-700">(Efectivo - Gastos)</p>
+                </div>
+
+                {/* Gastos (2 columnas) */}
+                <div className="col-span-2 bg-red-50 rounded-lg p-3 border border-red-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Minus className="w-4 h-4 text-red-600" />
+                    <span className="font-semibold text-red-700 text-sm">Gastos</span>
+                  </div>
+                  <p className="text-lg font-bold text-red-600 mb-1">
+                    {formatCurrency(selectedStoreLiquidation.totalSpent)}
+                  </p>
+                  <button 
+                    onClick={() => handleViewExpenses(selectedStoreLiquidation)}
+                    className="text-xs text-red-600 hover:text-red-800 underline"
+                  >
+                    Ver detalles
+                  </button>
+                </div>
+
+                {/* Total Recaudado con Fórmula (4 columnas) */}
+                <div className="col-span-4 bg-blue-50 rounded-lg p-3 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <DollarSign className="w-4 h-4 text-blue-600" />
+                    <span className="font-semibold text-blue-700 text-sm">Total Recaudado</span>
+                  </div>
+                  <p className="text-xl font-bold text-blue-600 mb-2">
+                    {formatCurrency(selectedStoreLiquidation.totalCollected)}
+                  </p>
+                  {/* Fórmula desglosada */}
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Efectivo:</span>
+                      <span className="font-medium text-green-600">{formatCurrency(selectedStoreLiquidation.cashPayments)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">SINPE:</span>
+                      <span className="font-medium text-blue-600">{formatCurrency(selectedStoreLiquidation.sinpePayments)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Tarjeta:</span>
+                      <span className="font-medium text-purple-600">{formatCurrency(selectedStoreLiquidation.tarjetaPayments || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filtros por Método de Pago como Botones (3 columnas) */}
+                <div className="col-span-3 space-y-2">
+                  <h4 className="font-semibold text-sm text-gray-700 mb-2">Filtros por Pago</h4>
                   
-                  {/* Resumen Financiero */}
-                  <Card className="border-2 border-blue-200">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg flex items-center gap-2">
+                  {/* Botón Efectivo */}
+                  <button
+                    onClick={() => setStoreOrderPaymentFilter(storeOrderPaymentFilter === 'EFECTIVO' ? 'all' : 'EFECTIVO')}
+                    className={`w-full p-2 rounded-lg border text-left transition-all ${
+                      storeOrderPaymentFilter === 'EFECTIVO' 
+                        ? 'bg-green-100 border-green-300 text-green-700' 
+                        : 'bg-green-50 border-green-200 text-green-600 hover:bg-green-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Banknote className="w-4 h-4" />
+                      <span className="font-medium text-sm">Efectivo</span>
+                    </div>
+                    <p className="text-xs font-bold mt-1">
+                      {formatCurrency(selectedStoreLiquidation.cashPayments)}
+                    </p>
+                  </button>
+
+                  {/* Botón SINPE */}
+                  <button
+                    onClick={() => setStoreOrderPaymentFilter(storeOrderPaymentFilter === 'SINPE' ? 'all' : 'SINPE')}
+                    className={`w-full p-2 rounded-lg border text-left transition-all ${
+                      storeOrderPaymentFilter === 'SINPE' 
+                        ? 'bg-blue-100 border-blue-300 text-blue-700' 
+                        : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="w-4 h-4" />
+                      <span className="font-medium text-sm">SINPE</span>
+                    </div>
+                    <p className="text-xs font-bold mt-1">
+                      {formatCurrency(selectedStoreLiquidation.sinpePayments)}
+                    </p>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewSinpeOrders(selectedStoreLiquidation);
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800 mt-1 underline"
+                    >
+                      Ver comprobantes
+                    </button>
+                  </button>
+
+                  {/* Botón Tarjeta */}
+                  <button
+                    onClick={() => setStoreOrderPaymentFilter(storeOrderPaymentFilter === 'TARJETA' ? 'all' : 'TARJETA')}
+                    className={`w-full p-2 rounded-lg border text-left transition-all ${
+                      storeOrderPaymentFilter === 'TARJETA' 
+                        ? 'bg-purple-100 border-purple-300 text-purple-700' 
+                        : 'bg-purple-50 border-purple-200 text-purple-600 hover:bg-purple-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-4 h-4" />
+                      <span className="font-medium text-sm">Tarjeta</span>
+                    </div>
+                    <p className="text-xs font-bold mt-1">
+                      {formatCurrency(selectedStoreLiquidation.tarjetaPayments || 0)}
+                    </p>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewTarjetaOrders(selectedStoreLiquidation);
+                      }}
+                      className="text-xs text-purple-600 hover:text-purple-800 mt-1 underline"
+                    >
+                      Ver comprobantes
+                    </button>
+                  </button>
+                </div>
+              </div>
+
+              {/* Sección de Métricas y Filtros de Estado */}
+              <div className="grid grid-cols-12 gap-3 p-3 bg-gray-50 rounded-lg border">
+                {/* Métricas de Pedidos (6 columnas) */}
+                <div className="col-span-6 grid grid-cols-3 gap-2">
+                  <div className="text-center p-2 bg-blue-50 rounded text-xs">
+                    <p className="font-bold text-blue-600 text-sm">{selectedStoreLiquidation.orders.length}</p>
+                    <p className="text-xs text-muted-foreground">Total</p>
+                  </div>
+                  <div className="text-center p-2 bg-green-50 rounded text-xs">
+                    <p className="font-bold text-green-600 text-sm">{selectedStoreLiquidation.orders.filter(o => o.estado_pedido === 'ENTREGADO').length}</p>
+                    <p className="text-xs text-muted-foreground">Entregados</p>
+                  </div>
+                  <div className="text-center p-2 bg-red-50 rounded text-xs">
+                    <p className="font-bold text-red-600 text-sm">{selectedStoreLiquidation.orders.filter(o => o.estado_pedido === 'DEVOLUCION').length}</p>
+                    <p className="text-xs text-muted-foreground">Devueltos</p>
+                  </div>
+                  <div className="text-center p-2 bg-orange-50 rounded text-xs">
+                    <p className="font-bold text-orange-600 text-sm">{selectedStoreLiquidation.orders.filter(o => o.estado_pedido === 'REAGENDADO').length}</p>
+                    <p className="text-xs text-muted-foreground">Reagendados</p>
+                  </div>
+                  <div className="text-center p-2 bg-yellow-50 rounded text-xs">
+                    <p className="font-bold text-yellow-600 text-sm">{selectedStoreLiquidation.orders.filter(o => o.estado_pedido === 'PENDIENTE').length}</p>
+                    <p className="text-xs text-muted-foreground">Pendientes</p>
+                  </div>
+                  <div className="text-center p-2 bg-gray-50 rounded text-xs">
+                    <p className="font-bold text-gray-600 text-sm">{selectedStoreLiquidation.orders.filter(o => !o.mensajero_asignado).length}</p>
+                    <p className="text-xs text-muted-foreground">Sin Asignar</p>
+                  </div>
+                </div>
+                
+                {/* Filtros de Estado y Botones (6 columnas) */}
+                <div className="col-span-6 flex items-center justify-end gap-2">
+                  <Select value={storeOrderStatusFilter} onValueChange={setStoreOrderStatusFilter}>
+                    <SelectTrigger className="w-24 h-7 text-xs">
+                      <SelectValue placeholder="Estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="ENTREGADO">Entregados</SelectItem>
+                      <SelectItem value="PENDIENTE">Pendientes</SelectItem>
+                      <SelectItem value="DEVOLUCION">Devueltos</SelectItem>
+                      <SelectItem value="REAGENDADO">Reagendados</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleViewPendingOrders(selectedStoreLiquidation)}
+                    className="h-7 px-2 text-xs"
+                  >
+                    Pendientes
+                  </Button>
+                </div>
+              </div>
+                      <div className="flex items-center gap-2 mb-2">
                         <DollarSign className="w-5 h-5 text-green-600" />
-                        Resumen Financiero
-                      </CardTitle>
+                        <span className="font-semibold text-green-700">Total Recaudado</span>
+                  </div>
+                      <p className="text-2xl font-bold text-green-600">
+                        {formatCurrency(selectedStoreLiquidation.totalCollected)}
+                      </p>
+                </div>
+                    
+                    <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Minus className="w-5 h-5 text-red-600" />
+                        <span className="font-semibold text-red-700">Gastos</span>
+                  </div>
+                      <p className="text-2xl font-bold text-red-600">
+                        {formatCurrency(selectedStoreLiquidation.totalSpent)}
+                      </p>
+                      <button 
+                        onClick={() => handleViewExpenses(selectedStoreLiquidation)}
+                        className="text-xs text-red-600 hover:text-red-800 mt-1 underline"
+                      >
+                        Click para ver detalles
+                      </button>
+                </div>
+                    
+                    <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock className="w-5 h-5 text-orange-600" />
+                        <span className="font-semibold text-orange-700">Pedidos a Devolver</span>
+                  </div>
+                      <p className="text-2xl font-bold text-orange-600">
+                        {selectedStoreLiquidation.orders.filter(o => o.estado_pedido === 'DEVOLUCION').length + 
+                         selectedStoreLiquidation.orders.filter(o => o.estado_pedido === 'REAGENDADO').length + 
+                         selectedStoreLiquidation.orders.filter(o => o.estado_pedido === 'PENDIENTE').length}
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">
+                        (Devueltos + Reagendados + Pendientes)
+                      </p>
+                      <button 
+                        onClick={() => handleViewPendingOrders(selectedStoreLiquidation)}
+                        className="text-xs text-orange-600 hover:text-orange-800 mt-1 underline"
+                      >
+                        Click para ver detalles
+                      </button>
+              </div>
+                  </CardContent>
+                </Card>
+
+                {/* Filtros por Método de Pago */}
+                <Card>
+                    <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Filtros por Método de Pago</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-green-50 p-3 rounded-lg">
+                  <CardContent className="space-y-3">
+                    <div className="p-3 bg-green-50 rounded-lg border border-green-200">
                           <div className="flex items-center gap-2 mb-1">
-                            <TrendingUp className="w-4 h-4 text-green-600" />
-                            <span className="text-sm font-medium text-green-800">Total Recaudado</span>
+                        <Banknote className="w-4 h-4 text-green-600" />
+                        <span className="font-semibold text-green-700 text-sm">Efectivo</span>
                           </div>
-                          <p className="text-xl font-bold text-green-900">
-                            {formatCurrency(selectedViewAndLiquidate.totalCollected)}
+                      <p className="text-lg font-bold text-green-600">
+                        {formatCurrency(selectedStoreLiquidation.cashPayments)}
                           </p>
                         </div>
-                        <div 
-                          className="bg-red-50 p-3 rounded-lg cursor-pointer hover:bg-red-100 transition-colors duration-200"
-                          onClick={() => handleViewExpenses(selectedViewAndLiquidate)}
-                        >
+                    
+                    <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
                           <div className="flex items-center gap-2 mb-1">
-                            <Minus className="w-4 h-4 text-red-600" />
-                            <span className="text-sm font-medium text-red-800">Gastos</span>
-                            <Eye className="w-3 h-3 text-red-500 ml-auto" />
+                        <Smartphone className="w-4 h-4 text-blue-600" />
+                        <span className="font-semibold text-blue-700 text-sm">SINPE</span>
                           </div>
-                          <p className="text-xl font-bold text-red-900">
-                            {formatCurrency(selectedViewAndLiquidate.totalSpent)}
-                          </p>
-                          <p className="text-xs text-red-600 mt-1">Click para ver detalles</p>
-                        </div>
+                      <p className="text-lg font-bold text-blue-600">
+                        {formatCurrency(selectedStoreLiquidation.sinpePayments)}
+                      </p>
+                      <button 
+                        onClick={() => handleViewSinpeOrders(selectedStoreLiquidation)}
+                        className="text-xs text-blue-600 hover:text-blue-800 mt-1 underline"
+                      >
+                        Ver comprobantes
+                      </button>
                       </div>
                       
-                      {/* Pedidos a Devolver */}
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Pedidos a Devolver</h4>
-                        <div 
-                          className="bg-orange-50 p-3 rounded-lg cursor-pointer hover:bg-orange-100 transition-colors duration-200"
-                          onClick={() => handleViewPendingOrders(selectedViewAndLiquidate)}
-                        >
+                    <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
                           <div className="flex items-center gap-2 mb-1">
-                            <Package className="w-4 h-4 text-orange-600" />
-                            <span className="text-sm font-medium text-orange-800">Pedidos Pendientes</span>
-                            <Eye className="w-3 h-3 text-orange-500 ml-auto" />
+                        <CreditCard className="w-4 h-4 text-purple-600" />
+                        <span className="font-semibold text-purple-700 text-sm">Tarjeta</span>
                           </div>
-                          <p className="text-lg font-bold text-orange-900">
-                            {selectedViewAndLiquidate.orders.filter(p => p.estado_pedido !== 'ENTREGADO').length}
-                          </p>
-                          <p className="text-xs text-orange-600 mt-1">Click para ver detalles</p>
-                        </div>
-                      </div>
-                      
-                      {/* Desglose por método de pago - Filtros clickeables */}
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Filtros por Método de Pago</h4>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div 
-                            className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
-                              orderPaymentFilter === 'EFECTIVO' 
-                                ? 'bg-green-100 border-2 border-green-300' 
-                                : 'bg-green-50 hover:bg-green-100'
-                            }`}
-                            onClick={() => setOrderPaymentFilter(orderPaymentFilter === 'EFECTIVO' ? 'all' : 'EFECTIVO')}
-                          >
-                            <div className="flex items-center justify-center gap-1 mb-1">
-                              <Banknote className="w-3 h-3 text-green-600" />
-                              <span className="text-xs font-medium text-green-800">Efectivo</span>
-                            </div>
-                            <p className="text-sm font-bold text-green-900">
-                              {formatCurrency(selectedViewAndLiquidate.cashPayments)}
-                            </p>
-                          </div>
-                          <div 
-                            className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
-                              orderPaymentFilter === 'SINPE' 
-                                ? 'bg-blue-100 border-2 border-blue-300' 
-                                : 'bg-blue-50 hover:bg-blue-100'
-                            }`}
-                            onClick={() => {
-                              setOrderPaymentFilter(orderPaymentFilter === 'SINPE' ? 'all' : 'SINPE');
-                              if (selectedViewAndLiquidate.sinpePayments > 0) {
-                                handleViewSinpeOrders(selectedViewAndLiquidate);
-                              }
-                            }}
-                          >
-                            <div className="flex items-center justify-center gap-1 mb-1">
-                              <Smartphone className="w-3 h-3 text-blue-600" />
-                              <span className="text-xs font-medium text-blue-800">SINPE</span>
-                              {selectedViewAndLiquidate.sinpePayments > 0 && (
-                                <Eye className="w-3 h-3 text-blue-500 ml-1" />
-                              )}
-                            </div>
-                            <p className="text-sm font-bold text-blue-900">
-                              {formatCurrency(selectedViewAndLiquidate.sinpePayments)}
-                            </p>
-                          </div>
-                          <div 
-                            className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
-                              orderPaymentFilter === 'TARJETA' 
-                                ? 'bg-purple-100 border-2 border-purple-300' 
-                                : 'bg-purple-50 hover:bg-purple-100'
-                            }`}
-                            onClick={() => {
-                              setOrderPaymentFilter(orderPaymentFilter === 'TARJETA' ? 'all' : 'TARJETA');
-                              if ((selectedViewAndLiquidate.tarjetaPayments || 0) > 0) {
-                                handleViewTarjetaOrders(selectedViewAndLiquidate);
-                              }
-                            }}
-                          >
-                            <div className="flex items-center justify-center gap-1 mb-1">
-                              <CreditCard className="w-3 h-3 text-purple-600" />
-                              <span className="text-xs font-medium text-purple-800">Tarjeta</span>
-                              {(selectedViewAndLiquidate.tarjetaPayments || 0) > 0 && (
-                                <Eye className="w-3 h-3 text-purple-500 ml-1" />
-                              )}
-                            </div>
-                            <p className="text-sm font-bold text-purple-900">
-                              {formatCurrency(selectedViewAndLiquidate.tarjetaPayments || 0)}
-                            </p>
-                          </div>
-                        </div>
+                      <p className="text-lg font-bold text-purple-600">
+                        {formatCurrency(selectedStoreLiquidation.tarjetaPayments || 0)}
+                      </p>
+                      <button 
+                        onClick={() => handleViewTarjetaOrders(selectedStoreLiquidation)}
+                        className="text-xs text-purple-600 hover:text-purple-800 mt-1 underline"
+                      >
+                        Ver comprobantes
+                      </button>
                       </div>
                     </CardContent>
                   </Card>
 
                   {/* Plata Inicial */}
-                  <Card className="border-2 border-orange-200">
+                <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-lg flex items-center gap-2">
-                        <Plus className="w-5 h-5 text-orange-600" />
-                        Plata Inicial
+                      <DollarSign className="w-5 h-5" />
+                      + Plata Inicial
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
                         <div>
-                          <Label htmlFor="initial-amount" className="text-sm font-medium">Monto (₡)</Label>
+                        <label className="text-sm font-medium text-gray-700">Monto (₡)</label>
                           <Input
-                            id="initial-amount"
                             type="number"
-                            value={initialAmountInput}
-                            onChange={(e) => setInitialAmountInput(e.target.value)}
-                            placeholder="0"
-                            className="mt-1 text-lg font-semibold"
+                          value={0} 
+                          disabled
+                          className="w-full mt-1"
                           />
                         </div>
-                        <p className="text-xs text-gray-600 bg-orange-50 p-2 rounded">
-                          💡 Monto entregado al mensajero en la mañana
+                      <p className="text-sm text-gray-500">
+                        Monto entregado a la tienda en efectivo
                         </p>
                       </div>
                     </CardContent>
                   </Card>
 
-                  {/* Cálculo Final - Diseño Mejorado */}
-                  <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="text-xl flex items-center gap-3">
-                        <div className="p-2 bg-purple-100 rounded-lg">
-                          <Calculator className="w-6 h-6 text-purple-600" />
-                        </div>
-                        <span>Cálculo Final</span>
-                      </CardTitle>
+                {/* Cálculo Final */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Cálculo Final</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-6">
-                      {/* Plata Inicial - Más Grande */}
-                      <div className="bg-green-50 p-4 rounded-xl border-2 border-green-200">
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-green-100 rounded-lg">
-                              <Plus className="w-5 h-5 text-green-600" />
+                  <CardContent className="space-y-4">
+                    <div className="p-3 bg-green-50 rounded-lg">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-green-700">Plata Inicial</span>
+                        <span className="font-bold text-green-600">{formatCurrency(0)}</span>
                             </div>
-                            <div>
-                              <span className="text-base font-semibold text-green-800">Plata inicial</span>
-                              <p className="text-xs text-green-600">Monto entregado en la mañana</p>
-                            </div>
-                          </div>
-                          <span className="text-xl font-bold text-green-900">
-                            {formatCurrency(parseFloat(initialAmountInput) || 0)}
-                          </span>
-                        </div>
+                      <p className="text-xs text-gray-600">Monto entregado a la tienda</p>
                       </div>
 
-                      {/* Total Recaudado - Más Grande */}
-                      <div className="bg-blue-50 p-4 rounded-xl border-2 border-blue-200">
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-blue-100 rounded-lg">
-                              <TrendingUp className="w-5 h-5 text-blue-600" />
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-blue-700">Total Recaudado</span>
+                        <span className="font-bold text-blue-600">{formatCurrency(selectedStoreLiquidation.totalCollected)}</span>
                             </div>
-                            <div>
-                              <span className="text-base font-semibold text-blue-800">+ Total recaudado</span>
-                              <p className="text-xs text-blue-600">Dinero recaudado por entregas</p>
-                            </div>
-                          </div>
-                          <span className="text-xl font-bold text-blue-900">
-                            {formatCurrency(selectedViewAndLiquidate.totalCollected)}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Gastos - Más Grande */}
-                      <div className="bg-red-50 p-4 rounded-xl border-2 border-red-200">
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-red-100 rounded-lg">
-                              <Minus className="w-5 h-5 text-red-600" />
-                            </div>
-                            <div>
-                              <span className="text-base font-semibold text-red-800">- Gastos</span>
-                              <p className="text-xs text-red-600">Gastos reportados por el mensajero</p>
-                            </div>
-                          </div>
-                          <span className="text-xl font-bold text-red-900">
-                            {formatCurrency(selectedViewAndLiquidate.totalSpent)}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Línea divisoria mejorada */}
-                      <div className="border-t-2 border-purple-200 pt-4">
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center text-sm text-gray-700">
-                              <span className="font-medium">Fórmula de Liquidación:</span>
-                            </div>
-                            <div className="bg-white p-3 rounded border font-mono text-sm">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-gray-600">Plata Inicial:</span>
-                                <span className="font-bold text-green-600">{formatCurrency(parseFloat(initialAmountInput) || 0)}</span>
-                              </div>
+                      <p className="text-xs text-gray-600">Total recaudado por entregas</p>
                               
                               {/* Desglose del total recaudado */}
-                              <div className="mb-2 p-2 bg-gray-50 rounded">
-                                <div className="text-xs text-gray-500 mb-1">Total Recaudado (desglose):</div>
-                                <div className="flex items-center justify-between text-xs mb-1">
-                                  <span className="text-gray-600">• Efectivo:</span>
-                                  <span className="font-semibold text-green-600">{formatCurrency(selectedViewAndLiquidate.cashPayments)}</span>
+                      <div className="mt-2 space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Efectivo:</span>
+                          <span className="font-medium">{formatCurrency(selectedStoreLiquidation.cashPayments)}</span>
                                 </div>
-                                <div className="flex items-center justify-between text-xs mb-1">
-                                  <span className="text-gray-600">• SINPE:</span>
-                                  <span className="font-semibold text-blue-600">{formatCurrency(selectedViewAndLiquidate.sinpePayments)}</span>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">SINPE:</span>
+                          <span className="font-medium">{formatCurrency(selectedStoreLiquidation.sinpePayments)}</span>
                                 </div>
-                                <div className="flex items-center justify-between text-xs mb-1">
-                                  <span className="text-gray-600">• Tarjeta:</span>
-                                  <span className="font-semibold text-purple-600">{formatCurrency(selectedViewAndLiquidate.tarjetaPayments || 0)}</span>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Tarjeta:</span>
+                          <span className="font-medium">{formatCurrency(selectedStoreLiquidation.tarjetaPayments || 0)}</span>
                                 </div>
-                                <div className="border-t border-gray-300 pt-1 flex items-center justify-between text-xs">
-                                  <span className="text-gray-700 font-semibold">= Total:</span>
-                                  <span className="font-bold text-gray-800">{formatCurrency(selectedViewAndLiquidate.totalCollected)}</span>
                                 </div>
                               </div>
                               
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-gray-600">+ Efectivo para Liquidación:</span>
-                                <span className="font-bold text-blue-600">{formatCurrency(selectedViewAndLiquidate.cashPayments)}</span>
+                    <div className="p-3 bg-red-50 rounded-lg">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-red-700">Gastos</span>
+                        <span className="font-bold text-red-600">{formatCurrency(selectedStoreLiquidation.totalSpent)}</span>
                               </div>
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-gray-600">- Gastos:</span>
-                                <span className="font-bold text-red-600">{formatCurrency(selectedViewAndLiquidate.totalSpent)}</span>
-                              </div>
-                              <div className="border-t pt-2 flex items-center justify-between">
-                                <span className="text-gray-800 font-semibold">= Total a Entregar:</span>
-                                <span className="font-bold text-purple-600 text-base">
-                                  {formatCurrency((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.cashPayments - selectedViewAndLiquidate.totalSpent)}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+                      <p className="text-xs text-gray-600">Gastos reportados por la tienda</p>
                       </div>
 
-                      {/* Resultado Final - Mucho Más Prominente */}
-                      <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-xl border-2 border-purple-200 shadow-lg">
-                        <div className="flex items-center gap-3 mb-4">
-                          <div className="bg-purple-100 p-2 rounded-lg">
-                            <Calculator className="w-6 h-6 text-purple-600" />
+                    <div className="p-3 bg-green-50 rounded-lg border-2 border-green-300">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-green-700">Efectivo para liquidación</span>
+                        <span className="font-bold text-green-600">{formatCurrency(selectedStoreLiquidation.cashPayments)}</span>
                           </div>
-                          <div>
-                            <h3 className="text-lg font-bold text-purple-800">Total a Entregar</h3>
-                            <p className="text-sm text-purple-600">El mensajero debe entregar este monto en bodega</p>
-                          </div>
+                      <p className="text-xs text-gray-600">Solo el efectivo se entrega físicamente</p>
                         </div>
                         
-                        {/* Fórmula de liquidación */}
-                        <div className="bg-white p-4 rounded-lg border border-purple-200 mb-4">
-                          <h4 className="text-sm font-semibold text-gray-700 mb-3">Fórmula de Liquidación:</h4>
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between items-center">
-                              <span className="text-gray-600">Plata Inicial:</span>
-                              <span className="font-semibold text-green-600">₡{(parseFloat(initialAmountInput) || 0).toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-gray-600">+ Efectivo Recaudado:</span>
-                              <span className="font-semibold text-blue-600">₡{selectedViewAndLiquidate.cashPayments.toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-gray-600">- Gastos:</span>
-                              <span className="font-semibold text-red-600">₡{selectedViewAndLiquidate.totalSpent.toLocaleString()}</span>
-                            </div>
-                            <div className="border-t border-gray-200 pt-2">
-                              <div className="flex justify-between items-center">
-                                <span className="font-bold text-gray-800">= Total a Entregar:</span>
-                                <span className="font-bold text-purple-600">₡{((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.cashPayments - selectedViewAndLiquidate.totalSpent).toLocaleString()}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        
+                    <div className="p-4 bg-purple-50 rounded-lg border-2 border-purple-300">
                         <div className="text-center">
-                          <div className="text-4xl font-bold text-purple-900 mb-2">
-                            {formatCurrency((parseFloat(initialAmountInput) || 0) + selectedViewAndLiquidate.cashPayments - selectedViewAndLiquidate.totalSpent)}
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                          <CheckCircle className="w-5 h-5 text-purple-600" />
+                          <span className="text-lg font-semibold text-purple-700">Total a Entregar</span>
                           </div>
-                          <div className="flex items-center justify-center gap-2 text-green-600">
-                            <CheckCircle className="w-4 h-4" />
-                            <span className="text-sm font-medium">Confirmado para entrega</span>
-                          </div>
+                        <p className="text-3xl font-bold text-purple-600">
+                          {formatCurrency(selectedStoreLiquidation.finalAmount)}
+                        </p>
+                        <p className="text-sm text-purple-700 mt-1">Confirmado para entrega</p>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                 </div>
 
-                {/* Columna Derecha - Pedidos */}
-                <div className="lg:col-span-2 space-y-4 flex flex-col h-full">
+              {/* Panel Derecho - Layout Bento Optimizado */}
+              <div className="lg:col-span-2 space-y-3">
+                {/* Layout Bento Compacto */}
+                <div className="grid grid-cols-12 gap-2 p-3 bg-gray-50 rounded-lg">
+                  {/* Métricas Compactas - 6 columnas */}
+                  <div className="col-span-6 grid grid-cols-3 gap-1">
+                    <div className="text-center p-2 bg-blue-50 rounded text-xs">
+                      <p className="font-bold text-blue-600 text-sm">{selectedStoreLiquidation.orders.length}</p>
+                      <p className="text-xs text-muted-foreground">Total</p>
+                    </div>
+                    <div className="text-center p-2 bg-green-50 rounded text-xs">
+                      <p className="font-bold text-green-600 text-sm">{selectedStoreLiquidation.orders.filter(o => o.estado_pedido === 'ENTREGADO').length}</p>
+                      <p className="text-xs text-muted-foreground">Entregados</p>
+                    </div>
+                    <div className="text-center p-2 bg-red-50 rounded text-xs">
+                      <p className="font-bold text-red-600 text-sm">{selectedStoreLiquidation.orders.filter(o => o.estado_pedido === 'DEVOLUCION').length}</p>
+                      <p className="text-xs text-muted-foreground">Devueltos</p>
+                    </div>
+                    <div className="text-center p-2 bg-orange-50 rounded text-xs">
+                      <p className="font-bold text-orange-600 text-sm">{selectedStoreLiquidation.orders.filter(o => o.estado_pedido === 'REAGENDADO').length}</p>
+                      <p className="text-xs text-muted-foreground">Reagendados</p>
+                    </div>
+                    <div className="text-center p-2 bg-yellow-50 rounded text-xs">
+                      <p className="font-bold text-yellow-600 text-sm">{selectedStoreLiquidation.orders.filter(o => o.estado_pedido === 'PENDIENTE').length}</p>
+                      <p className="text-xs text-muted-foreground">Pendientes</p>
+                    </div>
+                    <div className="text-center p-2 bg-gray-50 rounded text-xs">
+                      <p className="font-bold text-gray-600 text-sm">{selectedStoreLiquidation.orders.filter(o => !o.mensajero_asignado).length}</p>
+                      <p className="text-xs text-muted-foreground">Sin Asignar</p>
+                    </div>
+                  </div>
+                  
+                  {/* Filtros y Botones - 6 columnas */}
+                  <div className="col-span-6 flex items-center justify-end gap-2">
+                    <Select value={storeOrderStatusFilter} onValueChange={setStoreOrderStatusFilter}>
+                      <SelectTrigger className="w-24 h-7 text-xs">
+                        <SelectValue placeholder="Estado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="ENTREGADO">Entregados</SelectItem>
+                        <SelectItem value="PENDIENTE">Pendientes</SelectItem>
+                        <SelectItem value="DEVOLUCION">Devueltos</SelectItem>
+                        <SelectItem value="REAGENDADO">Reagendados</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={storeOrderPaymentFilter} onValueChange={setStoreOrderPaymentFilter}>
+                      <SelectTrigger className="w-24 h-7 text-xs">
+                        <SelectValue placeholder="Pago" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="EFECTIVO">Efectivo</SelectItem>
+                        <SelectItem value="SINPE">SINPE</SelectItem>
+                        <SelectItem value="TARJETA">Tarjeta</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleViewExpenses(selectedStoreLiquidation)}
+                      className="h-7 px-2 text-xs"
+                    >
+                      Gastos
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleViewPendingOrders(selectedStoreLiquidation)}
+                      className="h-7 px-2 text-xs"
+                    >
+                      Pendientes
+                    </Button>
+                  </div>
+                </div>
 
-                  {/* Estadísticas de Pedidos */}
-                  <Card className="border-2 border-gray-200">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <BarChart3 className="w-4 h-4 text-gray-600" />
-                        Estadísticas de Pedidos
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="grid grid-cols-4 gap-2">
-                        <div 
-                          className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
-                            orderStatusFilter === 'all' 
-                              ? 'bg-blue-100 border-2 border-blue-300' 
-                              : 'bg-blue-50 hover:bg-blue-100'
-                          }`}
-                          onClick={() => setOrderStatusFilter('all')}
-                        >
-                          <div className="flex items-center justify-center gap-1 mb-1">
-                            <Package className="w-3 h-3 text-blue-600" />
-                            <span className="text-xs font-medium text-blue-800">Total</span>
-                          </div>
-                          <p className="text-lg font-bold text-blue-900">{statusCounts.total}</p>
-                        </div>
-                        <div 
-                          className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
-                            orderStatusFilter === 'entregado' 
-                              ? 'bg-green-100 border-2 border-green-300' 
-                              : 'bg-green-50 hover:bg-green-100'
-                          }`}
-                          onClick={() => setOrderStatusFilter('entregado')}
-                        >
-                          <div className="flex items-center justify-center gap-1 mb-1">
-                            <CheckCircle className="w-3 h-3 text-green-600" />
-                            <span className="text-xs font-medium text-green-800">Entregados</span>
-                          </div>
-                          <p className="text-lg font-bold text-green-900">{statusCounts.entregados}</p>
-                        </div>
-                        <div 
-                          className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
-                            orderStatusFilter === 'devolucion' 
-                              ? 'bg-red-100 border-2 border-red-300' 
-                              : 'bg-red-50 hover:bg-red-100'
-                          }`}
-                          onClick={() => setOrderStatusFilter('devolucion')}
-                        >
-                          <div className="flex items-center justify-center gap-1 mb-1">
-                            <AlertCircle className="w-3 h-3 text-red-600" />
-                            <span className="text-xs font-medium text-red-800">Devoluciones</span>
-                          </div>
-                          <p className="text-lg font-bold text-red-900">{statusCounts.devoluciones}</p>
-                        </div>
-                        <div 
-                          className={`p-2 rounded-lg text-center cursor-pointer transition-all duration-200 ${
-                            orderStatusFilter === 'reagendado' 
-                              ? 'bg-orange-100 border-2 border-orange-300' 
-                              : 'bg-orange-50 hover:bg-orange-100'
-                          }`}
-                          onClick={() => setOrderStatusFilter('reagendado')}
-                        >
-                          <div className="flex items-center justify-center gap-1 mb-1">
-                            <Clock className="w-3 h-3 text-orange-600" />
-                            <span className="text-xs font-medium text-orange-800">Reagendados</span>
-                          </div>
-                          <p className="text-lg font-bold text-orange-900">{statusCounts.reagendados}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                {/* Tabla de Pedidos - Sin Card para maximizar espacio */}
+                <div className="border rounded-lg">
+                  <div className="p-3 border-b bg-gray-50">
+                    <h3 className="font-semibold text-sm">Detalle de Pedidos ({selectedStoreLiquidation.orders.length})</h3>
+                  </div>
 
-                  {/* Tabla Detallada de Pedidos */}
-                  <Card className="border-2 border-gray-200 flex-1 flex flex-col">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg flex items-center gap-2">
-                          <Package className="w-5 h-5 text-gray-600" />
-                          Detalle de Pedidos ({selectedViewAndLiquidate.orders
-                            .filter(pedido => {
-                              let statusMatch = true;
-                              if (orderStatusFilter === 'entregado') {
-                                statusMatch = pedido.estado_pedido === 'ENTREGADO';
-                              } else if (orderStatusFilter === 'devolucion') {
-                                statusMatch = pedido.estado_pedido === 'DEVOLUCION';
-                              } else if (orderStatusFilter === 'reagendado') {
-                                statusMatch = pedido.estado_pedido === 'REAGENDADO';
-                              } else if (orderStatusFilter === 'pendiente') {
-                                statusMatch = pedido.estado_pedido === 'PENDIENTE' || !pedido.estado_pedido;
-                              }
-                              return statusMatch;
-                            })
-                            .filter(pedido => 
-                              orderPaymentFilter === 'all' || 
-                              pedido.metodo_pago === orderPaymentFilter
-                            ).length})
-                        </CardTitle>
-                        <div className="flex items-center gap-2">
-                          <Select
-                            value={orderStatusFilter}
-                            onValueChange={setOrderStatusFilter}
-                          >
-                            <SelectTrigger className="w-40">
-                              <SelectValue placeholder="Filtrar por estado" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">Todos los estados</SelectItem>
-                              <SelectItem value="entregado">Entregados</SelectItem>
-                              <SelectItem value="devolucion">Devoluciones</SelectItem>
-                              <SelectItem value="reagendado">Reagendados</SelectItem>
-                              <SelectItem value="pendiente">Pendientes</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="p-0 flex-1 flex flex-col">
-                      <div className="flex-1 overflow-y-auto">
-                  <Table>
+                  <div className="overflow-x-auto">
+                    <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-16 text-xs">ID</TableHead>
-                        <TableHead className="w-32 text-xs">Cliente</TableHead>
-                        <TableHead className="w-20 text-xs hidden sm:table-cell">Teléfono</TableHead>
-                        <TableHead className="w-32 text-xs hidden md:table-cell">Dirección</TableHead>
-                        <TableHead className="w-20 text-xs">Valor</TableHead>
-                        <TableHead className="w-20 text-xs">Método</TableHead>
-                        <TableHead className="w-20 text-xs">Estado</TableHead>
-                        <TableHead className="w-20 text-xs hidden lg:table-cell">Fecha</TableHead>
-                        <TableHead className="w-16 text-xs">Acciones</TableHead>
+                            <TableHead className="w-16">ID</TableHead>
+                            <TableHead className="w-24">Cliente</TableHead>
+                            <TableHead className="w-24">Mensajero</TableHead>
+                            <TableHead className="w-32">Producto</TableHead>
+                            <TableHead className="w-16">Valor</TableHead>
+                            <TableHead className="w-16">Método</TableHead>
+                            <TableHead className="w-16">Estado</TableHead>
+                            <TableHead className="w-16">Fecha</TableHead>
+                            <TableHead className="w-20">Acciones</TableHead>
+                            <TableHead className="min-w-24">Dirección</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {selectedViewAndLiquidate.orders
+                          {selectedStoreLiquidation.orders
                         .filter(pedido => {
-                          let statusMatch = true;
-                          if (orderStatusFilter === 'entregado') {
-                            statusMatch = pedido.estado_pedido === 'ENTREGADO';
-                          } else if (orderStatusFilter === 'devolucion') {
-                            statusMatch = pedido.estado_pedido === 'DEVOLUCION';
-                          } else if (orderStatusFilter === 'reagendado') {
-                            statusMatch = pedido.estado_pedido === 'REAGENDADO';
-                          } else if (orderStatusFilter === 'pendiente') {
-                            statusMatch = pedido.estado_pedido === 'PENDIENTE' || !pedido.estado_pedido;
-                          }
-                          return statusMatch;
-                        })
-                        .filter(pedido => 
-                          orderPaymentFilter === 'all' || 
-                          pedido.metodo_pago === orderPaymentFilter
-                        )
+                              const statusMatch = storeOrderStatusFilter === 'all' || pedido.estado_pedido === storeOrderStatusFilter;
+                              const paymentMatch = storeOrderPaymentFilter === 'all' || pedido.metodo_pago === storeOrderPaymentFilter;
+                              return statusMatch && paymentMatch;
+                            })
                         .map((pedido) => (
-                        <TableRow key={pedido.id_pedido} className="hover:bg-gray-50">
-                          <TableCell className="font-medium text-xs px-2 py-2">
-                            {pedido.id_pedido}
-                          </TableCell>
-                          <TableCell className="px-2 py-2">
-                            <div className="flex flex-col">
-                              <span className="font-medium text-xs truncate max-w-28">{pedido.cliente_nombre}</span>
-                              <span className="text-xs text-gray-500 truncate max-w-28">{pedido.distrito}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-xs px-2 py-2 hidden sm:table-cell">
-                            {pedido.cliente_telefono ? pedido.cliente_telefono.replace('506', '') : 'N/A'}
-                          </TableCell>
-                          <TableCell className="text-xs px-2 py-2 hidden md:table-cell">
-                            <div className="max-w-32 text-wrap leading-tight" title={pedido.direccion}>
-                              {pedido.direccion ? (
-                                <div className="space-y-1">
-                                  {pedido.direccion.split(',').slice(0, 2).map((part, index) => (
-                                    <div key={index} className="text-xs leading-tight">
-                                      {part.trim()}
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : 'N/A'}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right px-2 py-2">
-                            <span className="font-bold text-green-600 text-xs">
-                              {formatCurrency(pedido.valor_total)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="px-2 py-2">
+                            <TableRow key={pedido.id_pedido} className="text-xs">
+                              <TableCell className="font-medium text-xs">{pedido.id_pedido}</TableCell>
+                              <TableCell className="max-w-24 truncate text-xs">{pedido.cliente_nombre}</TableCell>
+                              <TableCell className="max-w-24 truncate text-xs">{pedido.mensajero_asignado || 'Sin asignar'}</TableCell>
+                              <TableCell className="max-w-32 truncate text-xs">{pedido.productos || 'No especificado'}</TableCell>
+                              <TableCell className="font-medium text-xs">{formatCurrency(pedido.valor_total)}</TableCell>
+                              <TableCell>
                             <div className="flex items-center gap-1">
-                              {pedido.metodo_pago === 'EFECTIVO' && <Banknote className="w-3 h-3 text-green-600" />}
                               {pedido.metodo_pago === 'SINPE' && <Smartphone className="w-3 h-3 text-blue-600" />}
+                                  {pedido.metodo_pago === 'EFECTIVO' && <Banknote className="w-3 h-3 text-green-600" />}
                               {pedido.metodo_pago === 'TARJETA' && <CreditCard className="w-3 h-3 text-purple-600" />}
-                              {pedido.metodo_pago === '2PAGOS' && <Receipt className="w-3 h-3 text-orange-600" />}
-                              <span className="text-xs font-medium truncate">{pedido.metodo_pago || 'N/A'}</span>
+                                  <span className="text-xs">
+                                    {pedido.metodo_pago === 'SINPE' ? 'SINPE' :
+                                     pedido.metodo_pago === 'EFECTIVO' ? 'EFECTIVO' :
+                                     pedido.metodo_pago === 'TARJETA' ? 'TARJETA' :
+                                     'SIN_METODO'}
+                                  </span>
                             </div>
                           </TableCell>
-                          <TableCell className="px-2 py-2">
+                              <TableCell>
                             <div className="flex items-center gap-1">
                               {pedido.estado_pedido === 'ENTREGADO' && <CheckCircle className="w-3 h-3 text-green-600" />}
-                              {pedido.estado_pedido === 'DEVOLUCION' && <AlertCircle className="w-3 h-3 text-red-600" />}
-                              {pedido.estado_pedido === 'REAGENDADO' && <Clock className="w-3 h-3 text-orange-600" />}
-                              {(!pedido.estado_pedido || pedido.estado_pedido === 'PENDIENTE') && <Package className="w-3 h-3 text-gray-600" />}
-                              <Badge 
-                                variant={pedido.estado_pedido === 'ENTREGADO' ? 'default' : 'outline'}
-                                className={`text-xs px-1 py-0.5 ${
-                                  pedido.estado_pedido === 'ENTREGADO' 
-                                    ? 'bg-green-100 text-green-800 border-green-200' 
-                                    : pedido.estado_pedido === 'DEVOLUCION'
-                                    ? 'bg-red-100 text-red-800 border-red-200'
-                                    : pedido.estado_pedido === 'REAGENDADO'
-                                    ? 'bg-orange-100 text-orange-800 border-orange-200'
-                                    : 'bg-gray-100 text-gray-800 border-gray-200'
-                                }`}
-                              >
+                                  {pedido.estado_pedido === 'PENDIENTE' && <Clock className="w-3 h-3 text-yellow-600" />}
+                                  {pedido.estado_pedido === 'DEVOLUCION' && <XCircle className="w-3 h-3 text-red-600" />}
+                                  {pedido.estado_pedido === 'REAGENDADO' && <AlertCircle className="w-3 h-3 text-blue-600" />}
+                                  <span className="text-xs">
                                 {pedido.estado_pedido === 'ENTREGADO' ? 'ENT' : 
+                                     pedido.estado_pedido === 'PENDIENTE' ? 'PEN' :
                                  pedido.estado_pedido === 'DEVOLUCION' ? 'DEV' :
                                  pedido.estado_pedido === 'REAGENDADO' ? 'REA' :
-                                 'PEN'}
-                              </Badge>
+                                     pedido.estado_pedido || 'PEN'}
+                                  </span>
                             </div>
                           </TableCell>
-                          <TableCell className="text-xs text-gray-500 px-2 py-2 hidden lg:table-cell">
-                            {pedido.fecha_creacion ? (() => {
-                              if (pedido.fecha_creacion.includes('T')) {
-                                const datePart = pedido.fecha_creacion.split('T')[0];
-                                const parts = datePart.split('-');
-                                if (parts.length === 3) {
-                                  const year = parts[0];
-                                  const month = parts[1];
-                                  const day = parts[2];
-                                  return `${day}/${month}/${year.slice(-2)}`;
-                                }
-                              }
-                              if (pedido.fecha_creacion.includes('-') && !pedido.fecha_creacion.includes('T')) {
-                                const parts = pedido.fecha_creacion.split('-');
-                                if (parts.length === 3) {
-                                  const year = parts[0];
-                                  const month = parts[1].padStart(2, '0');
-                                  const day = parts[2].padStart(2, '0');
-                                  return `${day}/${month}/${year.slice(-2)}`;
-                                }
-                              }
-                              return new Date(pedido.fecha_creacion).toLocaleDateString('es-CR', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                year: '2-digit'
-                              });
-                            })() : 'N/A'}
-                          </TableCell>
-                          <TableCell className="px-2 py-2">
-                            <div className="flex items-center gap-1">
-                              {pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'SINPE' && (
+                              <TableCell className="text-xs">{new Date(pedido.fecha_creacion).toLocaleDateString('es-CR')}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-col gap-1">
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-5 px-1 text-xs bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                                  onClick={() => {
-                                    if (pedido.comprobante_sinpe) {
-                                      // Abrir el comprobante en una nueva pestaña
-                                      window.open(pedido.comprobante_sinpe, '_blank');
-                                    } else {
-                                      alert(`No hay comprobante disponible para el pedido ${pedido.id_pedido}\nNúmero SINPE: ${pedido.numero_sinpe || 'N/A'}`);
-                                    }
-                                  }}
+                                    onClick={() => handleEditOrderStatus(pedido)}
+                                    className="text-xs px-1 py-0.5 h-5 w-full"
+                                  >
+                                    Editar
+                                </Button>
+                                  {pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago && pedido.metodo_pago !== 'EFECTIVO' && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleViewPedidoComprobante(pedido)}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-1 py-0.5 h-5 w-full"
                                 >
-                                  <Eye className="w-3 h-3 mr-1" />
                                   Comprobante
-                                </Button>
-                              )}
-                              {pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'EFECTIVO' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-5 px-1 text-xs bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
-                                  onClick={() => {
-                                    console.log('Ver comprobante efectivo para pedido:', pedido.id_pedido);
-                                    alert(`Pedido pagado en efectivo: ${pedido.id_pedido}\nValor: ${formatCurrency(pedido.valor_total)}\nCliente: ${pedido.cliente_nombre}`);
-                                  }}
-                                >
-                                  <Banknote className="w-3 h-3 mr-1" />
-                                  Efectivo
-                                </Button>
-                              )}
-                              {pedido.estado_pedido === 'ENTREGADO' && pedido.metodo_pago === 'TARJETA' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-5 px-1 text-xs bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
-                                  onClick={() => {
-                                    if (pedido.comprobante_sinpe) {
-                                      window.open(pedido.comprobante_sinpe, '_blank');
-                                    } else {
-                                      alert(`No hay comprobante disponible para el pedido ${pedido.id_pedido}\nValor: ${formatCurrency(pedido.valor_total)}\nCliente: ${pedido.cliente_nombre}`);
-                                    }
-                                  }}
-                                >
-                                  <Eye className="w-3 h-3 mr-1" />
-                                  Comprobante
-                                </Button>
-                              )}
-                              {pedido.estado_pedido === 'DEVOLUCION' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-5 px-1 text-xs bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
-                                  onClick={() => {
-                                    alert(`Pedido devuelto: ${pedido.id_pedido}\nCliente: ${pedido.cliente_nombre}\nValor: ${formatCurrency(pedido.valor_total)}\nMotivo: ${pedido.notas || 'No especificado'}`);
-                                  }}
-                                >
-                                  <AlertCircle className="w-3 h-3 mr-1" />
-                                  Devolución
-                                </Button>
-                              )}
-                              {pedido.estado_pedido === 'REAGENDADO' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-5 px-1 text-xs bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100"
-                                  onClick={() => {
-                                    alert(`Pedido reagendado: ${pedido.id_pedido}\nCliente: ${pedido.cliente_nombre}\nValor: ${formatCurrency(pedido.valor_total)}\nNueva fecha: ${pedido.fecha_entrega || 'No especificada'}`);
-                                  }}
-                                >
-                                  <Clock className="w-3 h-3 mr-1" />
-                                  Reagendado
                                 </Button>
                               )}
                             </div>
                           </TableCell>
+                          <TableCell className="max-w-24 truncate text-xs">{pedido.direccion}</TableCell>
                         </TableRow>
                       ))}
                         </TableBody>
                       </Table>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
+                    </div>
+                  </div>
               
-              {/* Botones de Acción */}
-              <div className="flex justify-end gap-3 pt-4 border-t bg-gray-50 p-4 -mx-6 -mb-6">
-                {isLiquidationCompleted ? (
-                  <Button
-                    onClick={() => setShowViewAndLiquidateModal(false)}
-                    className="px-6"
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Cerrar
-                  </Button>
-                ) : (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowViewAndLiquidateModal(false)}
-                      className="px-6"
-                    >
-                      <X className="w-4 h-4 mr-2" />
-                      Cancelar
-                    </Button>
-                    <Button
-                      onClick={() => confirmLiquidation(selectedViewAndLiquidate, parseFloat(initialAmountInput))}
-                      className="bg-green-600 hover:bg-green-700 px-6"
-                    >
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Confirmar Liquidación
-                    </Button>
-                  </>
-                )}
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Progress Loader */}
-      <ProgressLoader
-        isVisible={isLoaderVisible}
-        title="Procesando Liquidaciones"
-        steps={loaderSteps}
-        currentStep={loaderCurrentStep}
-        overallProgress={loaderProgress}
-        onClose={closeLoader}
-      />
-      {/* Modal de Gastos */}
-      {showExpensesModal && selectedExpenses && (
-        <Dialog open={showExpensesModal} onOpenChange={setShowExpensesModal}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      {/* Modal de Actualización de Estado de Pedido - Completo como mensajeros */}
+      <Dialog open={showUpdateStatusModal} onOpenChange={setShowUpdateStatusModal}>
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-red-600" />
-                Gastos de {selectedExpenses.mensajero}
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              Actualizar Estado del Pedido
               </DialogTitle>
             </DialogHeader>
             
-            <div className="space-y-4">
-              {selectedExpenses.gastos.length === 0 ? (
-                <div className="text-center py-8">
-                  <Receipt className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">No hay gastos reportados para este mensajero</p>
-                </div>
-              ) : (
-                <>
-                  {/* Resumen de gastos */}
-                  <div className="bg-red-50 p-4 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-semibold text-red-800">Total de Gastos</h3>
-                        <p className="text-sm text-red-600">
-                          {selectedExpenses.gastos.length} {selectedExpenses.gastos.length === 1 ? 'gasto' : 'gastos'} reportado{selectedExpenses.gastos.length === 1 ? '' : 's'}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-red-900">
-                          ₡{selectedExpenses.gastos.reduce((sum, gasto) => sum + gasto.monto, 0).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Lista de gastos - Estilo similar a Mi Ruta de Hoy */}
-                  <div className="space-y-3">
-                    {selectedExpenses.gastos.map((gasto, index) => (
-                      <div key={gasto.id || index} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-full ${getExpenseColor(gasto.tipo_gasto)}`}>
-                              {getExpenseIcon(gasto.tipo_gasto)}
-                            </div>
-                            <div>
-                              <p className="font-medium text-sm capitalize">{gasto.tipo_gasto}</p>
-                              <p className="text-xs text-gray-500">
-                                {new Date(gasto.fecha).toLocaleTimeString('es-CR', { 
-                                  hour: '2-digit', 
-                                  minute: '2-digit' 
-                                })} - {new Date(gasto.fecha).toLocaleDateString('es-CR')}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-lg font-bold text-red-600">
-                              ₡{gasto.monto.toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                        {gasto.comprobante_link && (
-                          <div className="flex justify-end mt-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-3 text-xs bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                              onClick={() => window.open(gasto.comprobante_link, '_blank')}
-                            >
-                              <Eye className="w-3 h-3 mr-1" />
-                              Ver Comprobante
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* Modal de Pedidos Pendientes */}
-      {showPendingOrdersModal && selectedPendingOrders && (
-        <Dialog open={showPendingOrdersModal} onOpenChange={setShowPendingOrdersModal}>
-          <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Package className="w-5 h-5 text-orange-600" />
-                Pedidos a Devolver - {selectedPendingOrders.mensajero}
-              </DialogTitle>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              {selectedPendingOrders.pedidos.length === 0 ? (
-                <div className="text-center py-8">
-                  <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">No hay pedidos pendientes para este mensajero</p>
-                </div>
-              ) : (
-                <>
-                  {/* Resumen de pedidos pendientes */}
-                  <div className="bg-orange-50 p-4 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-semibold text-orange-800">Total de Pedidos Pendientes</h3>
-                        <p className="text-sm text-orange-600">
-                          {selectedPendingOrders.pedidos.length} {selectedPendingOrders.pedidos.length === 1 ? 'pedido' : 'pedidos'} sin entregar
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-orange-900">
-                          {selectedPendingOrders.pedidos.length}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Tabla de pedidos pendientes */}
-                  <div className="border rounded-lg overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>ID Pedido</TableHead>
-                          <TableHead>Cliente</TableHead>
-                          <TableHead>Estado</TableHead>
-                          <TableHead>Valor</TableHead>
-                          <TableHead>Método Pago</TableHead>
-                          <TableHead>Distrito</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {selectedPendingOrders.pedidos.map((pedido) => (
-                          <TableRow key={pedido.id_pedido}>
-                            <TableCell className="font-mono text-sm">
-                              {pedido.id_pedido}
-                            </TableCell>
-                            <TableCell>
-                              <div>
-                                <p className="font-medium">{pedido.cliente_nombre}</p>
-                                <p className="text-xs text-gray-500">{pedido.cliente_telefono}</p>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge 
-                                variant={
-                                  pedido.estado_pedido === 'PENDIENTE' ? 'secondary' :
-                                  pedido.estado_pedido === 'DEVOLUCION' ? 'destructive' :
-                                  pedido.estado_pedido === 'REAGENDADO' ? 'outline' : 'secondary'
-                                }
-                              >
-                                {pedido.estado_pedido || 'PENDIENTE'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="font-semibold text-green-600">
-                              ₡{(pedido.valor_total || 0).toLocaleString()}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline">
-                                {pedido.metodo_pago || 'SIN_METODO'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-sm text-gray-600">
-                              {pedido.distrito || 'N/A'}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* Modal de pedidos SINPE */}
-      {showSinpeModal && selectedSinpeOrders && (
-        <Dialog open={showSinpeModal} onOpenChange={setShowSinpeModal}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Smartphone className="w-5 h-5 text-blue-600" />
-                Pedidos SINPE - {selectedViewAndLiquidate?.messengerName}
-              </DialogTitle>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              {selectedSinpeOrders.length === 0 ? (
-                <div className="text-center py-8">
-                  <Smartphone className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">No hay pedidos SINPE entregados</p>
-                </div>
-              ) : (
-                <>
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-semibold text-blue-800">Total SINPE</h3>
-                        <p className="text-sm text-blue-600">
-                          {selectedSinpeOrders.length} {selectedSinpeOrders.length === 1 ? 'pedido' : 'pedidos'} entregado{selectedSinpeOrders.length === 1 ? '' : 's'}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-blue-900">
-                          ₡{selectedSinpeOrders.reduce((sum, pedido) => sum + (pedido.valor_total || 0), 0).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {selectedSinpeOrders.map((pedido, index) => (
-                      <div key={pedido.id_pedido || index} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-full bg-blue-100">
-                              <Smartphone className="w-4 h-4 text-blue-600" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-sm">{pedido.cliente_nombre}</p>
-                              <p className="text-xs text-gray-500">ID: {pedido.id_pedido}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-lg font-bold text-blue-600">
-                              ₡{(pedido.valor_total || 0).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                        {pedido.comprobante_sinpe && (
-                          <div className="flex justify-end mt-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-3 text-xs bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                              onClick={() => window.open(pedido.comprobante_sinpe!, '_blank')}
-                            >
-                              <Eye className="w-3 h-3 mr-1" />
-                              Ver Comprobante
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* Modal de pedidos Tarjeta */}
-      {showTarjetaModal && selectedTarjetaOrders && (
-        <Dialog open={showTarjetaModal} onOpenChange={setShowTarjetaModal}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-purple-600" />
-                Pedidos Tarjeta - {selectedViewAndLiquidate?.messengerName}
-              </DialogTitle>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              {selectedTarjetaOrders.length === 0 ? (
-                <div className="text-center py-8">
-                  <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">No hay pedidos con tarjeta entregados</p>
-                </div>
-              ) : (
-                <>
-                  <div className="bg-purple-50 p-4 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-semibold text-purple-800">Total Tarjeta</h3>
-                        <p className="text-sm text-purple-600">
-                          {selectedTarjetaOrders.length} {selectedTarjetaOrders.length === 1 ? 'pedido' : 'pedidos'} entregado{selectedTarjetaOrders.length === 1 ? '' : 's'}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-purple-900">
-                          ₡{selectedTarjetaOrders.reduce((sum, pedido) => sum + (pedido.valor_total || 0), 0).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {selectedTarjetaOrders.map((pedido, index) => (
-                      <div key={pedido.id_pedido || index} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-full bg-purple-100">
-                              <CreditCard className="w-4 h-4 text-purple-600" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-sm">{pedido.cliente_nombre}</p>
-                              <p className="text-xs text-gray-500">ID: {pedido.id_pedido}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-lg font-bold text-purple-600">
-                              ₡{(pedido.valor_total || 0).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                        {pedido.comprobante_sinpe && (
-                          <div className="flex justify-end mt-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-3 text-xs bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
-                              onClick={() => window.open(pedido.comprobante_sinpe!, '_blank')}
-                            >
-                              <Eye className="w-3 h-3 mr-1" />
-                              Ver Comprobante
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* Modal para actualizar estado de pedido */}
-      <Dialog open={isUpdateStatusModalOpen} onOpenChange={setIsUpdateStatusModalOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Actualizar Estado del Pedido</DialogTitle>
-          </DialogHeader>
           {selectedOrderForUpdate && (
-            <div className="space-y-4">
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <p className="text-sm font-medium">Pedido: {selectedOrderForUpdate.id_pedido}</p>
-                <p className="text-sm text-gray-600">{selectedOrderForUpdate.cliente_nombre}</p>
-                <p className="text-sm text-gray-600">Valor: ₡{(selectedOrderForUpdate.valor_total || 0).toLocaleString()}</p>
-                <p className="text-sm text-gray-600">Estado actual: {selectedOrderForUpdate.estado_pedido || 'PENDIENTE'}</p>
-              </div>
-              
-              <div>
-                <Label htmlFor="new-status">Nuevo Estado</Label>
+            <div className="space-y-6">
+              {/* Información del pedido */}
+              <div className="bg-gray-50 p-4 rounded-lg border">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-lg">Pedido {selectedOrderForUpdate.id_pedido}</h3>
+                  <Badge variant="outline" className="text-xs">
+                    {selectedOrderForUpdate.estado_pedido || 'PENDIENTE'}
+                  </Badge>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Cliente:</span>
+                    <span className="font-medium">{selectedOrderForUpdate.cliente_nombre}</span>
+                      </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Valor:</span>
+                    <span className="font-bold text-green-600">{formatCurrency(selectedOrderForUpdate.valor_total)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Teléfono:</span>
+                    <span className="font-medium">{selectedOrderForUpdate.cliente_telefono}</span>
+                      </div>
+                    </div>
+                  </div>
+
+              {/* Selector de nuevo estado */}
+                  <div className="space-y-3">
+                <Label className="text-base font-semibold">Nuevo Estado *</Label>
                 <Select value={newStatus} onValueChange={setNewStatus}>
-                  <SelectTrigger>
-                    <SelectValue />
+                  <SelectTrigger className="h-12">
+                    <SelectValue placeholder="Seleccionar nuevo estado" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ENTREGADO">Entregado</SelectItem>
-                    <SelectItem value="DEVOLUCION">Devolución</SelectItem>
-                    <SelectItem value="REAGENDADO">Reagendado</SelectItem>
-                    <SelectItem value="PENDIENTE">Pendiente</SelectItem>
+                    <SelectItem value="ENTREGADO">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                        <span>Entregado</span>
+                            </div>
+                    </SelectItem>
+                    <SelectItem value="PENDIENTE">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-yellow-600" />
+                        <span>Pendiente</span>
+                            </div>
+                    </SelectItem>
+                    <SelectItem value="DEVOLUCION">
+                      <div className="flex items-center gap-2">
+                        <XCircle className="w-4 h-4 text-red-600" />
+                        <span>Devolución</span>
+                          </div>
+                    </SelectItem>
+                    <SelectItem value="REAGENDADO">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-blue-600" />
+                        <span>Reagendado</span>
+                          </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+                        </div>
 
-              {newStatus !== 'DEVOLUCION' && newStatus !== 'REAGENDADO' && (
-                <div>
-                  <Label htmlFor="payment-method">Método de Pago</Label>
-                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="efectivo">Efectivo</SelectItem>
-                      <SelectItem value="sinpe">SINPE</SelectItem>
-                      <SelectItem value="tarjeta">Tarjeta</SelectItem>
-                    </SelectContent>
-                  </Select>
+              {/* Método de pago para entregado */}
+              {newStatus === 'ENTREGADO' && (
+                <div className="space-y-3 p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-base font-semibold">Método de Pago *</Label>
+                    <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
+                      {'🔄 Cambio'}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-gray-600">
+                    Confirma el método de pago que el cliente está utilizando para esta entrega
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <Button
+                      variant={paymentMethod === 'efectivo' ? 'default' : 'outline'}
+                      onClick={() => setPaymentMethod('efectivo')}
+                      className={`h-10 text-xs font-medium ${
+                        paymentMethod === 'efectivo' 
+                          ? 'bg-green-600 hover:bg-green-700 text-white' 
+                          : 'border-green-200 hover:border-green-300 hover:bg-green-50 text-green-700'
+                      }`}
+                    >
+                      💵 Efectivo
+                    </Button>
+                    <Button
+                      variant={paymentMethod === 'sinpe' ? 'default' : 'outline'}
+                      onClick={() => setPaymentMethod('sinpe')}
+                      className={`h-10 text-xs font-medium ${
+                        paymentMethod === 'sinpe' 
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                          : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50 text-blue-700'
+                      }`}
+                    >
+                      📱 SINPE
+                    </Button>
+                    <Button
+                      variant={paymentMethod === 'tarjeta' ? 'default' : 'outline'}
+                      onClick={() => setPaymentMethod('tarjeta')}
+                      className={`h-10 text-xs font-medium ${
+                        paymentMethod === 'tarjeta' 
+                          ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+                          : 'border-purple-200 hover:border-purple-300 hover:bg-purple-50 text-purple-700'
+                      }`}
+                    >
+                      💳 Tarjeta
+                    </Button>
+                    <Button
+                      variant={paymentMethod === '2pagos' ? 'default' : 'outline'}
+                      onClick={() => {
+                        setPaymentMethod('2pagos');
+                        setIsDualPayment(true);
+                        setFirstPaymentMethod('efectivo'); // Por defecto el primer pago es efectivo
+                        setSecondPaymentMethod(''); // El segundo método debe ser seleccionado por el usuario
+                      }}
+                      className={`h-10 text-xs font-medium ${
+                        paymentMethod === '2pagos' 
+                          ? 'bg-orange-600 hover:bg-orange-700 text-white' 
+                          : 'border-orange-200 hover:border-orange-300 hover:bg-orange-50 text-orange-700'
+                      }`}
+                    >
+                      💰 2 Pagos
+                    </Button>
+                  </div>
+                  
+                  {/* Comprobante para SINPE o Tarjeta */}
+                  {(paymentMethod === 'sinpe' || paymentMethod === 'tarjeta') && (
+                    <div className="space-y-2">
+                      <Label>Comprobante de Transacción *</Label>
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                        {uploadedReceipts.length > 0 ? (
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-2">
+                              {uploadedReceipts.map((receipt, index) => (
+                                <div key={index} className="relative">
+                                  <img
+                                    src={receipt}
+                                    alt={`Comprobante ${index + 1}`}
+                                    className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                                  />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                                    onClick={() => setUploadedReceipts(prev => prev.filter((_, i) => i !== index))}
+                                    className="absolute -top-2 -right-2 h-6 w-6 p-0 text-red-600 hover:text-red-700 bg-white border border-red-200"
+                            >
+                                    <X className="w-3 h-3" />
+                            </Button>
+                      </div>
+                    ))}
+                  </div>
+                            <div className="text-xs text-gray-500 text-center">
+                              {uploadedReceipts.length} comprobante{uploadedReceipts.length !== 1 ? 's' : ''} seleccionado{uploadedReceipts.length !== 1 ? 's' : ''}
+            </div>
+                </div>
+              ) : (
+                          <div className="space-y-3">
+                            <Camera className="w-8 h-8 mx-auto text-gray-400" />
+                            <p className="text-sm text-gray-600">Toca para seleccionar comprobantes (múltiples)</p>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              onChange={(e) => handleFileUpload(e, 'receipt')}
+                              className="hidden"
+                              id="receipt-upload"
+                            />
+                            <Button
+                              variant="outline"
+                              onClick={() => document.getElementById('receipt-upload')?.click()}
+                            >
+                              <ImageIcon className="w-4 h-4 mr-2" />
+                              Seleccionar Comprobantes
+                            </Button>
+                      </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Sección para 2 pagos */}
+                  {paymentMethod === '2pagos' && (
+                    <div className="space-y-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-sm font-semibold">Configurar 2 Pagos *</Label>
+                        <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-700">
+                          💰 Pagos Múltiples
+                              </Badge>
+                  </div>
+                      <p className="text-xs text-gray-600">
+                        Especifica los dos tipos de pago y sus montos correspondientes
+                      </p>
+                      
+                      {/* Primer Pago */}
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium">Primer Pago</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs text-gray-600">Método</Label>
+                            <Select value={firstPaymentMethod} onValueChange={() => {}} disabled>
+                              <SelectTrigger className="h-8 bg-gray-100">
+                                <SelectValue placeholder="Seleccionar" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="efectivo">💵 Efectivo</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-gray-500 mt-1">El primer pago siempre es efectivo</p>
+                </div>
+                      <div>
+                            <Label className="text-xs text-gray-600">Monto (₡)</Label>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              value={firstPaymentAmount}
+                              onChange={(e) => setFirstPaymentAmount(e.target.value)}
+                              className="h-8"
+                            />
+                      </div>
+                    </div>
+                  </div>
+
+                      {/* Segundo Pago */}
+                  <div className="space-y-3">
+                        <Label className="text-sm font-medium">Segundo Pago</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs text-gray-600">Método</Label>
+                            <Select value={secondPaymentMethod} onValueChange={setSecondPaymentMethod}>
+                              <SelectTrigger className="h-8">
+                                <SelectValue placeholder="Seleccionar" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="efectivo">💵 Efectivo</SelectItem>
+                                <SelectItem value="sinpe">📱 SINPE</SelectItem>
+                                <SelectItem value="tarjeta">💳 Tarjeta</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            </div>
+                            <div>
+                            <Label className="text-xs text-gray-600">Monto (₡)</Label>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              value={secondPaymentAmount}
+                              onChange={(e) => setSecondPaymentAmount(e.target.value)}
+                              className="h-8"
+                            />
+                            </div>
+                          </div>
+
+                        {/* Comprobante para segundo pago si es SINPE o Tarjeta */}
+                        {(secondPaymentMethod === 'sinpe' || secondPaymentMethod === 'tarjeta') && (
+                          <div className="space-y-2">
+                            <Label className="text-xs">Comprobante del Segundo Pago *</Label>
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center">
+                              {secondPaymentReceipt ? (
+                                <div className="space-y-2">
+                                  <img
+                                    src={secondPaymentReceipt}
+                                    alt="Comprobante segundo pago"
+                                    className="max-w-full h-24 object-contain mx-auto rounded-lg"
+                                  />
+                            <Button
+                                    variant="outline"
+                              size="sm"
+                                    onClick={() => setSecondPaymentReceipt(null)}
+                                    className="text-red-600 hover:text-red-700 h-6 text-xs"
+                                  >
+                                    <X className="w-3 h-3 mr-1" />
+                                    Eliminar
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  <Camera className="w-6 h-6 mx-auto text-gray-400" />
+                                  <p className="text-xs text-gray-600">Comprobante del segundo pago</p>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => handleDualPaymentFileUpload(e, 'second')}
+                                    className="hidden"
+                                    id="second-payment-upload"
+                                  />
+                                  <Button
+                              variant="outline"
+                                    size="sm"
+                                    onClick={() => document.getElementById('second-payment-upload')?.click()}
+                                    className="h-6 text-xs"
+                            >
+                                    <ImageIcon className="w-3 h-3 mr-1" />
+                                    Subir
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                  </div>
+              )}
+            </div>
+
+                      {/* Resumen de totales */}
+                      <div className="bg-white p-3 rounded border">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="font-medium">Total del Pedido:</span>
+                          <span className="font-bold">{formatCurrency(selectedOrderForUpdate?.valor_total || 0)}</span>
+                </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span>Primer Pago:</span>
+                          <span>{formatCurrency(parseFloat(firstPaymentAmount) || 0)}</span>
+                      </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span>Segundo Pago:</span>
+                          <span>{formatCurrency(parseFloat(secondPaymentAmount) || 0)}</span>
+                      </div>
+                        <div className="border-t pt-2 mt-2">
+                          <div className="flex justify-between items-center text-sm font-semibold">
+                            <span>Diferencia:</span>
+                            <span className={`${
+                              (parseFloat(firstPaymentAmount) || 0) + (parseFloat(secondPaymentAmount) || 0) === (selectedOrderForUpdate?.valor_total || 0)
+                                ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              {formatCurrency((parseFloat(firstPaymentAmount) || 0) + (parseFloat(secondPaymentAmount) || 0) - (selectedOrderForUpdate?.valor_total || 0))}
+                            </span>
+                    </div>
+                  </div>
+                            </div>
+                            </div>
+                  )}
+                          </div>
+              )}
+
+              {/* Selector de fecha obligatorio para reagendado */}
+              {newStatus === 'REAGENDADO' && (
+                <div className="space-y-3 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                  <Label>Seleccionar fecha a reagendar *</Label>
+                  <Popover open={isReagendadoDatePickerOpen} onOpenChange={setIsReagendadoDatePickerOpen}>
+                    <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !reagendadoDate && "text-muted-foreground"
+                        )}
+                      >
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {reagendadoDate ? reagendadoDate.toLocaleDateString('es-ES') : "Seleccionar fecha"}
+                            </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={reagendadoDate || undefined}
+                        onSelect={(date) => {
+                          setReagendadoDate(date || null);
+                          setIsReagendadoDatePickerOpen(false);
+                        }}
+                        disabled={(date) => date < new Date()}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                          </div>
+                        )}
+
+              {/* Checkbox opcional para marcar como cambio */}
+              {newStatus === 'REAGENDADO' && (
+                <div className="space-y-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="reagendado-as-change"
+                      checked={isReagendadoAsChange}
+                      onCheckedChange={(checked) => setIsReagendadoAsChange(checked as boolean)}
+                    />
+                    <Label htmlFor="reagendado-as-change" className="text-sm font-medium">
+                      Marcar reagendado como cambio
+                    </Label>
+                      </div>
+                  <p className="text-xs text-gray-600">
+                    Opcional: Marca este pedido como un cambio en el backend para seguimiento especial
+                  </p>
+                  </div>
+              )}
+
+              {/* Comprobante de evidencia para devolución o reagendado */}
+              {(newStatus === 'DEVOLUCION' || newStatus === 'REAGENDADO') && (
+                <div className="space-y-3 p-4 bg-red-50 rounded-lg border border-red-200">
+                  <Label>Comprobante de Comunicación *</Label>
+                  <p className="text-xs text-gray-600">
+                    Adjunta captura de pantalla del chat o llamada con el cliente para evidenciar la comunicación
+                  </p>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                    {uploadedEvidence ? (
+                      <div className="space-y-3">
+                        <img
+                          src={uploadedEvidence}
+                          alt="Comprobante de comunicación"
+                          className="max-w-full h-32 object-contain mx-auto rounded-lg"
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setUploadedEvidence(null)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <X className="w-4 h-4 mr-1" />
+                          Eliminar
+                        </Button>
+              </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <Camera className="w-8 h-8 mx-auto text-gray-400" />
+                        <p className="text-sm text-gray-600">Toca para seleccionar comprobante</p>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleFileUpload(e, 'evidence')}
+                          className="hidden"
+                          id="evidence-upload"
+                        />
+                        <Button
+                          variant="outline"
+                          onClick={() => document.getElementById('evidence-upload')?.click()}
+                        >
+                          <ImageIcon className="w-4 h-4 mr-2" />
+                          Seleccionar Imagen
+                        </Button>
+              </div>
+                    )}
+                  </div>
                 </div>
               )}
 
-              <div>
-                <Label htmlFor="status-comment">Comentarios (opcional)</Label>
+              <div className="space-y-3">
+                <Label>Comentarios (opcional)</Label>
                 <Textarea
-                  id="status-comment"
-                  placeholder="Agrega comentarios sobre el cambio de estado..."
+                  placeholder="Añadir comentarios sobre el cambio de estado..."
                   value={statusComment}
                   onChange={(e) => setStatusComment(e.target.value)}
-                  className="mt-1"
+                  rows={3}
                 />
               </div>
               
-              <div className="flex justify-end gap-2">
+              {/* Botones fijos en la parte inferior */}
+              <div className="flex-shrink-0 flex gap-2 pt-4 border-t bg-white">
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setIsUpdateStatusModalOpen(false);
+                    setShowUpdateStatusModal(false);
                     setSelectedOrderForUpdate(null);
-                    setNewStatus('ENTREGADO');
-                    setStatusComment('');
-                    setPaymentMethod('efectivo');
+                    resetModalState();
                   }}
+                  className="flex-1"
                 >
                   Cancelar
                 </Button>
                 <Button
                   onClick={handleUpdateOrderStatus}
-                  disabled={updatingOrder === selectedOrderForUpdate.id_pedido}
-                  className="bg-blue-600 hover:bg-blue-700"
+                  disabled={
+                    !newStatus || 
+                    updatingOrder === selectedOrderForUpdate?.id_pedido ||
+                    (newStatus === 'ENTREGADO' && !paymentMethod) ||
+                    (newStatus === 'ENTREGADO' && (paymentMethod === 'sinpe' || paymentMethod === 'tarjeta') && uploadedReceipts.length === 0) ||
+                    (newStatus === 'ENTREGADO' && paymentMethod === '2pagos' && (
+                      !firstPaymentMethod || !secondPaymentMethod || 
+                      !firstPaymentAmount || !secondPaymentAmount ||
+                      (secondPaymentMethod === 'sinpe' && !secondPaymentReceipt) ||
+                      (secondPaymentMethod === 'tarjeta' && !secondPaymentReceipt) ||
+                      (parseFloat(firstPaymentAmount) + parseFloat(secondPaymentAmount)) !== selectedOrderForUpdate?.valor_total
+                    )) ||
+                    ((newStatus === 'DEVOLUCION' || newStatus === 'REAGENDADO') && !uploadedEvidence) ||
+                    (newStatus === 'REAGENDADO' && !reagendadoDate)
+                  }
+                  className="flex-1"
                 >
-                  {updatingOrder === selectedOrderForUpdate.id_pedido ? (
+                  {updatingOrder === selectedOrderForUpdate?.id_pedido ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Actualizando...
                     </>
                   ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Actualizar Estado
-                    </>
+                    'Actualizar'
                   )}
                 </Button>
               </div>
@@ -3737,140 +2947,332 @@ ${pedidosList}
         </DialogContent>
       </Dialog>
 
-      {/* Modal de detalles del pedido */}
-      <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+      {/* Modal de Gastos */}
+      <Dialog open={showExpensesModal} onOpenChange={setShowExpensesModal}>
+        <DialogContent className="sm:max-w-[600px] ">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Package className="w-5 h-5" />
-              Detalles del Pedido
-            </DialogTitle>
+            <DialogTitle>Gastos del Mensajero - {selectedExpenses?.mensajero}</DialogTitle>
           </DialogHeader>
-          {selectedOrderForDetails && (
-            <div className="space-y-6">
-              {/* Información básica */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          {selectedExpenses && (
+            <div className="space-y-4">
+              {selectedExpenses.gastos.length > 0 ? (
                 <div className="space-y-3">
-                  <div>
-                    <Label className="text-sm font-medium text-gray-500">ID del Pedido</Label>
-                    <p className="text-lg font-semibold">{selectedOrderForDetails.id_pedido}</p>
+                  {selectedExpenses.gastos.map((gasto, index) => (
+                    <div key={index} className="p-4 border rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          {getExpenseIcon(gasto.tipo_gasto)}
+                          <span className={`px-2 py-1 rounded text-sm font-medium ${getExpenseColor(gasto.tipo_gasto)}`}>
+                            {gasto.tipo_gasto}
+                          </span>
                   </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-500">Cliente</Label>
-                    <p className="text-lg">{selectedOrderForDetails.cliente_nombre}</p>
+                        <span className="font-bold text-lg">{formatCurrency(gasto.monto)}</span>
                   </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-500">Teléfono</Label>
-                    <p className="text-lg">{selectedOrderForDetails.cliente_telefono || 'No especificado'}</p>
+                      <p className="text-sm text-gray-600">Fecha: {new Date(gasto.fecha).toLocaleDateString('es-CR')}</p>
+                      {gasto.comprobante_link && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleViewComprobante(gasto.comprobante_link)}
+                          className="mt-2"
+                        >
+                          Ver Comprobante
+                        </Button>
+                      )}
                   </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-500">Valor Total</Label>
-                    <p className="text-lg font-semibold text-green-600">₡{(selectedOrderForDetails.valor_total || 0).toLocaleString()}</p>
+                  ))}
                   </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-sm font-medium text-gray-500">Estado</Label>
-                    <div className="mt-1">
-                      <Badge 
-                        variant={selectedOrderForDetails.estado_pedido === 'ENTREGADO' ? 'default' : 'outline'}
-                        className={
-                          selectedOrderForDetails.estado_pedido === 'ENTREGADO' ? 'bg-green-100 text-green-800' :
-                          selectedOrderForDetails.estado_pedido === 'PENDIENTE' ? 'bg-yellow-100 text-yellow-800' :
-                          selectedOrderForDetails.estado_pedido === 'DEVOLUCION' ? 'bg-red-100 text-red-800' :
-                          selectedOrderForDetails.estado_pedido === 'REAGENDADO' ? 'bg-blue-100 text-blue-800' : ''
-                        }
-                      >
-                        {selectedOrderForDetails.estado_pedido || 'PENDIENTE'}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-500">Método de Pago</Label>
-                    <p className="text-lg">{selectedOrderForDetails.metodo_pago || 'No especificado'}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-500">Mensajero</Label>
-                    <p className="text-lg">{selectedOrderForDetails.mensajero_concretado || selectedOrderForDetails.mensajero_asignado || 'SIN_ASIGNAR'}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-500">Tienda</Label>
-                    <p className="text-lg">{selectedOrderForDetails.tienda || 'ALL STARS'}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Dirección */}
-              <div>
-                <Label className="text-sm font-medium text-gray-500">Dirección de Entrega</Label>
-                <div className="mt-1 p-3 bg-gray-50 rounded-lg">
-                  <p className="text-sm">
-                    {selectedOrderForDetails.direccion || 'No especificada'}, {selectedOrderForDetails.distrito || ''}, {selectedOrderForDetails.canton || ''}, {selectedOrderForDetails.provincia || ''}
-                  </p>
-                </div>
-              </div>
-
-              {/* Productos */}
-              <div>
-                <Label className="text-sm font-medium text-gray-500">Productos</Label>
-                <div className="mt-1 p-3 bg-gray-50 rounded-lg">
-                  <p className="text-sm">{selectedOrderForDetails.productos || 'No especificados'}</p>
-                </div>
-              </div>
-
-              {/* Información adicional */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">Fecha de Creación</Label>
-                  <p className="text-sm">{selectedOrderForDetails.fecha_creacion || 'No especificada'}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">Fecha de Entrega</Label>
-                  <p className="text-sm">{selectedOrderForDetails.fecha_entrega || 'No especificada'}</p>
-                </div>
-              </div>
-
-              {/* Notas */}
-              {(selectedOrderForDetails.notas || selectedOrderForDetails.nota_asesor) && (
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">Notas</Label>
-                  <div className="mt-1 p-3 bg-gray-50 rounded-lg">
-                    <p className="text-sm">{selectedOrderForDetails.notas || selectedOrderForDetails.nota_asesor}</p>
-                  </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Calculator className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No hay gastos registrados para este mensajero</p>
                 </div>
               )}
-
-              {/* Botones de acción */}
-              <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsDetailsModalOpen(false);
-                    setSelectedOrderForDetails(null);
-                  }}
-                >
-                  Cerrar
-                </Button>
-                <Button
-                  onClick={() => {
-                    setIsDetailsModalOpen(false);
-                    setSelectedOrderForUpdate(selectedOrderForDetails);
-                    setNewStatus('ENTREGADO');
-                    setPaymentMethod(selectedOrderForDetails.metodo_pago || 'efectivo');
-                    setIsUpdateStatusModalOpen(true);
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Edit3 className="w-4 h-4 mr-2" />
-                  Editar Estado
-                </Button>
-              </div>
-            </div>
+                  </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Pedidos Pendientes */}
+      <Dialog open={showPendingOrdersModal} onOpenChange={setShowPendingOrdersModal}>
+        <DialogContent className="sm:max-w-[1200px] max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Pedidos Pendientes - {selectedPendingOrders?.mensajero}</DialogTitle>
+          </DialogHeader>
+          
+          {selectedPendingOrders && (
+            <div className="flex-1 overflow-y-auto">
+              {selectedPendingOrders.pedidos.length > 0 ? (
+                <div className="space-y-6 p-2">
+                  {selectedPendingOrders.pedidos.map((pedido) => (
+                    <div key={pedido.id_pedido} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all duration-200">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                        {/* Información Principal */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-bold text-lg text-gray-800">{pedido.id_pedido}</h4>
+                            <div className="flex flex-col gap-2">
+                              <Badge 
+                                variant="outline"
+                                className={`text-sm px-3 py-1 ${
+                                  pedido.estado_pedido === 'ENTREGADO' ? 'bg-green-100 text-green-700 border-green-300' :
+                                  pedido.estado_pedido === 'PENDIENTE' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' :
+                                  pedido.estado_pedido === 'DEVOLUCION' ? 'bg-red-100 text-red-700 border-red-300' :
+                                  pedido.estado_pedido === 'REAGENDADO' ? 'bg-blue-100 text-blue-700 border-blue-300' :
+                                  'bg-gray-100 text-gray-700 border-gray-300'
+                                }`}
+                              >
+                                {pedido.estado_pedido === 'ENTREGADO' ? 'ENTREGADO' :
+                                 pedido.estado_pedido === 'PENDIENTE' ? 'PENDIENTE' :
+                                 pedido.estado_pedido === 'DEVOLUCION' ? 'DEVOLUCION' :
+                                 pedido.estado_pedido === 'REAGENDADO' ? 'REAGENDADO' :
+                                 pedido.estado_pedido || 'PENDIENTE'}
+                              </Badge>
+                              <Badge variant="outline" className="text-sm px-3 py-1 bg-gray-100 text-gray-700 border-gray-300">
+                                {pedido.metodo_pago || 'SIN_METODO'}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-gray-600 min-w-[60px]">Cliente:</span> 
+                              <span className="text-gray-800">{pedido.cliente_nombre}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-gray-600 min-w-[60px]">Teléfono:</span> 
+                              <span className="text-gray-800">{pedido.cliente_telefono}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-gray-600 min-w-[60px]">Valor:</span> 
+                              <span className="font-bold text-green-600 text-lg">{formatCurrency(pedido.valor_total)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Dirección */}
+                        <div className="space-y-3">
+                          <h5 className="font-semibold text-gray-700 text-base">📍 Dirección</h5>
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-700 leading-relaxed">{pedido.direccion}</p>
+                          </div>
+                        </div>
+
+                        {/* Productos y Acciones */}
+                        <div className="space-y-3">
+                          <h5 className="font-semibold text-gray-700 text-base">📦 Productos</h5>
+                          <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                            <p className="text-sm text-gray-700 leading-relaxed">{pedido.productos || 'No especificado'}</p>
+                          </div>
+                          <div className="flex flex-col gap-3">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEditOrderStatus(pedido)}
+                              className="text-sm h-10 px-6 hover:bg-blue-50 hover:border-blue-300"
+                            >
+                              ✏️ Editar Estado
+                            </Button>
+                            <p className="text-xs text-gray-500 text-center">
+                              📅 Fecha: {new Date(pedido.fecha_creacion).toLocaleDateString('es-CR')}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No hay pedidos pendientes</p>
+                  </div>
+              )}
+                  </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Pedidos SINPE */}
+      <Dialog open={showSinpeModal} onOpenChange={setShowSinpeModal}>
+        <DialogContent className="sm:max-w-[700px] ">
+          <DialogHeader>
+            <DialogTitle>Comprobantes SINPE</DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto">
+            {selectedSinpeOrders.length > 0 ? (
+              <div className="space-y-6 p-2">
+                {selectedSinpeOrders.map((pedido) => (
+                  <div key={pedido.id_pedido} className="bg-white border border-blue-200 rounded-xl p-6 hover:shadow-lg transition-all duration-200">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                      {/* Información Principal */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-bold text-lg text-blue-700">{pedido.id_pedido}</h4>
+                          <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300 text-sm px-3 py-1">
+                            📱 SINPE
+                          </Badge>
+                        </div>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-600 min-w-[60px]">Cliente:</span> 
+                            <span className="text-gray-800">{pedido.cliente_nombre}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-600 min-w-[60px]">Teléfono:</span> 
+                            <span className="text-gray-800">{pedido.cliente_telefono}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-600 min-w-[60px]">Valor:</span> 
+                            <span className="font-bold text-green-600 text-lg">{formatCurrency(pedido.valor_total)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Dirección */}
+                      <div className="space-y-3">
+                        <h5 className="font-semibold text-gray-700 text-base">📍 Dirección</h5>
+                        <div className="bg-blue-50 p-4 rounded-lg">
+                          <p className="text-sm text-gray-700 leading-relaxed">{pedido.direccion}</p>
+                        </div>
+                      </div>
+
+                      {/* Productos y Acciones */}
+                      <div className="space-y-3">
+                        <h5 className="font-semibold text-gray-700 text-base">📦 Productos</h5>
+                        <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                          <p className="text-sm text-gray-700 leading-relaxed">{pedido.productos || 'No especificado'}</p>
+                        </div>
+                        <div className="flex flex-col gap-3">
+                          <Button
+                            size="sm"
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-sm h-10 px-6"
+                          >
+                            📄 Ver Comprobante SINPE
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEditOrderStatus(pedido)}
+                            className="text-sm h-10 px-6 hover:bg-blue-50 hover:border-blue-300"
+                          >
+                            ✏️ Editar Estado
+                          </Button>
+                          <p className="text-xs text-gray-500 text-center">
+                            📅 Fecha: {new Date(pedido.fecha_creacion).toLocaleDateString('es-CR')}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Smartphone className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">No hay pedidos pagados con SINPE</p>
+                </div>
+            )}
+              </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Pedidos con Tarjeta */}
+      <Dialog open={showTarjetaModal} onOpenChange={setShowTarjetaModal}>
+        <DialogContent className="sm:max-w-[1200px] max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Comprobantes de Tarjeta</DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto">
+            {selectedTarjetaOrders.length > 0 ? (
+              <div className="space-y-6 p-2">
+                {selectedTarjetaOrders.map((pedido) => (
+                  <div key={pedido.id_pedido} className="bg-white border border-purple-200 rounded-xl p-6 hover:shadow-lg transition-all duration-200">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                      {/* Información Principal */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-bold text-lg text-purple-700">{pedido.id_pedido}</h4>
+                          <Badge variant="outline" className="bg-purple-100 text-purple-700 border-purple-300 text-sm px-3 py-1">
+                            💳 TARJETA
+                          </Badge>
+                        </div>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-600 min-w-[60px]">Cliente:</span> 
+                            <span className="text-gray-800">{pedido.cliente_nombre}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-600 min-w-[60px]">Teléfono:</span> 
+                            <span className="text-gray-800">{pedido.cliente_telefono}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-600 min-w-[60px]">Valor:</span> 
+                            <span className="font-bold text-green-600 text-lg">{formatCurrency(pedido.valor_total)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Dirección */}
+                      <div className="space-y-3">
+                        <h5 className="font-semibold text-gray-700 text-base">📍 Dirección</h5>
+                        <div className="bg-purple-50 p-4 rounded-lg">
+                          <p className="text-sm text-gray-700 leading-relaxed">{pedido.direccion}</p>
+                        </div>
+                      </div>
+
+                      {/* Productos y Acciones */}
+                      <div className="space-y-3">
+                        <h5 className="font-semibold text-gray-700 text-base">📦 Productos</h5>
+                        <div className="bg-purple-50 p-4 rounded-lg mb-4">
+                          <p className="text-sm text-gray-700 leading-relaxed">{pedido.productos || 'No especificado'}</p>
+                        </div>
+                        <div className="flex flex-col gap-3">
+                          <Button
+                            size="sm"
+                            className="bg-purple-600 hover:bg-purple-700 text-white text-sm h-10 px-6"
+                          >
+                            📄 Ver Comprobante de Tarjeta
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEditOrderStatus(pedido)}
+                            className="text-sm h-10 px-6 hover:bg-purple-50 hover:border-purple-300"
+                          >
+                            ✏️ Editar Estado
+                          </Button>
+                          <p className="text-xs text-gray-500 text-center">
+                            📅 Fecha: {new Date(pedido.fecha_creacion).toLocaleDateString('es-CR')}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">No hay pedidos pagados con tarjeta</p>
+            </div>
+          )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Progress Loader */}
+      {isLoaderVisible && (
+        <ProgressLoader
+          title="Procesando Liquidaciones"
+          isVisible={isLoaderVisible}
+          steps={loaderSteps}
+          currentStep={loaderCurrentStep}
+          overallProgress={loaderProgress}
+        />
+      )}
     </div>
   );
 }
-

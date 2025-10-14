@@ -738,9 +738,9 @@ export const getMensajerosUnicos = async (): Promise<string[]> => {
       console.error('❌ Error al obtener mensajeros concretados:', errorConcretados);
     }
 
-    // Combinar y obtener nombres únicos
-    const nombresAsignados = asignados?.map(p => p.mensajero_asignado).filter(Boolean) || [];
-    const nombresConcretados = concretados?.map(p => p.mensajero_concretado).filter(Boolean) || [];
+    // Combinar y obtener nombres únicos - NORMALIZANDO para evitar duplicados
+    const nombresAsignados = asignados?.map(p => p.mensajero_asignado?.trim().toUpperCase()).filter(Boolean) || [];
+    const nombresConcretados = concretados?.map(p => p.mensajero_concretado?.trim().toUpperCase()).filter(Boolean) || [];
     
     console.log('📋 Nombres asignados encontrados:', nombresAsignados);
     console.log('📋 Nombres concretados encontrados:', nombresConcretados);
@@ -847,6 +847,7 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
     comprobante_link: string;
     fecha: string;
   }[];
+  isLiquidated: boolean;
 }[]> => {
   try {
     // Validar que la fecha no esté vacía
@@ -921,6 +922,9 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
       // El mensajero solo debe entregar el efectivo recaudado, no el total de todos los pagos
       const finalAmount = initialAmount + cashPayments - totalSpent;
 
+      // Verificar si la liquidación ya está confirmada
+      const isLiquidated = await checkLiquidationStatus(mensajero, fecha);
+
       liquidaciones.push({
         mensajero,
         pedidos,
@@ -931,7 +935,8 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
         totalSpent,
         initialAmount,
         finalAmount,
-        gastos
+        gastos,
+        isLiquidated
       });
     }
     
@@ -951,19 +956,53 @@ export const checkLiquidationStatus = async (mensajero: string, fecha: string): 
       return false;
     }
     
-    console.log(`🔍 Verificando estado de liquidación para ${mensajero} en fecha ${fecha}`);
+    // Normalizar el nombre del mensajero para consistencia con la tabla liquidaciones
+    // La tabla usa formato "Johan", "Pablo" (primera letra mayúscula, resto minúscula)
+    const mensajeroNormalizado = mensajero.trim().charAt(0).toUpperCase() + mensajero.trim().slice(1).toLowerCase();
+    
+    console.log(`🔍 Verificando estado de liquidación para ${mensajeroNormalizado} en fecha ${fecha}`);
+    
+    // Primero verificar si la tabla existe y tenemos permisos
+    const { data: testData, error: testError } = await supabasePedidos
+      .from('liquidaciones')
+      .select('*')
+      .limit(1);
+
+    if (testError) {
+      console.error('❌ Error accediendo a tabla liquidaciones:', testError);
+      console.log('🔧 Posibles soluciones:');
+      console.log('   1. La tabla liquidaciones no existe');
+      console.log('   2. RLS está habilitado sin políticas');
+      console.log('   3. Permisos insuficientes');
+      return false;
+    }
+
+    console.log('✅ Tabla liquidaciones accesible, continuando con consulta específica...');
+    
+    // Debug: mostrar todos los registros de liquidaciones para esta fecha
+    const { data: debugData, error: debugError } = await supabasePedidos
+      .from('liquidaciones')
+      .select('*')
+      .eq('fecha', fecha);
+    
+    if (!debugError && debugData) {
+      console.log(`📊 Registros encontrados para fecha ${fecha}:`, debugData.length);
+      debugData.forEach(reg => {
+        console.log(`  - ${reg.mensajero}: ya_liquidado = ${reg.ya_liquidado}`);
+      });
+    }
     
     const { data, error } = await supabasePedidos
       .from('liquidaciones')
       .select('ya_liquidado')
-      .eq('mensajero', mensajero)
+      .eq('mensajero', mensajeroNormalizado)
       .eq('fecha', fecha)
       .single();
 
     if (error) {
       if (error.code === 'PGRST116') {
         // No se encontró registro, no está liquidado
-        console.log(`ℹ️ No se encontró liquidación para ${mensajero} en ${fecha}`);
+        console.log(`ℹ️ No se encontró liquidación para ${mensajeroNormalizado} en ${fecha}`);
         return false;
       }
       console.error('❌ Error verificando liquidación:', error);
@@ -971,7 +1010,7 @@ export const checkLiquidationStatus = async (mensajero: string, fecha: string): 
     }
 
     const isLiquidated = data?.ya_liquidado === true;
-    console.log(`✅ Estado de liquidación para ${mensajero}: ${isLiquidated ? 'LIQUIDADO' : 'PENDIENTE'}`);
+    console.log(`✅ Estado de liquidación para ${mensajeroNormalizado}: ${isLiquidated ? 'LIQUIDADO' : 'PENDIENTE'}`);
     return isLiquidated;
   } catch (error) {
     console.error('❌ Error en checkLiquidationStatus:', error);
@@ -1188,14 +1227,15 @@ export const getGastosMensajeros = async (fecha: string): Promise<{
 
     console.log(`✅ Gastos encontrados: ${gastos?.length || 0}`);
 
-    // Agrupar por mensajero
+    // Agrupar por mensajero - NORMALIZANDO nombres para evitar duplicados
     const gastosPorMensajero: { [key: string]: any[] } = {};
     
     gastos?.forEach(gasto => {
-      if (!gastosPorMensajero[gasto.mensajero]) {
-        gastosPorMensajero[gasto.mensajero] = [];
+      const mensajeroNormalizado = gasto.mensajero?.trim().toUpperCase();
+      if (!gastosPorMensajero[mensajeroNormalizado]) {
+        gastosPorMensajero[mensajeroNormalizado] = [];
       }
-      gastosPorMensajero[gasto.mensajero].push(gasto);
+      gastosPorMensajero[mensajeroNormalizado].push(gasto);
     });
 
     // Convertir a formato requerido
