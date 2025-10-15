@@ -46,6 +46,7 @@ export interface User {
   companyId?: string;        // Nueva relación con empresa
   company?: Company;         // Referencia a empresa
   tiendaName?: string;       // Nombre de la tienda para usuarios tipo 'tienda'
+  isMessengerLeader?: boolean; // Líder de mensajeros con permisos especiales
 }
 
 export interface Customer {

@@ -250,6 +250,50 @@ export const getCostaRicaDateISO = () => {
   return isoDate;
 };
 
+// Función para obtener todos los pedidos de una fecha específica
+export const getPedidosByFecha = async (fecha: string): Promise<PedidoTest[]> => {
+  try {
+    console.log('🔍 Buscando pedidos para fecha:', fecha);
+    
+    // Obtener todos los pedidos usando paginación para evitar el límite de 1000
+    let allPedidos: PedidoTest[] = [];
+    let from = 0;
+    const limit = 1000; // Límite por página
+    let hasMore = true;
+
+    while (hasMore) {
+      console.log(`📄 Obteniendo página ${Math.floor(from / limit) + 1} (registros ${from} a ${from + limit - 1})...`);
+      
+      const { data, error } = await supabasePedidos
+        .from('pedidos')
+        .select('*')
+        .eq('fecha_creacion', fecha)
+        .range(from, from + limit - 1)
+        .order('id_pedido', { ascending: true });
+
+      if (error) {
+        console.error('❌ Error al obtener pedidos por fecha:', error);
+        return allPedidos; // Devolver lo que tengamos hasta ahora
+      }
+
+      if (data && data.length > 0) {
+        allPedidos = [...allPedidos, ...data];
+        from += limit;
+        hasMore = data.length === limit; // Si obtenemos menos registros que el límite, no hay más páginas
+        console.log(`📦 Página obtenida: ${data.length} registros. Total acumulado: ${allPedidos.length}`);
+      } else {
+        hasMore = false;
+      }
+    }
+
+    console.log(`✅ Pedidos encontrados para fecha ${fecha}:`, allPedidos.length);
+    return allPedidos;
+  } catch (error) {
+    console.error('❌ Error en getPedidosByFecha:', error);
+    return [];
+  }
+};
+
 // Función para obtener pedidos del día por tienda
 export const getPedidosDelDiaByTienda = async (tienda: string, fecha?: string): Promise<PedidoTest[]> => {
   try {
@@ -1344,22 +1388,18 @@ export const getPedidosDelDiaByTiendaEspecifica = async (tiendaName: string, fec
 // Función para obtener liquidaciones reales por tienda
 export const getLiquidacionesRealesByTienda = async (fecha: string): Promise<{
   tienda: string;
-  pedidos: PedidoTest[];
+  routeDate: string;
+  totalOrders: number;
+  totalValue: number;
   totalCollected: number;
+  totalSpent: number;
   sinpePayments: number;
   cashPayments: number;
   tarjetaPayments: number;
-  totalSpent: number;
-  initialAmount: number;
   finalAmount: number;
-  gastos: {
-    id: string;
-    monto: number;
-    tipo_gasto: string;
-    comprobante_link: string;
-    fecha: string;
-  }[];
-  // Métricas adicionales por tienda
+  orders: PedidoTest[];
+  isLiquidated: boolean;
+  canEdit: boolean;
   deliveredOrders: number;
   pendingOrders: number;
   returnedOrders: number;
@@ -1367,6 +1407,13 @@ export const getLiquidacionesRealesByTienda = async (fecha: string): Promise<{
   averageOrderValue: number;
   topMessenger: string;
   topDistrict: string;
+  gastos: {
+    id: string;
+    monto: number;
+    tipo_gasto: string;
+    comprobante_link: string;
+    fecha: string;
+  }[];
 }[]> => {
   try {
     // Validar que la fecha no esté vacía
@@ -1397,6 +1444,7 @@ export const getLiquidacionesRealesByTienda = async (fecha: string): Promise<{
     
     console.log(`📋 Tiendas encontradas para fecha ${fecha}: ${tiendas.length}`);
     console.log(`📋 Tiendas:`, tiendas);
+    console.log(`📋 Datos raw de tiendas:`, tiendasData);
     
     // Obtener gastos para todas las tiendas (agrupados por mensajero)
     const gastosData = await getGastosMensajeros(fecha);
@@ -1406,11 +1454,15 @@ export const getLiquidacionesRealesByTienda = async (fecha: string): Promise<{
     
     // Procesar todas las tiendas
     for (const tienda of tiendas) {
+      console.log(`🏪 Procesando tienda: ${tienda}`);
+      
       // Obtener pedidos del día para esta tienda
       const pedidosRaw = await getPedidosDelDiaByTiendaEspecifica(tienda, fecha);
+      console.log(`📦 Pedidos raw para ${tienda}: ${pedidosRaw.length}`);
       
       // Normalizar todos los pedidos a mayúsculas
       const pedidos = pedidosRaw.map(normalizePedidoData);
+      console.log(`📦 Pedidos normalizados para ${tienda}: ${pedidos.length}`);
       
       // Calcular métricas por tienda
       const totalCollected = pedidos.reduce((sum, pedido) => {
@@ -1485,24 +1537,28 @@ export const getLiquidacionesRealesByTienda = async (fecha: string): Promise<{
 
       liquidaciones.push({
         tienda,
-        pedidos,
+        routeDate: fecha,
+        totalOrders: pedidos.length,
+        totalValue: totalValue,
         totalCollected,
+        totalSpent,
         sinpePayments,
         cashPayments,
         tarjetaPayments,
-        totalSpent,
-        initialAmount,
         finalAmount,
-        gastos: gastosData
-          .filter(g => mensajerosDeLaTienda.includes(g.mensajero))
-          .flatMap(g => g.gastos),
+        orders: pedidos,
+        isLiquidated: false, // Por defecto no liquidado
+        canEdit: true, // Por defecto se puede editar
         deliveredOrders,
         pendingOrders,
         returnedOrders,
         rescheduledOrders,
         averageOrderValue,
         topMessenger,
-        topDistrict
+        topDistrict,
+        gastos: gastosData
+          .filter(g => mensajerosDeLaTienda.includes(g.mensajero))
+          .flatMap(g => g.gastos)
       });
     }
     

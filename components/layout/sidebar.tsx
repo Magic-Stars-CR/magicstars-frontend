@@ -95,7 +95,27 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
 
   if (!user) return null;
 
-  const userMenuItems = menuItems[user.role] || [];
+  // Obtener menú base según el rol
+  let userMenuItems = menuItems[user.role] || [];
+  
+  // Si es el líder de mensajeros, agregar la opción de ver todas las rutas
+  console.log('🔍 Verificando usuario en sidebar:', {
+    name: user.name,
+    role: user.role,
+    isMessengerLeader: user.isMessengerLeader,
+    email: user.email
+  });
+  
+  if (user.role === 'mensajero' && user.isMessengerLeader) {
+    console.log('✅ Usuario es líder de mensajeros, agregando opción de rutas');
+    userMenuItems = [
+      ...userMenuItems.slice(0, 1), // Mantener "Mi Ruta de Hoy"
+      { icon: Truck, label: 'Rutas de Mensajeros', href: '/dashboard/mensajero/rutas-mensajeros' },
+      ...userMenuItems.slice(1), // Resto del menú
+    ];
+  } else {
+    console.log('❌ Usuario no es líder de mensajeros');
+  }
 
   const SidebarContent = () => (
     <>
