@@ -1001,8 +1001,8 @@ export const checkLiquidationStatus = async (mensajero: string, fecha: string): 
     }
     
     // Normalizar el nombre del mensajero para consistencia con la tabla liquidaciones
-    // La tabla usa formato "Johan", "Pablo" (primera letra mayúscula, resto minúscula)
-    const mensajeroNormalizado = mensajero.trim().charAt(0).toUpperCase() + mensajero.trim().slice(1).toLowerCase();
+    // La tabla usa formato "PRUEBA" (todo mayúsculas)
+    const mensajeroNormalizado = mensajero.trim().toUpperCase();
     
     console.log(`🔍 Verificando estado de liquidación para ${mensajeroNormalizado} en fecha ${fecha}`);
     

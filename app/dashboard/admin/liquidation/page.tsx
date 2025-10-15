@@ -108,6 +108,9 @@ export default function AdminLiquidationPage() {
   const [selectedViewAndLiquidate, setSelectedViewAndLiquidate] = useState<LiquidationCalculation | null>(null);
   const [showExpensesModal, setShowExpensesModal] = useState(false);
   const [selectedExpenses, setSelectedExpenses] = useState<any>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [modalType, setModalType] = useState<'success' | 'error'>('success');
   
   // Estados para modales adicionales
   const [showPendingOrdersModal, setShowPendingOrdersModal] = useState(false);
@@ -168,7 +171,7 @@ export default function AdminLiquidationPage() {
         return;
       }
     }
-
+    
     initializeDate();
   }, []);
 
@@ -235,7 +238,7 @@ export default function AdminLiquidationPage() {
       }
       
       const liquidacionesReales = await getLiquidacionesReales(fechaParaUsar);
-      console.log('✅ Liquidaciones reales obtenidas:', liquidacionesReales.length);
+      
       
       if (liquidacionesReales.length > 0) {
         console.log('📋 Primeros 3 pedidos de ejemplo:');
@@ -246,6 +249,32 @@ export default function AdminLiquidationPage() {
       
       // Log básico de liquidaciones cargadas
       console.log(`✅ Liquidaciones cargadas: ${liquidacionesReales.length} mensajeros`);
+
+      // DEBUG: Mostrar liquidaciones de la tabla 'liquidaciones' para hoy
+      const { createClient } = await import('@/utils/supabase/client');
+      const supabase = createClient();
+      const { data: rawLiquidaciones, error: rawLiquidacionesError } = await supabase
+        .from('liquidaciones')
+        .select('*')
+        .eq('fecha', fechaParaUsar);
+
+      if (rawLiquidacionesError) {
+        console.error('❌ Error al obtener liquidaciones de la tabla "liquidaciones":', rawLiquidacionesError);
+      } else {
+        console.clear(); // Clear console before showing specific log
+        console.log('📊 LIQUIDACIONES EN LA TABLA "liquidaciones" PARA HOY:', rawLiquidaciones);
+        
+        // DEBUG: Verificar estado de liquidación para cada mensajero
+        console.log('🔍 VERIFICANDO ESTADO DE LIQUIDACIÓN:');
+        liquidacionesReales.forEach(liq => {
+          const liquidacionEnTabla = rawLiquidaciones?.find(r => 
+            r.mensajero?.toUpperCase() === liq.mensajero?.toUpperCase()
+          );
+          console.log(`  - ${liq.mensajero}: isLiquidated=${liq.isLiquidated}, en tabla=${!!liquidacionEnTabla}, ya_liquidado=${liquidacionEnTabla?.ya_liquidado}`);
+        });
+      }
+      
+      
       
       // Paso 2: Procesar pedidos
       if (!isReload) {
@@ -291,16 +320,16 @@ export default function AdminLiquidationPage() {
         updateStep('finalization', { status: 'completed' });
         
         // Cerrar el loader automáticamente después de un pequeño delay
-        setTimeout(() => {
-          closeLoader();
+      setTimeout(() => {
+        closeLoader();
         }, 1000);
       }
       
       setIsLoadingData(false);
       
-      if (isReload) {
-        console.log('✅ Datos actualizados correctamente');
-      }
+        if (isReload) {
+          console.log('✅ Datos actualizados correctamente');
+        }
       
     } catch (error) {
       console.error('❌ Error en loadCalculations:', error);
@@ -401,13 +430,13 @@ export default function AdminLiquidationPage() {
         
       } else {
         // Usar fecha simple
-        let fechaParaUsar = selectedDate;
-        if (!fechaParaUsar) {
-          const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
-          fechaParaUsar = getCostaRicaDateISO();
-          console.log('📅 Usando fecha de Costa Rica por defecto:', fechaParaUsar);
-        }
-        
+      let fechaParaUsar = selectedDate;
+      if (!fechaParaUsar) {
+        const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
+        fechaParaUsar = getCostaRicaDateISO();
+        console.log('📅 Usando fecha de Costa Rica por defecto:', fechaParaUsar);
+      }
+      
         liquidacionesReales = await getLiquidacionesRealesByTienda(fechaParaUsar);
       }
       
@@ -516,15 +545,27 @@ export default function AdminLiquidationPage() {
     }, 0);
 
     const sinpePayments = calculation.orders.reduce((sum, order) => {
-      if (order.estado_pedido === 'ENTREGADO' && order.metodo_pago === 'SINPE') {
+      if (order.estado_pedido === 'ENTREGADO') {
+        if (order.metodo_pago === 'SINPE') {
         return sum + order.valor_total;
+        } else if (order.metodo_pago === '2PAGOS') {
+          // Para pedidos con 2 pagos, sumar solo la parte de SINPE
+          const sinpeAmount = parseFloat(order.sinpe_2_pagos || '0');
+          return sum + sinpeAmount;
+        }
       }
       return sum;
     }, 0);
 
     const cashPayments = calculation.orders.reduce((sum, order) => {
-      if (order.estado_pedido === 'ENTREGADO' && order.metodo_pago === 'EFECTIVO') {
+      if (order.estado_pedido === 'ENTREGADO') {
+        if (order.metodo_pago === 'EFECTIVO') {
         return sum + order.valor_total;
+        } else if (order.metodo_pago === '2PAGOS') {
+          // Para pedidos con 2 pagos, sumar solo la parte de efectivo
+          const efectivoAmount = parseFloat(order.efectivo_2_pagos || '0');
+          return sum + efectivoAmount;
+        }
       }
       return sum;
     }, 0);
@@ -563,7 +604,7 @@ export default function AdminLiquidationPage() {
   const handleEditInitialAmount = (messengerId: string, currentAmount: number) => {
     const newAmount = prompt('Ingrese el monto inicial:', currentAmount.toString());
     if (newAmount === null) return;
-    
+
     const amount = parseFloat(newAmount);
     if (isNaN(amount) || amount < 0) {
       alert('Por favor ingrese un monto válido');
@@ -633,15 +674,16 @@ export default function AdminLiquidationPage() {
 
       console.log('🔄 Cálculo convertido para el modal:', calculation);
       console.log('📦 Pedidos en el cálculo:', calculation.orders?.length || 0);
-
-      setSelectedViewAndLiquidate(calculation);
-      setShowViewAndLiquidateModal(true);
+    
+    setSelectedViewAndLiquidate(calculation);
+    setShowViewAndLiquidateModal(true);
       
       console.log(`🔍 Liquidación para tienda ${tiendaCalculation.tienda}:`, calculation);
     } catch (error) {
       console.error('❌ Error abriendo liquidación de tienda:', error);
     }
   };
+
 
 
   const confirmLiquidation = async (calculation: LiquidationCalculation, initialAmount?: number) => {
@@ -664,7 +706,7 @@ export default function AdminLiquidationPage() {
         pagos_tarjeta: calculation.tarjetaPayments
       };
 
-      const response = await fetch("https://primary-production-2b25b.up.railway.app/webhook/liquidacion", {
+      const response = await fetch("https://primary-production-85ff.up.railway.app/webhook/add-liquidacion", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -672,28 +714,57 @@ export default function AdminLiquidationPage() {
         body: JSON.stringify(liquidationData)
       });
 
-      if (!response.ok) {
-        throw new Error(`Error al enviar liquidación: ${response.status}`);
-      }
-
       const responseData = await response.json();
-      console.log('✅ Liquidación enviada exitosamente:', responseData);
-      
+
+      if (!response.ok) {
+        // Si ya existe la liquidación, marcamos como liquidada localmente
+        if (responseData.error && responseData.error.includes('duplicate key value violates unique constraint')) {
+          console.log('⚠️ Liquidación ya existe, marcando como liquidada');
       setCalculations(prev => 
         prev.map(calc => 
           calc.messengerId === calculation.messengerId 
-            ? { ...calc, isLiquidated: true }
+                ? { ...calc, isLiquidated: true }
             : calc
         )
       );
       
+          setSuccessMessage(`Liquidación de ${calculation.messengerName} ya existía y se marcó como completada`);
+          setModalType('success');
+        } else {
+          throw new Error(`Error: ${responseData.error || responseData.message || response.status}`);
+        }
+      } else {
+        console.log('✅ Liquidación enviada exitosamente');
+        setCalculations(prev => 
+          prev.map(calc => 
+            calc.messengerId === calculation.messengerId 
+              ? { ...calc, isLiquidated: true }
+              : calc
+          )
+        );
+        
+        setSuccessMessage(`Liquidación de ${calculation.messengerName} confirmada exitosamente`);
+        setModalType('success');
+      }
+      
+      setShowSuccessModal(true);
       setShowViewAndLiquidateModal(false);
       setSelectedViewAndLiquidate(null);
-      alert(`Liquidación de ${calculation.messengerName} confirmada exitosamente`);
+      
+      setTimeout(() => {
+        setShowSuccessModal(false);
+        loadCalculations(true); // Recargar datos
+      }, 3000);
       
     } catch (error) {
-      console.error('Error confirming liquidation:', error);
-      alert('Error al confirmar la liquidación: ' + (error instanceof Error ? error.message : 'Error desconocido'));
+      console.error('❌ Error:', error);
+      setSuccessMessage(`Error: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      setModalType('error');
+      setShowSuccessModal(true);
+      
+      setTimeout(() => {
+        setShowSuccessModal(false);
+      }, 5000);
     }
   };
 
@@ -840,24 +911,25 @@ export default function AdminLiquidationPage() {
           
           {/* Filtro de fecha simple */}
           <div className="flex items-center gap-2">
-            <Input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-40"
-              disabled={isLoadingData}
-            />
-            <Button 
-              variant="outline"
-              onClick={() => {
-                const today = new Date().toISOString().split('T')[0];
-                setSelectedDate(today);
-              }}
-              disabled={isLoadingData}
-            >
-              <Calendar className="w-4 h-4 mr-2" />
-              Hoy
-            </Button>
+          <Input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="w-40"
+            disabled={isLoadingData}
+          />
+          <Button 
+            variant="outline"
+            onClick={() => {
+              const today = new Date().toISOString().split('T')[0];
+              setSelectedDate(today);
+            }}
+            disabled={isLoadingData}
+          >
+            <Calendar className="w-4 h-4 mr-2" />
+            Hoy
+          </Button>
+            
           </div>
 
           {/* Filtro de rango de fechas para tiendas */}
@@ -945,68 +1017,68 @@ export default function AdminLiquidationPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {/* Primera fila: Mensajeros con Pedidos, Pendientes por Liquidar, Pedidos Totales del Día, Contador de Estados */}
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-blue-50 to-blue-100">
-              <CardContent className="p-4">
+          <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Truck className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
+              </div>
+              <div>
                       <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Mensajeros con Pedidos</p>
                       <p className="text-lg font-bold text-blue-900 mt-1">{calculations.length}</p>
-                    </div>
+              </div>
                   </div>
                   <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
+            </div>
+          </CardContent>
+        </Card>
 
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-yellow-50 to-yellow-100">
-              <CardContent className="p-4">
+          <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-yellow-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Clock className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
+              </div>
+              <div>
                       <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide">Pendientes por Liquidar</p>
                       <p className="text-lg font-bold text-yellow-900 mt-1">
-                        {calculations.filter(c => !c.isLiquidated).length}
-                      </p>
-                    </div>
+                  {calculations.filter(c => !c.isLiquidated).length}
+                </p>
+              </div>
                   </div>
                   <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
+            </div>
+          </CardContent>
+        </Card>
 
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-orange-50 to-orange-100">
-              <CardContent className="p-4">
+          <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Package className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
+              </div>
+              <div>
                       <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Pedidos Totales del Día (Asignados)</p>
                       <p className="text-lg font-bold text-orange-900 mt-1">
                         {calculations.reduce((sum, c) => sum + c.orders.length, 0)}
-                      </p>
-                    </div>
+                </p>
+              </div>
                   </div>
                   <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
+            </div>
+          </CardContent>
+        </Card>
 
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-purple-50 to-purple-100">
-              <CardContent className="p-4">
+          <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center shadow-lg">
                       <CheckCircle className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
+              </div>
+              <div>
                       <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Estados</p>
                       <div className="flex flex-wrap gap-1 mt-1">
                         <div className="flex items-center gap-1">
@@ -1057,13 +1129,13 @@ export default function AdminLiquidationPage() {
                           const calculated = calculateLiquidation(c);
                           return sum + calculated.totalCollected;
                         }, 0))}
-                      </p>
-                    </div>
+                </p>
+              </div>
                   </div>
                   <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
+            </div>
+          </CardContent>
+        </Card>
 
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-purple-50 to-purple-100">
               <CardContent className="p-4">
@@ -1071,7 +1143,7 @@ export default function AdminLiquidationPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Calculator className="w-5 h-5 text-white" />
-                    </div>
+      </div>
                     <div>
                       <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Total a Entregar</p>
                       <p className="text-xs text-purple-600">(efectivo - gastos)</p>
@@ -1103,12 +1175,24 @@ export default function AdminLiquidationPage() {
                           return sum + calculated.cashPayments;
                         }, 0))}
                       </p>
+                      <p className="text-xs text-green-600 mt-1">
+                        {(() => {
+                          const efectivoCount = calculations.reduce((sum, c) => {
+                            const calculated = calculateLiquidation(c);
+                            return sum + calculated.orders.filter(o => 
+                              o.estado_pedido === 'ENTREGADO' && 
+                              (o.metodo_pago === 'EFECTIVO' || o.metodo_pago === '2PAGOS')
+                            ).length;
+                          }, 0);
+                          return `${efectivoCount} pedidos`;
+                        })()}
+                      </p>
                     </div>
                   </div>
                   <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                 </div>
-              </CardContent>
-            </Card>
+          </CardContent>
+        </Card>
 
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-cyan-50 to-cyan-100">
               <CardContent className="p-4">
@@ -1124,6 +1208,18 @@ export default function AdminLiquidationPage() {
                           const calculated = calculateLiquidation(c);
                           return sum + calculated.sinpePayments;
                         }, 0))}
+                      </p>
+                      <p className="text-xs text-cyan-600 mt-1">
+            {(() => {
+                          const sinpeCount = calculations.reduce((sum, c) => {
+                            const calculated = calculateLiquidation(c);
+                            return sum + calculated.orders.filter(o => 
+                              o.estado_pedido === 'ENTREGADO' && 
+                              (o.metodo_pago === 'SINPE' || o.metodo_pago === '2PAGOS')
+                            ).length;
+                          }, 0);
+                          return `${sinpeCount} pedidos`;
+                        })()}
                       </p>
                     </div>
                   </div>
@@ -1147,81 +1243,113 @@ export default function AdminLiquidationPage() {
                           return sum + calculated.tarjetaPayments;
                         }, 0))}
                       </p>
-                    </div>
+                      <p className="text-xs text-pink-600 mt-1">
+                        {(() => {
+                          const tarjetaCount = calculations.reduce((sum, c) => {
+                            const calculated = calculateLiquidation(c);
+                            return sum + calculated.orders.filter(o => 
+                              o.estado_pedido === 'ENTREGADO' && 
+                              o.metodo_pago === 'TARJETA'
+                            ).length;
+                          }, 0);
+                          return `${tarjetaCount} pedidos`;
+                        })()}
+                      </p>
+                  </div>
                   </div>
                   <div className="w-2 h-2 bg-pink-400 rounded-full animate-pulse"></div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-gray-50 to-gray-100">
+            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-orange-50 to-orange-100">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gray-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <DollarSign className="w-5 h-5 text-white" />
+                    <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg">
+                      <Receipt className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Otros Métodos</p>
-                      <p className="text-lg font-bold text-gray-900 mt-1">₡0</p>
+                      <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">2 Pagos</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-sm font-bold text-orange-900">
+                          {(() => {
+                            const dosPagosTotal = calculations.reduce((sum, calc) => {
+                              const calculated = calculateLiquidation(calc);
+                              return sum + calculated.orders
+                                .filter(o => o.metodo_pago === '2PAGOS' && o.estado_pedido === 'ENTREGADO')
+                                .reduce((s, o) => s + parseFloat(o.efectivo_2_pagos || '0') + parseFloat(o.sinpe_2_pagos || '0'), 0);
+                            }, 0);
+                            return formatCurrency(dosPagosTotal);
+            })()}
+                        </span>
+                      </div>
+                      <div className="text-xs text-orange-600 mt-1">
+                        {(() => {
+                          const dosPagosCount = calculations.reduce((sum, calc) => {
+                            return sum + calc.orders.filter(o => o.metodo_pago === '2PAGOS' && o.estado_pedido === 'ENTREGADO').length;
+                          }, 0);
+                          return `${dosPagosCount} pedidos`;
+                        })()}
+                      </div>
                     </div>
                   </div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
+                  <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+          </CardContent>
+        </Card>
+      </div>
 
           {/* Tabla de Liquidaciones de Mensajeros */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calculator className="w-5 h-5" />
-                Liquidaciones por Ruta - {selectedDate}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mensajero</TableHead>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calculator className="w-5 h-5" />
+            Liquidaciones por Ruta - {selectedDate}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Mensajero</TableHead>
                     <TableHead>Pedidos por Estado</TableHead>
-                    <TableHead>Total Recaudado</TableHead>
+                <TableHead>Total Recaudado</TableHead>
                     <TableHead>SINPE</TableHead>
                     <TableHead>Efectivo</TableHead>
-                    <TableHead>Gastos</TableHead>
+                <TableHead>Gastos</TableHead>
                     <TableHead>Monto Final</TableHead>
-                    <TableHead>Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {calculations.length === 0 ? (
-                    <TableRow>
+                <TableHead>Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {calculations.length === 0 ? (
+                <TableRow>
                       <TableCell colSpan={8} className="text-center py-8">
                         <div className="flex flex-col items-center gap-2">
                           <Package className="w-8 h-8 text-gray-400" />
                           <p className="text-gray-500">
-                            No se encontraron mensajeros con pedidos asignados para la fecha {selectedDate}
-                          </p>
+                          No se encontraron mensajeros con pedidos asignados para la fecha {selectedDate}
+                        </p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                calculations.map((calculation) => {
+                  const calculated = calculateLiquidation(calculation);
+                  return (
+                    <TableRow key={calculation.messengerId}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4 text-muted-foreground" />
+                        <div>
+                          <span className="font-medium">{calculation.messengerName}</span>
+                          <div className="text-xs text-muted-foreground">
+                            {calculated.orders.length} pedidos
+                          </div>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    calculations.map((calculation) => {
-                      const calculated = calculateLiquidation(calculation);
-                      return (
-                        <TableRow key={calculation.messengerId}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <User className="w-4 h-4 text-muted-foreground" />
-                              <div>
-                                <span className="font-medium">{calculation.messengerName}</span>
-                                <div className="text-xs text-muted-foreground">
-                                  {calculated.orders.length} pedidos
-                                </div>
-                              </div>
-                            </div>
-                          </TableCell>
+                      </div>
+                    </TableCell>
                           
                           <TableCell>
                             <div className="flex flex-wrap gap-2">
@@ -1254,81 +1382,80 @@ export default function AdminLiquidationPage() {
                               })()}
                             </div>
                           </TableCell>
-                          
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <DollarSign className="w-4 h-4 text-green-600" />
+                    
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="w-4 h-4 text-green-600" />
                               <span className="font-medium text-green-600">
-                                {formatCurrency(calculated.totalCollected)}
-                              </span>
-                            </div>
-                          </TableCell>
-                          
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Smartphone className="w-4 h-4 text-blue-600" />
+                          {formatCurrency(calculated.totalCollected)}
+                        </span>
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Smartphone className="w-4 h-4 text-blue-600" />
                               <span className="font-medium text-blue-600">
-                                {formatCurrency(calculated.sinpePayments)}
-                              </span>
-                            </div>
-                          </TableCell>
-                          
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Banknote className="w-4 h-4 text-green-600" />
+                          {formatCurrency(calculated.sinpePayments)}
+                        </span>
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Banknote className="w-4 h-4 text-green-600" />
                               <span className="font-medium text-green-600">
-                                {formatCurrency(calculated.cashPayments)}
-                              </span>
-                            </div>
-                          </TableCell>
-                          
-                          <TableCell>
-                            <div className="flex items-center gap-2">
+                          {formatCurrency(calculated.cashPayments)}
+                        </span>
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="flex items-center gap-2">
                               <Receipt className="w-4 h-4 text-red-600" />
                               <span className="font-medium text-red-600">
-                                {formatCurrency(calculated.totalSpent)}
-                              </span>
-                            </div>
-                          </TableCell>
-                          
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Calculator className="w-4 h-4 text-purple-600" />
+                          {formatCurrency(calculated.totalSpent)}
+                        </span>
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Calculator className="w-4 h-4 text-purple-600" />
                               <span className="font-medium text-purple-600">
-                                {formatCurrency(calculated.finalAmount)}
-                              </span>
-                            </div>
-                          </TableCell>
-                          
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                size="sm"
+                          {formatCurrency(calculated.finalAmount)}
+                        </span>
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
                                 variant="outline"
-                                onClick={() => handleViewAndLiquidate(calculated)}
+                            onClick={() => handleViewAndLiquidate(calculated)}
                                 className={`h-8 ${calculated.isLiquidated 
                                   ? 'bg-green-600 text-white border-green-600 hover:bg-green-700' 
                                   : 'text-gray-600 border-gray-200 hover:bg-gray-50'
                                 }`}
-                              >
+                            >
+                              {calculated.isLiquidated ? (
+                                <CheckCircle2 className="w-4 h-4 mr-1" />
+                              ) : (
                                 <Eye className="w-4 h-4 mr-1" />
-                                Ver
-                                {calculated.isLiquidated && (
-                                  <span className="ml-1 px-1 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">
-                                    ✓
-                                  </span>
-                                )}
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                              )}
+                              Ver
+                            </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
         </TabsContent>
 
         {/* Tab de Tiendas */}
@@ -1339,8 +1466,8 @@ export default function AdminLiquidationPage() {
               <div className="flex items-center gap-3 text-blue-600">
                 <Loader2 className="w-6 h-6 animate-spin" />
                 <span className="text-lg font-medium">Cargando datos del rango de fechas...</span>
-              </div>
-            </div>
+                  </div>
+                </div>
           )}
           
           {/* Stats Cards para Tiendas */}
@@ -1352,16 +1479,16 @@ export default function AdminLiquidationPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Building2 className="w-5 h-5 text-white" />
-                    </div>
+                  </div>
                     <div>
                       <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Tiendas Activas</p>
                       <p className="text-lg font-bold text-blue-900 mt-1">{tiendaCalculations.length}</p>
-                    </div>
+                  </div>
                   </div>
                   <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
+                  </div>
+                </CardContent>
+              </Card>
 
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-orange-50 to-orange-100">
               <CardContent className="p-4">
@@ -1369,13 +1496,13 @@ export default function AdminLiquidationPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Package className="w-5 h-5 text-white" />
-                    </div>
+                  </div>
                     <div>
                       <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Total Pedidos</p>
                       <p className="text-lg font-bold text-orange-900 mt-1">
                         {tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)}
                       </p>
-                    </div>
+            </div>
                   </div>
                   <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
                 </div>
@@ -1388,16 +1515,16 @@ export default function AdminLiquidationPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shadow-lg">
                       <CheckCircle className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
+                      </div>
+                      <div>
                       <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Entregados</p>
                       <p className="text-lg font-bold text-green-900 mt-1">
                         {tiendaCalculations.reduce((sum, t) => sum + t.deliveredOrders, 0)}
                       </p>
-                    </div>
-                  </div>
+                      </div>
+                      </div>
                   <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                </div>
+                      </div>
               </CardContent>
             </Card>
 
@@ -1407,7 +1534,7 @@ export default function AdminLiquidationPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-yellow-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Clock className="w-5 h-5 text-white" />
-                    </div>
+                        </div>
                     <div>
                       <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide">Pendientes</p>
                       <p className="text-lg font-bold text-yellow-900 mt-1">
@@ -1415,15 +1542,15 @@ export default function AdminLiquidationPage() {
                         {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'PENDIENTE' && !o.mensajero_asignado).length, 0) > 0 && (
                           <span className="text-xs text-orange-600 ml-2">
                             ({tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'PENDIENTE' && !o.mensajero_asignado).length, 0)} sin asignar)
-                          </span>
+                                      </span>
                         )}
                       </p>
-                    </div>
-                  </div>
+                                      </div>
+                        </div>
                   <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
+            </div>
+          </CardContent>
+        </Card>
 
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-red-50 to-red-100">
               <CardContent className="p-4">
@@ -1437,12 +1564,12 @@ export default function AdminLiquidationPage() {
                       <p className="text-lg font-bold text-red-900 mt-1">
                         {tiendaCalculations.reduce((sum, t) => sum + t.returnedOrders, 0)}
                       </p>
-                    </div>
-                  </div>
+                            </div>
+                            </div>
                   <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
+            </div>
+          </CardContent>
+        </Card>
 
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-blue-50 to-blue-100">
               <CardContent className="p-4">
@@ -1450,112 +1577,145 @@ export default function AdminLiquidationPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Clock className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
+                  </div>
+                  <div>
                       <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Reagendados</p>
                       <p className="text-lg font-bold text-blue-900 mt-1">
                         {tiendaCalculations.reduce((sum, t) => sum + t.rescheduledOrders, 0)}
                       </p>
-                    </div>
+                  </div>
                   </div>
                   <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                </div>
+                  </div>
               </CardContent>
             </Card>
 
             {/* Segunda fila: Total Recibido, Total Efectivo, SINPE, Tarjeta, Otros */}
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-purple-50 to-purple-100">
-              <CardContent className="p-4">
+                    <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center shadow-lg">
                       <DollarSign className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
+                        </div>
+                        <div>
                       <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Total Recibido</p>
                       <p className="text-xs text-purple-600">(todos los medios)</p>
                       <p className="text-lg font-bold text-purple-900 mt-1">
                         {formatCurrency(tiendaCalculations.reduce((sum, t) => sum + t.totalCollected, 0))}
-                      </p>
-                    </div>
+                          </p>
+                        </div>
                   </div>
                   <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
+                      </div>
+                    </CardContent>
+                  </Card>
 
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-green-50 to-green-100">
-              <CardContent className="p-4">
+                    <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Banknote className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
+                        </div>
+                        <div>
                       <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Total Efectivo</p>
                       <p className="text-lg font-bold text-green-900 mt-1">
                         {formatCurrency(tiendaCalculations.reduce((sum, t) => sum + t.cashPayments, 0))}
                       </p>
-                    </div>
+                      <p className="text-xs text-green-600 mt-1">
+                        {(() => {
+                          const efectivoCount = tiendaCalculations.reduce((sum, t) => {
+                            return sum + t.orders.filter(o => 
+                              o.estado_pedido === 'ENTREGADO' && 
+                              (o.metodo_pago === 'EFECTIVO' || o.metodo_pago === '2PAGOS')
+                            ).length;
+                          }, 0);
+                          return `${efectivoCount} pedidos`;
+                        })()}
+                          </p>
+                        </div>
                   </div>
                   <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
+                      </div>
+                    </CardContent>
+                  </Card>
 
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-cyan-50 to-cyan-100">
-              <CardContent className="p-4">
+                    <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Smartphone className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
+                        </div>
+                        <div>
                       <p className="text-xs font-semibold text-cyan-700 uppercase tracking-wide">SINPE</p>
                       <p className="text-lg font-bold text-cyan-900 mt-1">
                         {formatCurrency(tiendaCalculations.reduce((sum, t) => sum + t.sinpePayments, 0))}
                       </p>
-                    </div>
+                      <p className="text-xs text-cyan-600 mt-1">
+                        {(() => {
+                          const sinpeCount = tiendaCalculations.reduce((sum, t) => {
+                            return sum + t.orders.filter(o => 
+                              o.estado_pedido === 'ENTREGADO' && 
+                              (o.metodo_pago === 'SINPE' || o.metodo_pago === '2PAGOS')
+                            ).length;
+                          }, 0);
+                          return `${sinpeCount} pedidos`;
+                        })()}
+                          </p>
+                        </div>
                   </div>
                   <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
+                      </div>
+                    </CardContent>
+                  </Card>
 
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-pink-50 to-pink-100">
-              <CardContent className="p-4">
+                    <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-pink-500 rounded-xl flex items-center justify-center shadow-lg">
                       <CreditCard className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
+                        </div>
+                        <div>
                       <p className="text-xs font-semibold text-pink-700 uppercase tracking-wide">Tarjeta</p>
                       <p className="text-lg font-bold text-pink-900 mt-1">
                         {formatCurrency(tiendaCalculations.reduce((sum, t) => sum + t.tarjetaPayments, 0))}
                       </p>
-                    </div>
+                      <p className="text-xs text-pink-600 mt-1">
+                        {(() => {
+                          const tarjetaCount = tiendaCalculations.reduce((sum, t) => {
+                            return sum + t.orders.filter(o => 
+                              o.estado_pedido === 'ENTREGADO' && 
+                              o.metodo_pago === 'TARJETA'
+                            ).length;
+                          }, 0);
+                          return `${tarjetaCount} pedidos`;
+                        })()}
+                          </p>
+                        </div>
                   </div>
                   <div className="w-2 h-2 bg-pink-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
+                      </div>
+                    </CardContent>
+                  </Card>
 
-          </div>
+                </div>
 
           {/* Tabla de Liquidaciones por Tienda */}
           <Card className={loadingRangoFechas ? 'opacity-50 pointer-events-none' : ''}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
                 <Building2 className="w-5 h-5" />
                 Liquidaciones por Tienda - {
                   usarRangoFechas && tiendaFechaInicio && tiendaFechaFin 
                     ? `${tiendaFechaInicio} a ${tiendaFechaFin}`
                     : selectedDate
                 }
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1593,7 +1753,7 @@ export default function AdminLiquidationPage() {
                         </TableCell>
                         
                         <TableCell>
-                          <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2">
                             {(() => {
                               const statusCounts: Record<string, { count: number; color: string; label: string }> = {
                                 ENTREGADO: { count: 0, color: 'bg-green-500', label: 'Entregado' },
@@ -1618,10 +1778,10 @@ export default function AdminLiquidationPage() {
                                     <div className={`w-3 h-3 rounded-full ${data.color}`}></div>
                                     <span className="text-xs font-medium">{data.count}</span>
                                     <span className="text-xs text-muted-foreground">{data.label}</span>
-                                  </div>
+                        </div>
                                 ));
                             })()}
-                          </div>
+                      </div>
                         </TableCell>
                         
                         <TableCell>
@@ -1629,8 +1789,8 @@ export default function AdminLiquidationPage() {
                             <DollarSign className="w-4 h-4 text-purple-600" />
                             <span className="font-medium text-purple-600">
                               {formatCurrency(tienda.totalValue)}
-                            </span>
-                          </div>
+                                    </span>
+                                  </div>
                         </TableCell>
                         
                         <TableCell>
@@ -1639,7 +1799,7 @@ export default function AdminLiquidationPage() {
                             <span className="font-medium text-green-600">
                               {formatCurrency(tienda.totalCollected)}
                             </span>
-                          </div>
+                                </div>
                         </TableCell>
                         
                         <TableCell>
@@ -1648,7 +1808,7 @@ export default function AdminLiquidationPage() {
                             <span className="font-medium text-blue-600">
                               {formatCurrency(tienda.sinpePayments)}
                             </span>
-                          </div>
+                                </div>
                         </TableCell>
                         
                         <TableCell>
@@ -1657,7 +1817,7 @@ export default function AdminLiquidationPage() {
                             <span className="font-medium text-green-600">
                               {formatCurrency(tienda.cashPayments)}
                             </span>
-                          </div>
+                                </div>
                         </TableCell>
                         
                         <TableCell>
@@ -1665,8 +1825,8 @@ export default function AdminLiquidationPage() {
                             <Receipt className="w-4 h-4 text-red-600" />
                             <span className="font-medium text-red-600">
                               {formatCurrency(tienda.totalSpent)}
-                            </span>
-                          </div>
+                                    </span>
+                                  </div>
                         </TableCell>
                         
                         <TableCell>
@@ -1674,22 +1834,22 @@ export default function AdminLiquidationPage() {
                             <Calculator className="w-4 h-4 text-purple-600" />
                             <span className="font-medium text-purple-600">
                               {formatCurrency(tienda.finalAmount)}
-                            </span>
-                          </div>
+                                    </span>
+                                  </div>
                         </TableCell>
                         
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <Button
+                <Button 
                               size="sm"
-                              variant="outline"
+                  variant="outline" 
                               onClick={() => handleViewTiendaLiquidation(tienda)}
                               className="h-8"
-                            >
+                >
                               <Eye className="w-4 h-4 mr-1" />
                               Ver Detalles
-                            </Button>
-                          </div>
+                </Button>
+              </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -1705,15 +1865,15 @@ export default function AdminLiquidationPage() {
       {showViewAndLiquidateModal && selectedViewAndLiquidate && (
         <Dialog open={showViewAndLiquidateModal} onOpenChange={setShowViewAndLiquidateModal}>
           <DialogContent className="sm:max-w-[95vw] lg:max-w-[90vw] xl:max-w-[85vw] max-h-[90vh] overflow-y-auto overflow-x-hidden max-w-7xl">
-            <DialogHeader>
+          <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-xl">
                 <Calculator className="w-6 h-6 text-blue-600" />
                 {activeTab === 'mensajeros' 
                   ? `Liquidación de Mensajero - ${selectedViewAndLiquidate.messengerName}`
                   : `Liquidación de Tienda - ${selectedViewAndLiquidate.messengerName}`
                 }
-              </DialogTitle>
-            </DialogHeader>
+            </DialogTitle>
+          </DialogHeader>
           
           {selectedViewAndLiquidate && (
             <div className="space-y-4 overflow-hidden">
@@ -1736,10 +1896,10 @@ export default function AdminLiquidationPage() {
                     <div className="min-w-0 flex-1">
                       <p className="text-purple-100 text-sm truncate">Total a Entregar</p>
                       <p className="text-2xl font-bold truncate">{formatCurrency(selectedViewAndLiquidate.finalAmount)}</p>
-                    </div>
-                    <CheckCircle className="w-8 h-8 text-purple-200 flex-shrink-0 ml-2" />
                   </div>
+                    <CheckCircle className="w-8 h-8 text-purple-200 flex-shrink-0 ml-2" />
                 </div>
+                  </div>
 
                 {/* Total Recaudado */}
                 <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 text-white flex-1 min-w-0">
@@ -1747,50 +1907,101 @@ export default function AdminLiquidationPage() {
                     <div className="min-w-0 flex-1">
                       <p className="text-blue-100 text-sm truncate">Total Recaudado</p>
                       <p className="text-2xl font-bold truncate">{formatCurrency(selectedViewAndLiquidate.totalCollected)}</p>
-                    </div>
-                    <DollarSign className="w-8 h-8 text-blue-200 flex-shrink-0 ml-2" />
-                  </div>
                 </div>
+                    <DollarSign className="w-8 h-8 text-blue-200 flex-shrink-0 ml-2" />
+              </div>
+            </div>
               </div>
 
               {/* Métodos de Pago Compactos */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4 overflow-hidden">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-4 overflow-hidden">
                 <div className="bg-green-50 rounded-lg p-2 border border-green-200">
                   <div className="flex items-center gap-1 mb-1">
                     <Banknote className="w-3 h-3 text-green-600 flex-shrink-0" />
                     <span className="font-medium text-green-800 text-xs">Efectivo</span>
-                  </div>
+                          </div>
                   <p className="text-sm font-bold text-green-600 truncate">
                     {formatCurrency(selectedViewAndLiquidate.cashPayments)}
                   </p>
-                </div>
-
+                  <p className="text-xs text-green-500 truncate">
+                    {(() => {
+                      const efectivoCount = selectedViewAndLiquidate.orders.filter(o => 
+                        o.estado_pedido === 'ENTREGADO' && 
+                        (o.metodo_pago === 'EFECTIVO' || o.metodo_pago === '2PAGOS')
+                      ).length;
+                      return `${efectivoCount} pedidos`;
+                    })()}
+                  </p>
+                      </div>
+                      
                 <div className="bg-blue-50 rounded-lg p-2 border border-blue-200">
                   <div className="flex items-center gap-1 mb-1">
                     <Smartphone className="w-3 h-3 text-blue-600 flex-shrink-0" />
                     <span className="font-medium text-blue-800 text-xs">SINPE</span>
-                  </div>
+                          </div>
                   <p className="text-sm font-bold text-blue-600 truncate">
                     {formatCurrency(selectedViewAndLiquidate.sinpePayments)}
                   </p>
-                </div>
-
+                  <p className="text-xs text-blue-500 truncate">
+                    {(() => {
+                      const sinpeCount = selectedViewAndLiquidate.orders.filter(o => 
+                        o.estado_pedido === 'ENTREGADO' && 
+                        (o.metodo_pago === 'SINPE' || o.metodo_pago === '2PAGOS')
+                      ).length;
+                      return `${sinpeCount} pedidos`;
+                    })()}
+                  </p>
+                      </div>
+                      
                 <div className="bg-purple-50 rounded-lg p-2 border border-purple-200">
                   <div className="flex items-center gap-1 mb-1">
                     <CreditCard className="w-3 h-3 text-purple-600 flex-shrink-0" />
                     <span className="font-medium text-purple-800 text-xs">Tarjeta</span>
-                  </div>
+                            </div>
                   <p className="text-sm font-bold text-purple-600 truncate">
                     {formatCurrency(selectedViewAndLiquidate.tarjetaPayments || 0)}
                   </p>
-                </div>
+                  <p className="text-xs text-purple-500 truncate">
+                    {(() => {
+                      const tarjetaCount = selectedViewAndLiquidate.orders.filter(o => 
+                        o.estado_pedido === 'ENTREGADO' && 
+                        o.metodo_pago === 'TARJETA'
+                      ).length;
+                      return `${tarjetaCount} pedidos`;
+                    })()}
+                            </p>
+                          </div>
+
+                <div className="bg-orange-50 rounded-lg p-2 border border-orange-200">
+                  <div className="flex items-center gap-1 mb-1">
+                    <Receipt className="w-3 h-3 text-orange-600 flex-shrink-0" />
+                    <span className="font-medium text-orange-800 text-xs">2 Pagos</span>
+                        </div>
+                  <p className="text-sm font-bold text-orange-600 truncate">
+                    {(() => {
+                      const dosPagosTotal = selectedViewAndLiquidate.orders
+                        .filter(o => o.metodo_pago === '2PAGOS' && o.estado_pedido === 'ENTREGADO')
+                        .reduce((sum, o) => sum + parseFloat(o.efectivo_2_pagos || '0') + parseFloat(o.sinpe_2_pagos || '0'), 0);
+                      return formatCurrency(dosPagosTotal);
+                    })()}
+                  </p>
+                  <p className="text-xs text-orange-500 truncate">
+                    {(() => {
+                      const dosPagosCount = selectedViewAndLiquidate.orders.filter(o => 
+                        o.estado_pedido === 'ENTREGADO' && 
+                        o.metodo_pago === '2PAGOS'
+                      ).length;
+                      return `${dosPagosCount} pedidos`;
+                    })()}
+                        </p>
+                      </div>
 
                 <div className="bg-gray-50 rounded-lg p-2 border border-gray-200">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-1 min-w-0">
                       <Minus className="w-3 h-3 text-gray-600 flex-shrink-0" />
                       <span className="font-medium text-gray-800 text-xs">Gastos</span>
-                    </div>
+                        </div>
                     <Button
                       size="sm"
                       variant="outline"
@@ -1799,12 +2010,12 @@ export default function AdminLiquidationPage() {
                     >
                       <Receipt className="w-3 h-3" />
                     </Button>
-                  </div>
+                            </div>
                   <p className="text-sm font-bold text-gray-600 truncate">
-                    {formatCurrency(selectedViewAndLiquidate.totalSpent)}
+                            {formatCurrency(selectedViewAndLiquidate.totalSpent)}
                   </p>
-                </div>
-              </div>
+                        </div>
+                      </div>
 
               {/* Filtros Compactos */}
               <div className="bg-gray-50 rounded-lg p-4">
@@ -1815,7 +2026,7 @@ export default function AdminLiquidationPage() {
                   <button
                     onClick={() => setOrderStatusFilter('all')}
                     className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
-                      orderStatusFilter === 'all' 
+                            orderStatusFilter === 'all' 
                         ? 'bg-blue-500 text-white' 
                         : 'bg-white text-blue-600 border border-blue-200 hover:bg-blue-50'
                     }`}
@@ -1867,7 +2078,7 @@ export default function AdminLiquidationPage() {
                   >
                     Devoluciones ({selectedViewAndLiquidate.orders.filter(o => o.estado_pedido === 'DEVOLUCION').length})
                   </button>
-                </div>
+                        </div>
 
                 <div className="flex flex-wrap gap-2">
                   <span className="text-sm font-medium text-gray-700">Pago:</span>
@@ -1880,7 +2091,7 @@ export default function AdminLiquidationPage() {
                         : 'bg-white text-green-600 border border-green-200 hover:bg-green-50'
                     }`}
                   >
-                    Efectivo
+                                  Efectivo
                   </button>
 
                   <button
@@ -1904,10 +2115,21 @@ export default function AdminLiquidationPage() {
                   >
                     Tarjeta
                   </button>
+
+                  <button
+                    onClick={() => setOrderPaymentFilter(orderPaymentFilter === '2PAGOS' ? 'all' : '2PAGOS')}
+                    className={`px-2 py-1 rounded-full text-xs font-medium transition-all ${
+                      orderPaymentFilter === '2PAGOS' 
+                        ? 'bg-orange-500 text-white' 
+                        : 'bg-white text-orange-600 border border-orange-200 hover:bg-orange-50'
+                    }`}
+                  >
+                    2 Pagos
+                  </button>
+                            </div>
                 </div>
               </div>
-              </div>
-
+              
               {/* Componente de Tabla de Pedidos */}
               <PedidosTable
                 orders={selectedViewAndLiquidate.orders}
@@ -1922,7 +2144,7 @@ export default function AdminLiquidationPage() {
               <div className="flex justify-end">
                 {selectedViewAndLiquidate.isLiquidated ? (
                   // Si ya está liquidado, mostrar botón de cerrar
-                  <Button 
+                  <Button
                     size="lg" 
                     className="bg-gray-600 hover:bg-gray-700 text-white px-8 py-3"
                     onClick={() => setShowViewAndLiquidateModal(false)}
@@ -1937,7 +2159,7 @@ export default function AdminLiquidationPage() {
                     const puedeLiquidar = pedidosPendientes === 0;
                     
                     return (
-                      <Button 
+                    <Button
                         size="lg" 
                         className={`px-8 py-3 ${
                           puedeLiquidar 
@@ -1946,23 +2168,22 @@ export default function AdminLiquidationPage() {
                         }`}
                         onClick={() => {
                           if (puedeLiquidar) {
-                            alert(`Liquidación confirmada para ${selectedViewAndLiquidate.messengerName}. Total a entregar: ${formatCurrency(selectedViewAndLiquidate.finalAmount)}`);
-                            setShowViewAndLiquidateModal(false);
+                            confirmLiquidation(selectedViewAndLiquidate);
                           }
                         }}
                         disabled={!puedeLiquidar}
                       >
                         <CheckCircle className="w-5 h-5 mr-2" />
                         {puedeLiquidar ? 'Confirmar Liquidación' : `No se puede liquidar (${pedidosPendientes} pendientes)`}
-                      </Button>
+                    </Button>
                     );
                   })()
                 )}
               </div>
             </div>
           )}
-          </DialogContent>
-        </Dialog>
+        </DialogContent>
+      </Dialog>
       )}
 
       {/* Modal de Actualización de Estado de Pedido */}
@@ -1977,9 +2198,9 @@ export default function AdminLiquidationPage() {
               <div>
                 <Label>Pedido: {selectedOrderForUpdate.id_pedido}</Label>
                 <p className="text-sm text-gray-600">{selectedOrderForUpdate.cliente_nombre}</p>
-              </div>
+                </div>
               
-              <div>
+                      <div>
                 <Label htmlFor="status">Nuevo Estado</Label>
                 <Select value={newStatus} onValueChange={setNewStatus}>
                   <SelectTrigger>
@@ -1992,8 +2213,8 @@ export default function AdminLiquidationPage() {
                     <SelectItem value="REAGENDADO">Reagendado</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              
+                  </div>
+
               {newStatus === 'ENTREGADO' && (
                 <div>
                   <Label htmlFor="payment">Método de Pago</Label>
@@ -2007,10 +2228,10 @@ export default function AdminLiquidationPage() {
                       <SelectItem value="TARJETA">Tarjeta</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
+                            </div>
               )}
               
-              <div>
+                            <div>
                 <Label htmlFor="comment">Comentario (opcional)</Label>
                 <Textarea
                   id="comment"
@@ -2018,14 +2239,14 @@ export default function AdminLiquidationPage() {
                   onChange={(e) => setStatusComment(e.target.value)}
                   placeholder="Agregar comentario..."
                 />
-              </div>
-            </div>
+                            </div>
+                          </div>
             
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={() => setIsUpdateStatusModalOpen(false)}>
                 Cancelar
               </Button>
-              <Button 
+                            <Button
                 onClick={handleUpdateOrderStatus}
                 disabled={updatingOrder === selectedOrderForUpdate.id_pedido}
               >
@@ -2038,8 +2259,8 @@ export default function AdminLiquidationPage() {
                   <>
                     <Save className="w-4 h-4 mr-2" />
                     Actualizar
-                  </>
-                )}
+                </>
+              )}
               </Button>
             </div>
           </DialogContent>
@@ -2073,8 +2294,8 @@ export default function AdminLiquidationPage() {
                     </div>
                     <p className="text-sm text-red-700 mt-1">
                       {selectedExpenses.gastos.length} {selectedExpenses.gastos.length === 1 ? 'gasto registrado' : 'gastos registrados'}
-                    </p>
-                  </div>
+                        </p>
+                      </div>
 
                   {/* Lista de gastos */}
                   <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -2085,11 +2306,11 @@ export default function AdminLiquidationPage() {
                             {gasto.tipo === 'gasolina' ? (
                               <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                                 <Fuel className="w-5 h-5 text-blue-600" />
-                              </div>
+                    </div>
                             ) : gasto.tipo === 'mantenimiento' ? (
                               <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
                                 <Wrench className="w-5 h-5 text-orange-600" />
-                              </div>
+                  </div>
                             ) : gasto.tipo === 'peaje' ? (
                               <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
                                 <Car className="w-5 h-5 text-purple-600" />
@@ -2097,41 +2318,41 @@ export default function AdminLiquidationPage() {
                             ) : (
                               <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
                                 <DollarSign className="w-5 h-5 text-gray-600" />
-                              </div>
-                            )}
-                          </div>
+                  </div>
+              )}
+            </div>
                           <div className="min-w-0 flex-1">
                             <p className="font-medium text-gray-900 truncate">{gasto.descripcion}</p>
                             <div className="flex items-center gap-2 mt-1">
                               <span className="text-sm text-gray-600 capitalize">{gasto.tipo}</span>
                               <span className="text-xs text-gray-400">•</span>
                               <span className="text-xs text-gray-500">{gasto.fecha}</span>
-                            </div>
-                          </div>
-                        </div>
+                </div>
+                      </div>
+                      </div>
                         <div className="text-right flex-shrink-0">
                           <p className="text-lg font-bold text-red-600">{formatCurrency(gasto.monto)}</p>
-                        </div>
-                      </div>
-                    ))}
+                    </div>
                   </div>
-                </div>
+                    ))}
+                            </div>
+                            </div>
               ) : (
                 <div className="text-center py-12">
                   <Receipt className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No hay gastos registrados</h3>
                   <p className="text-gray-500">Este mensajero no tiene gastos registrados para la fecha seleccionada</p>
-                </div>
+                          </div>
               )}
-            </div>
+                          </div>
             
             <div className="flex justify-end pt-4 border-t">
-              <Button 
+                            <Button
                 onClick={() => setShowExpensesModal(false)}
                 className="px-6"
               >
                 Cerrar
-              </Button>
+                            </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -2162,9 +2383,9 @@ export default function AdminLiquidationPage() {
                   <p className="text-sm font-medium">Pedido: {selectedOrderForUpdate.id_pedido}</p>
                   <p className="text-sm text-gray-600">{selectedOrderForUpdate.cliente_nombre}</p>
                   <p className="text-sm text-gray-600">{formatCurrency(selectedOrderForUpdate.valor_total)}</p>
-                </div>
-                
-                <div className="space-y-3">
+                  </div>
+
+                  <div className="space-y-3">
                   <Label className="text-sm font-semibold">Nuevo Estado *</Label>
                   <div className="grid grid-cols-1 gap-2">
                     <Button
@@ -2200,8 +2421,8 @@ export default function AdminLiquidationPage() {
                     >
                       Reagendado
                     </Button>
-                  </div>
-                </div>
+                            </div>
+                            </div>
 
                 {/* Sección de método de pago para entregado */}
                 {newStatus === 'ENTREGADO' && (
@@ -2214,12 +2435,12 @@ export default function AdminLiquidationPage() {
                          selectedOrderForUpdate.metodo_pago === 'TARJETA' ? 'Tarjeta' :
                          'Cambio'}
                       </Badge>
-                    </div>
+                          </div>
                     <p className="text-xs text-gray-600">
                       Confirma el método de pago que el cliente está utilizando para esta entrega
-                    </p>
+                            </p>
                     <div className="grid grid-cols-2 gap-2">
-                      <Button
+                            <Button
                         variant={paymentMethod === 'EFECTIVO' ? 'default' : 'outline'}
                         onClick={() => setPaymentMethod('EFECTIVO')}
                         className={`h-8 text-xs font-medium ${
@@ -2262,8 +2483,8 @@ export default function AdminLiquidationPage() {
                         }`}
                       >
                         Cambio
-                      </Button>
-                    </div>
+                            </Button>
+                          </div>
                     
                     {/* Campos de comprobante para entregados */}
                     {paymentMethod === 'SINPE' && (
@@ -2299,7 +2520,7 @@ export default function AdminLiquidationPage() {
                           }}
                           className="text-sm"
                         />
-                      </div>
+            </div>
                     )}
                     
                     {paymentMethod === 'EFECTIVO' && (
@@ -2317,9 +2538,9 @@ export default function AdminLiquidationPage() {
                           }}
                           className="text-sm"
                         />
-                      </div>
+              </div>
                     )}
-                  </div>
+              </div>
                 )}
 
                 {/* Sección de fecha de reagendación */}
@@ -2335,22 +2556,22 @@ export default function AdminLiquidationPage() {
                     <p className="text-xs text-gray-600">
                       Si no se especifica, se mantendrá la fecha original
                     </p>
-                  </div>
-                )}
+                </div>
+              )}
 
                 <div className="space-y-3">
                   <Label className="text-sm font-semibold">Comentarios (opcional)</Label>
-                  <Textarea
+                <Textarea
                     placeholder="Añadir comentarios sobre el pedido..."
-                    value={statusComment}
-                    onChange={(e) => setStatusComment(e.target.value)}
+                  value={statusComment}
+                  onChange={(e) => setStatusComment(e.target.value)}
                     rows={3}
                     className="text-sm"
-                  />
-                </div>
+                />
+              </div>
               </div>
             )}
-            
+              
             <div className="flex-shrink-0 p-4 pt-2 border-t">
               <div className="flex gap-2">
                 <Button
@@ -2374,6 +2595,55 @@ export default function AdminLiquidationPage() {
               </div>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmación de Éxito/Error */}
+      <Dialog open={showSuccessModal} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-[400px]">
+          <div className="flex flex-col items-center space-y-4 py-4">
+            {modalType === 'success' ? (
+              <>
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                  </div>
+                
+                <div className="text-center">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    ¡Liquidación Exitosa!
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {successMessage}
+                  </p>
+                </div>
+                
+                <div className="flex items-center space-x-2 text-xs text-gray-500">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Recargando datos...</span>
+                    </div>
+              </>
+            ) : (
+              <>
+                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-8 h-8 text-red-600" />
+              </div>
+
+                <div className="text-center">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Error en Liquidación
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {successMessage}
+                  </p>
+              </div>
+
+                <div className="flex items-center space-x-2 text-xs text-gray-500">
+                  <Clock className="w-3 h-3" />
+                  <span>Cerrando automáticamente...</span>
+                </div>
+              </>
+            )}
+              </div>
         </DialogContent>
       </Dialog>
     </div>
@@ -2412,7 +2682,7 @@ const PedidosTable = ({
     if (orderPaymentFilter === 'all') {
       paymentMatch = true;
     } else if (orderPaymentFilter === 'OTROS') {
-      paymentMatch = !pedido.metodo_pago || !['EFECTIVO', 'SINPE', 'TARJETA'].includes(pedido.metodo_pago);
+      paymentMatch = !pedido.metodo_pago || !['EFECTIVO', 'SINPE', 'TARJETA', '2PAGOS'].includes(pedido.metodo_pago);
     } else {
       paymentMatch = pedido.metodo_pago === orderPaymentFilter;
     }
@@ -2427,8 +2697,8 @@ const PedidosTable = ({
         </h3>
         <div className="text-xs text-gray-500">
           Mostrando {filteredOrders.length} de {orders.length} pedidos
-        </div>
-      </div>
+                </div>
+                </div>
       <div className="bg-white overflow-x-auto max-h-96">
         <Table className="w-full" style={{ minWidth: '1300px' }}>
             <TableHeader>
@@ -2460,7 +2730,7 @@ const PedidosTable = ({
                         }`}
                       />
                       <span className="truncate">{pedido.id_pedido}</span>
-                    </div>
+              </div>
                   </TableCell>
                   <TableCell className="truncate text-xs">{pedido.cliente_nombre}</TableCell>
                   <TableCell className="truncate text-xs">{pedido.productos || 'No especificado'}</TableCell>
@@ -2471,13 +2741,20 @@ const PedidosTable = ({
                       {pedido.metodo_pago === 'SINPE' && <Smartphone className="w-3 h-3 text-blue-600" />}
                       {pedido.metodo_pago === 'EFECTIVO' && <Banknote className="w-3 h-3 text-green-600" />}
                       {pedido.metodo_pago === 'TARJETA' && <CreditCard className="w-3 h-3 text-purple-600" />}
-                      <span className="text-xs">
+                      {pedido.metodo_pago === '2PAGOS' && <Receipt className="w-3 h-3 text-orange-600" />}
+                      <span 
+                        className="text-xs" 
+                        title={pedido.metodo_pago === '2PAGOS' ? 
+                          `Efectivo: ₡${parseFloat(pedido.efectivo_2_pagos || '0').toLocaleString()} | SINPE: ₡${parseFloat(pedido.sinpe_2_pagos || '0').toLocaleString()}` 
+                          : undefined}
+                      >
                         {pedido.metodo_pago === 'SINPE' ? 'SINPE' :
                          pedido.metodo_pago === 'EFECTIVO' ? 'EFECTIVO' :
                          pedido.metodo_pago === 'TARJETA' ? 'TARJETA' :
+                         pedido.metodo_pago === '2PAGOS' ? '2 PAGOS' :
                          'SIN_METODO'}
                       </span>
-                    </div>
+                  </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
@@ -2492,22 +2769,22 @@ const PedidosTable = ({
                          pedido.estado_pedido === 'REAGENDADO' ? 'REA' :
                          pedido.estado_pedido || 'PEN'}
                       </span>
-                    </div>
+                </div>
                   </TableCell>
                   <TableCell className="text-xs whitespace-nowrap">{pedido.fecha_creacion.split('T')[0]}</TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1">
-                      <Button
+                <Button
                         size="sm"
-                        variant="outline"
+                  variant="outline"
                         onClick={() => onEditOrder(pedido)}
                         className="text-xs px-2 py-1 h-6 w-full"
                         title="Editar estado"
                       >
                         Editar
-                      </Button>
+                </Button>
                       {pedido.metodo_pago !== 'EFECTIVO' && (
-                        <Button
+                <Button
                           size="sm"
                           variant="outline"
                           onClick={() => onViewComprobante(pedido)}
@@ -2515,16 +2792,16 @@ const PedidosTable = ({
                           title="Ver comprobante"
                         >
                           Comprobante
-                        </Button>
+                </Button>
                       )}
-                    </div>
+              </div>
                   </TableCell>
                   <TableCell className="truncate text-xs">{pedido.direccion}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </div>
-      </div>
-    );
+            </div>
+    </div>
+  );
   };
