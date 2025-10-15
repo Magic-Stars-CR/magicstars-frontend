@@ -716,7 +716,9 @@ export default function RutasMensajerosPage() {
                                     size="sm"
                                     variant="outline"
                                     onClick={() => {
-                                      window.open(order.link_ubicacion, '_blank');
+                                      if (order.link_ubicacion) {
+                                        window.open(order.link_ubicacion, '_blank');
+                                      }
                                     }}
                                     className="h-3 px-1 text-[8px] bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
                                     title="Abrir en Maps"
