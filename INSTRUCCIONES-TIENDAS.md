@@ -118,7 +118,7 @@
 
 ## 📱 Soporte
 
-Si tienes problemas para acceder o necesitas ayuda:
+Si   tienes problemas para acceder o necesitas ayuda:
 1. Verifica que estés usando las credenciales correctas
 2. Asegúrate de que tu navegador esté actualizado
 3. Contacta al administrador del sistema

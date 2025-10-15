@@ -95,8 +95,28 @@ export default function TiendaLiquidacion() {
       );
       
       if (liquidacionTienda) {
-        setLiquidacion(liquidacionTienda);
-        console.log('✅ Liquidación encontrada:', liquidacionTienda);
+        // Mapear el tipo de la función al tipo esperado
+        const liquidacionMapeada: LiquidacionTiendaData = {
+          tienda: liquidacionTienda.tienda,
+          pedidos: liquidacionTienda.orders,
+          totalCollected: liquidacionTienda.totalCollected,
+          sinpePayments: liquidacionTienda.sinpePayments,
+          cashPayments: liquidacionTienda.cashPayments,
+          tarjetaPayments: liquidacionTienda.tarjetaPayments,
+          totalSpent: liquidacionTienda.totalSpent,
+          initialAmount: liquidacionTienda.totalValue,
+          finalAmount: liquidacionTienda.finalAmount,
+          deliveredOrders: liquidacionTienda.deliveredOrders,
+          pendingOrders: liquidacionTienda.pendingOrders,
+          returnedOrders: liquidacionTienda.returnedOrders,
+          rescheduledOrders: liquidacionTienda.rescheduledOrders,
+          averageOrderValue: liquidacionTienda.averageOrderValue,
+          topMessenger: liquidacionTienda.topMessenger,
+          topDistrict: liquidacionTienda.topDistrict
+        };
+        
+        setLiquidacion(liquidacionMapeada);
+        console.log('✅ Liquidación encontrada:', liquidacionMapeada);
       } else {
         console.log('⚠️ No se encontró liquidación para la tienda');
         setLiquidacion(null);

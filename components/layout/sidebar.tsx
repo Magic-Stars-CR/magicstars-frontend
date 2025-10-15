@@ -95,21 +95,41 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
 
   if (!user) return null;
 
-  const userMenuItems = menuItems[user.role] || [];
+  // Obtener menú base según el rol
+  let userMenuItems = menuItems[user.role] || [];
+  
+  // Si es el líder de mensajeros, agregar la opción de ver todas las rutas
+  console.log('🔍 Verificando usuario en sidebar:', {
+    name: user.name,
+    role: user.role,
+    isMessengerLeader: user.isMessengerLeader,
+    email: user.email
+  });
+  
+  if (user.role === 'mensajero' && user.isMessengerLeader) {
+    console.log('✅ Usuario es líder de mensajeros, agregando opción de rutas');
+    userMenuItems = [
+      ...userMenuItems.slice(0, 1), // Mantener "Mi Ruta de Hoy"
+      { icon: Truck, label: 'Rutas de Mensajeros', href: '/dashboard/mensajero/rutas-mensajeros' },
+      ...userMenuItems.slice(1), // Resto del menú
+    ];
+  } else {
+    console.log('❌ Usuario no es líder de mensajeros');
+  }
 
   const SidebarContent = () => (
     <>
       {/* Header del sidebar */}
-      <div className="p-6 border-b flex-shrink-0">
+      <div className="p-3 border-b flex-shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-            <Star className="w-5 h-5 text-white" />
+          <div className="w-6 h-6 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+            <Star className="w-4 h-4 text-white" />
           </div>
           <div>
             {user.role === 'asesor' && user.company ? (
-              <h1 className="font-bold text-lg">{user.company.name}</h1>
+              <h1 className="font-bold text-sm">{user.company.name}</h1>
             ) : (
-              <h1 className="font-bold text-lg">Magic Stars</h1>
+              <h1 className="font-bold text-sm">Magic Stars</h1>
             )}
             {user.role === 'asesor' && user.company ? (
               <p className="text-xs text-muted-foreground">
@@ -123,7 +143,7 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
       </div>
 
       {/* Navegación principal - scrollable */}
-      <nav className="flex-1 p-3 sm:p-4 space-y-2 overflow-y-auto" role="navigation" aria-label="Navegación principal">
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto" role="navigation" aria-label="Navegación principal">
         {userMenuItems.map((item, index) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
@@ -134,7 +154,7 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
               href={item.href}
               onClick={() => setIsOpen(false)}
               className={cn(
-                "flex items-center gap-3 px-3 sm:px-4 py-3 rounded-lg transition-all duration-200 min-h-[44px] sm:min-h-[48px]",
+                "flex items-center gap-2 px-2 py-2 rounded-lg transition-all duration-200 min-h-[36px]",
                 isActive 
                   ? "bg-primary text-primary-foreground shadow-md" 
                   : "hover:bg-accent hover:text-accent-foreground active:bg-accent/80"
@@ -144,10 +164,10 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
               aria-current={isActive ? "page" : undefined}
               aria-label={`${item.label}${isActive ? ' (página actual)' : ''}`}
             >
-              <Icon className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
-              <span className="font-medium text-sm sm:text-base truncate">{item.label}</span>
+              <Icon className="w-4 h-4 flex-shrink-0" />
+              <span className="font-medium text-xs truncate">{item.label}</span>
               {isActive && (
-                <div className="ml-auto w-2 h-2 bg-white rounded-full flex-shrink-0" />
+                <div className="ml-auto w-1.5 h-1.5 bg-white rounded-full flex-shrink-0" />
               )}
             </Link>
           );
@@ -155,13 +175,13 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
       </nav>
 
       {/* Sección del usuario y logout - fija en la parte inferior */}
-      <div className="p-3 sm:p-4 border-t bg-card/50 flex-shrink-0">
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-accent/50 mb-3">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
-            <User className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+      <div className="p-2 border-t bg-card/50 flex-shrink-0">
+        <div className="flex items-center gap-2 p-2 rounded-lg bg-accent/50 mb-2">
+          <div className="w-6 h-6 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+            <User className="w-3 h-3 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-xs sm:text-sm truncate">{user.name}</p>
+            <p className="font-medium text-xs truncate">{user.name}</p>
             <p className="text-xs text-muted-foreground truncate">{user.email}</p>
           </div>
         </div>
@@ -169,14 +189,13 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
         {/* Botón de cerrar sesión - siempre visible */}
         <Button
           variant="ghost"
-          className="w-full justify-start gap-2 sm:gap-3 text-muted-foreground hover:text-foreground hover:bg-red-50 hover:text-red-600 min-h-[44px] sm:min-h-[48px] px-3 sm:px-4 py-2 sm:py-3 transition-all duration-200"
+          className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-red-50 hover:text-red-600 min-h-[32px] px-2 py-1.5 transition-all duration-200"
           onClick={logout}
           aria-label="Cerrar sesión"
         >
-          <LogOut className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-          <span className="font-medium text-sm sm:text-base truncate">
-            <span className="hidden sm:inline">Cerrar Sesión</span>
-            <span className="sm:hidden">Salir</span>
+          <LogOut className="w-3 h-3 flex-shrink-0" />
+          <span className="font-medium text-xs truncate">
+            Cerrar Sesión
           </span>
         </Button>
       </div>
@@ -199,7 +218,7 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
       </Button>
 
       {/* Desktop sidebar - siempre visible y empuja el contenido */}
-      <aside className="hidden lg:flex w-64 border-r bg-card flex-shrink-0 z-10 flex-col h-screen">
+      <aside className="hidden lg:flex w-48 border-r bg-card flex-shrink-0 z-10 flex-col h-screen">
         <SidebarContent />
       </aside>
 
