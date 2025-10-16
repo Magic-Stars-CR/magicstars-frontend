@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
@@ -53,6 +53,7 @@ import {
   Fuel,
   Wrench,
   Car,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -87,6 +88,16 @@ export default function AdminLiquidationPage() {
   // Estados para el módulo de liquidación mejorado
   const [calculations, setCalculations] = useState<LiquidationCalculation[]>([]);
   const [tiendaCalculations, setTiendaCalculations] = useState<TiendaLiquidationCalculation[]>([]);
+  const [pruebaMetrics, setPruebaMetrics] = useState<{
+    totalOrders: number;
+    totalCollected: number;
+    cashPayments: number;
+    sinpePayments: number;
+    tarjetaPayments: number;
+    dosPagosPayments: number;
+    totalSpent: number;
+    finalAmount: number;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<'mensajeros' | 'tiendas'>('mensajeros');
   
   // Estados para filtros y paginación de tiendas
@@ -116,6 +127,7 @@ export default function AdminLiquidationPage() {
   const [showPendingOrdersModal, setShowPendingOrdersModal] = useState(false);
   const [showSinpeModal, setShowSinpeModal] = useState(false);
   const [showTarjetaModal, setShowTarjetaModal] = useState(false);
+  const [showDevolverModal, setShowDevolverModal] = useState(false);
   
   // Estados para datos de modales
   const [selectedPendingOrders, setSelectedPendingOrders] = useState<{
@@ -125,6 +137,7 @@ export default function AdminLiquidationPage() {
   
   const [selectedSinpeOrders, setSelectedSinpeOrders] = useState<PedidoTest[]>([]);
   const [selectedTarjetaOrders, setSelectedTarjetaOrders] = useState<PedidoTest[]>([]);
+  const [selectedDevolverOrders, setSelectedDevolverOrders] = useState<PedidoTest[]>([]);
   
   // Estados para modal de cambio de estado
   const [isUpdateStatusModalOpen, setIsUpdateStatusModalOpen] = useState(false);
@@ -249,7 +262,7 @@ export default function AdminLiquidationPage() {
       
       // Log básico de liquidaciones cargadas
       console.log(`✅ Liquidaciones cargadas: ${liquidacionesReales.length} mensajeros`);
-
+      
       // DEBUG: Mostrar liquidaciones de la tabla 'liquidaciones' para hoy
       const { createClient } = await import('@/utils/supabase/client');
       const supabase = createClient();
@@ -305,7 +318,15 @@ export default function AdminLiquidationPage() {
         updateStep('calculations', { status: 'loading' });
       }
       
-      setCalculations(calculationsData);
+      // Separar cálculos de PRUEBA del resto
+      const { pruebaCalculation, otherCalculations } = separatePruebaCalculations(calculationsData);
+      
+      // Establecer cálculos sin PRUEBA
+      setCalculations(otherCalculations);
+      
+      // Calcular y establecer métricas de PRUEBA
+      const pruebaMetricsData = calculatePruebaMetrics(pruebaCalculation);
+      setPruebaMetrics(pruebaMetricsData);
       
       // Paso 4: Finalización
       if (!isReload) {
@@ -506,6 +527,19 @@ export default function AdminLiquidationPage() {
     setShowTarjetaModal(true);
   };
 
+  const handleViewDevolverOrders = () => {
+    // Obtener solo los pedidos del mensajero actual que necesitan ser devueltos
+    if (!selectedViewAndLiquidate) return;
+    
+    const devolverOrders = selectedViewAndLiquidate.orders.filter(pedido => 
+      pedido.estado_pedido === 'PENDIENTE' || 
+      pedido.estado_pedido === 'REAGENDADO' || 
+      pedido.estado_pedido === 'DEVOLUCION'
+    );
+    setSelectedDevolverOrders(devolverOrders);
+    setShowDevolverModal(true);
+  };
+
   const handleEditOrderStatus = (pedido: PedidoTest) => {
     setSelectedOrderForUpdate(pedido);
     setNewStatus(pedido.estado_pedido || 'ENTREGADO');
@@ -535,6 +569,42 @@ export default function AdminLiquidationPage() {
     }
   };
 
+
+  // Función para separar cálculos de PRUEBA del resto
+  const separatePruebaCalculations = (allCalculations: LiquidationCalculation[]) => {
+    const pruebaCalculation = allCalculations.find(c => c.messengerName?.toUpperCase() === 'PRUEBA');
+    const otherCalculations = allCalculations.filter(c => c.messengerName?.toUpperCase() !== 'PRUEBA');
+    
+    return { pruebaCalculation, otherCalculations };
+  };
+
+  // Función para calcular métricas de PRUEBA
+  const calculatePruebaMetrics = (pruebaCalculation: LiquidationCalculation | undefined) => {
+    if (!pruebaCalculation) return null;
+    
+    const calculated = calculateLiquidation(pruebaCalculation);
+    
+    // Calcular total de 2 pagos
+    const dosPagosPayments = pruebaCalculation.orders.reduce((sum, order) => {
+      if (order.estado_pedido === 'ENTREGADO' && order.metodo_pago === '2PAGOS') {
+        const efectivoAmount = parseFloat(order.efectivo_2_pagos || '0');
+        const sinpeAmount = parseFloat(order.sinpe_2_pagos || '0');
+        return sum + efectivoAmount + sinpeAmount;
+      }
+      return sum;
+    }, 0);
+    
+    return {
+      totalOrders: pruebaCalculation.orders.length,
+      totalCollected: calculated.totalCollected,
+      cashPayments: calculated.cashPayments,
+      sinpePayments: calculated.sinpePayments,
+      tarjetaPayments: calculated.tarjetaPayments,
+      dosPagosPayments,
+      totalSpent: calculated.totalSpent,
+      finalAmount: calculated.finalAmount
+    };
+  };
 
   const calculateLiquidation = (calculation: LiquidationCalculation): LiquidationCalculation => {
     const totalCollected = calculation.orders.reduce((sum, order) => {
@@ -1143,10 +1213,10 @@ export default function AdminLiquidationPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Calculator className="w-5 h-5 text-white" />
-      </div>
+                    </div>
                     <div>
                       <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Total a Entregar</p>
-                      <p className="text-xs text-purple-600">(efectivo - gastos)</p>
+                      <p className="text-xs text-purple-600 font-medium">Efectivo - Gastos</p>
                       <p className="text-lg font-bold text-purple-900 mt-1">
                         {formatCurrency(calculations.reduce((sum, c) => {
                           const calculated = calculateLiquidation(c);
@@ -1155,7 +1225,13 @@ export default function AdminLiquidationPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <p className="text-xs text-purple-600">Fórmula:</p>
+                      <p className="text-xs text-purple-700 font-mono">Efectivo - Gastos</p>
+                    </div>
+                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -1178,10 +1254,9 @@ export default function AdminLiquidationPage() {
                       <p className="text-xs text-green-600 mt-1">
                         {(() => {
                           const efectivoCount = calculations.reduce((sum, c) => {
-                            const calculated = calculateLiquidation(c);
-                            return sum + calculated.orders.filter(o => 
+                            return sum + c.orders.filter(o => 
                               o.estado_pedido === 'ENTREGADO' && 
-                              (o.metodo_pago === 'EFECTIVO' || o.metodo_pago === '2PAGOS')
+                              o.metodo_pago === 'EFECTIVO'
                             ).length;
                           }, 0);
                           return `${efectivoCount} pedidos`;
@@ -1212,10 +1287,9 @@ export default function AdminLiquidationPage() {
                       <p className="text-xs text-cyan-600 mt-1">
             {(() => {
                           const sinpeCount = calculations.reduce((sum, c) => {
-                            const calculated = calculateLiquidation(c);
-                            return sum + calculated.orders.filter(o => 
+                            return sum + c.orders.filter(o => 
                               o.estado_pedido === 'ENTREGADO' && 
-                              (o.metodo_pago === 'SINPE' || o.metodo_pago === '2PAGOS')
+                              o.metodo_pago === 'SINPE'
                             ).length;
                           }, 0);
                           return `${sinpeCount} pedidos`;
@@ -1281,7 +1355,7 @@ export default function AdminLiquidationPage() {
                                 .reduce((s, o) => s + parseFloat(o.efectivo_2_pagos || '0') + parseFloat(o.sinpe_2_pagos || '0'), 0);
                             }, 0);
                             return formatCurrency(dosPagosTotal);
-            })()}
+                          })()}
                         </span>
                       </div>
                       <div className="text-xs text-orange-600 mt-1">
@@ -1296,9 +1370,116 @@ export default function AdminLiquidationPage() {
                   </div>
                   <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
                 </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+
       </div>
+
+      {/* Dropdown de Resumen de PRUEBA */}
+      {pruebaMetrics && (
+        <details className="group">
+          <summary className="cursor-pointer list-none">
+            <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200 transition-all duration-200">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between text-blue-800">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                      <span className="text-white font-bold text-sm">P</span>
+                    </div>
+                    Resumen de Pedidos PRUEBA
+                    <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded-full">
+                      Contabilidad Separada
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-blue-600">
+                      {pruebaMetrics.totalOrders} pedidos • {formatCurrency(pruebaMetrics.totalCollected)}
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-blue-600 group-open:rotate-180 transition-transform duration-200" />
+                  </div>
+                </CardTitle>
+              </CardHeader>
+            </Card>
+          </summary>
+          <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 mt-2">
+            <CardContent className="pt-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {/* Total Pedidos */}
+                <div className="bg-white rounded-lg p-3 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Package className="w-4 h-4 text-blue-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase">Total Pedidos</span>
+                  </div>
+                  <p className="text-lg font-bold text-blue-900">{pruebaMetrics.totalOrders}</p>
+                </div>
+
+                {/* Total Recaudado */}
+                <div className="bg-white rounded-lg p-3 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <DollarSign className="w-4 h-4 text-green-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase">Total Recaudado</span>
+                  </div>
+                  <p className="text-lg font-bold text-blue-900">{formatCurrency(pruebaMetrics.totalCollected)}</p>
+                </div>
+
+                {/* Efectivo */}
+                <div className="bg-white rounded-lg p-3 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Banknote className="w-4 h-4 text-green-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase">Efectivo</span>
+                  </div>
+                  <p className="text-lg font-bold text-blue-900">{formatCurrency(pruebaMetrics.cashPayments)}</p>
+                </div>
+
+                {/* SINPE */}
+                <div className="bg-white rounded-lg p-3 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Smartphone className="w-4 h-4 text-cyan-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase">SINPE</span>
+                  </div>
+                  <p className="text-lg font-bold text-blue-900">{formatCurrency(pruebaMetrics.sinpePayments)}</p>
+                </div>
+
+                {/* Tarjeta */}
+                <div className="bg-white rounded-lg p-3 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CreditCard className="w-4 h-4 text-pink-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase">Tarjeta</span>
+                  </div>
+                  <p className="text-lg font-bold text-blue-900">{formatCurrency(pruebaMetrics.tarjetaPayments)}</p>
+                </div>
+
+                {/* 2 Pagos */}
+                <div className="bg-white rounded-lg p-3 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Receipt className="w-4 h-4 text-orange-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase">2 Pagos</span>
+                  </div>
+                  <p className="text-lg font-bold text-blue-900">{formatCurrency(pruebaMetrics.dosPagosPayments)}</p>
+                </div>
+
+                {/* Gastos */}
+                <div className="bg-white rounded-lg p-3 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Receipt className="w-4 h-4 text-red-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase">Gastos</span>
+                  </div>
+                  <p className="text-lg font-bold text-blue-900">{formatCurrency(pruebaMetrics.totalSpent)}</p>
+                </div>
+
+                {/* Monto Final */}
+                <div className="bg-white rounded-lg p-3 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Calculator className="w-4 h-4 text-purple-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase">Monto Final</span>
+                  </div>
+                  <p className="text-lg font-bold text-blue-900">{formatCurrency(pruebaMetrics.finalAmount)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </details>
+      )}
 
           {/* Tabla de Liquidaciones de Mensajeros */}
       <Card>
@@ -1380,8 +1561,8 @@ export default function AdminLiquidationPage() {
                                     </div>
                                   ));
                               })()}
-                            </div>
-                          </TableCell>
+                      </div>
+                    </TableCell>
                     
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -1442,7 +1623,7 @@ export default function AdminLiquidationPage() {
                               {calculated.isLiquidated ? (
                                 <CheckCircle2 className="w-4 h-4 mr-1" />
                               ) : (
-                                <Eye className="w-4 h-4 mr-1" />
+                              <Eye className="w-4 h-4 mr-1" />
                               )}
                               Ver
                             </Button>
@@ -1628,7 +1809,7 @@ export default function AdminLiquidationPage() {
                           const efectivoCount = tiendaCalculations.reduce((sum, t) => {
                             return sum + t.orders.filter(o => 
                               o.estado_pedido === 'ENTREGADO' && 
-                              (o.metodo_pago === 'EFECTIVO' || o.metodo_pago === '2PAGOS')
+                              o.metodo_pago === 'EFECTIVO'
                             ).length;
                           }, 0);
                           return `${efectivoCount} pedidos`;
@@ -1658,7 +1839,7 @@ export default function AdminLiquidationPage() {
                           const sinpeCount = tiendaCalculations.reduce((sum, t) => {
                             return sum + t.orders.filter(o => 
                               o.estado_pedido === 'ENTREGADO' && 
-                              (o.metodo_pago === 'SINPE' || o.metodo_pago === '2PAGOS')
+                              o.metodo_pago === 'SINPE'
                             ).length;
                           }, 0);
                           return `${sinpeCount} pedidos`;
@@ -1927,7 +2108,7 @@ export default function AdminLiquidationPage() {
                     {(() => {
                       const efectivoCount = selectedViewAndLiquidate.orders.filter(o => 
                         o.estado_pedido === 'ENTREGADO' && 
-                        (o.metodo_pago === 'EFECTIVO' || o.metodo_pago === '2PAGOS')
+                        o.metodo_pago === 'EFECTIVO'
                       ).length;
                       return `${efectivoCount} pedidos`;
                     })()}
@@ -1946,7 +2127,7 @@ export default function AdminLiquidationPage() {
                     {(() => {
                       const sinpeCount = selectedViewAndLiquidate.orders.filter(o => 
                         o.estado_pedido === 'ENTREGADO' && 
-                        (o.metodo_pago === 'SINPE' || o.metodo_pago === '2PAGOS')
+                        o.metodo_pago === 'SINPE'
                       ).length;
                       return `${sinpeCount} pedidos`;
                     })()}
@@ -1976,7 +2157,7 @@ export default function AdminLiquidationPage() {
                   <div className="flex items-center gap-1 mb-1">
                     <Receipt className="w-3 h-3 text-orange-600 flex-shrink-0" />
                     <span className="font-medium text-orange-800 text-xs">2 Pagos</span>
-                        </div>
+                  </div>
                   <p className="text-sm font-bold text-orange-600 truncate">
                     {(() => {
                       const dosPagosTotal = selectedViewAndLiquidate.orders
@@ -1993,8 +2174,19 @@ export default function AdminLiquidationPage() {
                       ).length;
                       return `${dosPagosCount} pedidos`;
                     })()}
-                        </p>
-                      </div>
+                  </p>
+                  <div className="mt-1 text-xs text-orange-600">
+                    {(() => {
+                      const dosPagosEfectivo = selectedViewAndLiquidate.orders
+                        .filter(o => o.metodo_pago === '2PAGOS' && o.estado_pedido === 'ENTREGADO')
+                        .reduce((sum, o) => sum + parseFloat(o.efectivo_2_pagos || '0'), 0);
+                      const dosPagosSinpe = selectedViewAndLiquidate.orders
+                        .filter(o => o.metodo_pago === '2PAGOS' && o.estado_pedido === 'ENTREGADO')
+                        .reduce((sum, o) => sum + parseFloat(o.sinpe_2_pagos || '0'), 0);
+                      return `Ef: ${formatCurrency(dosPagosEfectivo)} | S: ${formatCurrency(dosPagosSinpe)}`;
+                    })()}
+                  </div>
+                </div>
 
                 <div className="bg-gray-50 rounded-lg p-2 border border-gray-200">
                   <div className="flex items-center justify-between mb-1">
@@ -2127,6 +2319,25 @@ export default function AdminLiquidationPage() {
                     2 Pagos
                   </button>
                             </div>
+                  
+                  {/* Botón de Productos para Devolver - Esquina Derecha */}
+                  <div className="flex justify-end mt-2">
+                    <Button
+                      onClick={handleViewDevolverOrders}
+                      variant="outline"
+                      className="bg-red-50 border-red-200 text-red-700 hover:bg-red-100 hover:border-red-300"
+                    >
+                      <Package className="w-4 h-4 mr-2" />
+                      Productos para Devolver ({(() => {
+                        if (!selectedViewAndLiquidate) return 0;
+                        return selectedViewAndLiquidate.orders.filter(pedido => 
+                          pedido.estado_pedido === 'PENDIENTE' || 
+                          pedido.estado_pedido === 'REAGENDADO' || 
+                          pedido.estado_pedido === 'DEVOLUCION'
+                        ).length;
+                      })()})
+                    </Button>
+                  </div>
                 </div>
               </div>
               
@@ -2142,24 +2353,30 @@ export default function AdminLiquidationPage() {
             
                 {/* Botón de Confirmar Liquidación */}
               <div className="flex justify-end">
-                {selectedViewAndLiquidate.isLiquidated ? (
-                  // Si ya está liquidado, mostrar botón de cerrar
-                  <Button
-                    size="lg" 
-                    className="bg-gray-600 hover:bg-gray-700 text-white px-8 py-3"
-                    onClick={() => setShowViewAndLiquidateModal(false)}
-                  >
-                    <X className="w-5 h-5 mr-2" />
-                    Cerrar
-                  </Button>
-                ) : (
-                  // Si no está liquidado, verificar si puede liquidar
-                  (() => {
+                {/* Para tiendas, siempre mostrar solo el botón Cerrar */}
+                {(() => {
+                  // Verificar si es una tienda comparando con tiendaCalculations
+                  const esTienda = tiendaCalculations.some(t => t.tienda === selectedViewAndLiquidate.messengerName);
+                  
+                  if (esTienda || selectedViewAndLiquidate.isLiquidated) {
+                    // Para tiendas o liquidaciones ya completadas, mostrar solo cerrar
+                    return (
+                      <Button
+                        size="lg" 
+                        className="bg-gray-600 hover:bg-gray-700 text-white px-8 py-3"
+                        onClick={() => setShowViewAndLiquidateModal(false)}
+                      >
+                        <X className="w-5 h-5 mr-2" />
+                        Cerrar
+                      </Button>
+                    );
+                  } else {
+                    // Para mensajeros no liquidados, mostrar botón de confirmar liquidación
                     const pedidosPendientes = selectedViewAndLiquidate.orders.filter(o => o.estado_pedido === 'PENDIENTE').length;
                     const puedeLiquidar = pedidosPendientes === 0;
                     
                     return (
-                    <Button
+                      <Button
                         size="lg" 
                         className={`px-8 py-3 ${
                           puedeLiquidar 
@@ -2175,10 +2392,10 @@ export default function AdminLiquidationPage() {
                       >
                         <CheckCircle className="w-5 h-5 mr-2" />
                         {puedeLiquidar ? 'Confirmar Liquidación' : `No se puede liquidar (${pedidosPendientes} pendientes)`}
-                    </Button>
+                      </Button>
                     );
-                  })()
-                )}
+                  }
+                })()}
               </div>
             </div>
           )}
@@ -2646,6 +2863,119 @@ export default function AdminLiquidationPage() {
               </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Productos para Devolver */}
+      {showDevolverModal && (
+        <Dialog open={showDevolverModal} onOpenChange={setShowDevolverModal}>
+          <DialogContent className="sm:max-w-[90vw] lg:max-w-[80vw] xl:max-w-[70vw] max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <Package className="w-6 h-6 text-red-600" />
+                Productos para Devolver
+                <span className="text-sm font-normal text-gray-500">
+                  ({selectedDevolverOrders.length} productos)
+                </span>
+              </DialogTitle>
+              <DialogDescription>
+                Lista de todos los productos que necesitan ser devueltos (Pendientes + Reagendados + Devoluciones)
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              {/* Resumen por estado */}
+              <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-yellow-600">
+                    {selectedDevolverOrders.filter(p => p.estado_pedido === 'PENDIENTE').length}
+                  </p>
+                  <p className="text-sm text-gray-600">Pendientes</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-blue-600">
+                    {selectedDevolverOrders.filter(p => p.estado_pedido === 'REAGENDADO').length}
+                  </p>
+                  <p className="text-sm text-gray-600">Reagendados</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-red-600">
+                    {selectedDevolverOrders.filter(p => p.estado_pedido === 'DEVOLUCION').length}
+                  </p>
+                  <p className="text-sm text-gray-600">Devoluciones</p>
+                </div>
+              </div>
+
+              {/* Tabla de pedidos */}
+              <div className="max-h-96 overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Ubicación</TableHead>
+                      <TableHead>Dirección</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Mensajero</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedDevolverOrders.map((pedido) => (
+                      <TableRow key={pedido.idx}>
+                        <TableCell className="font-mono text-sm">{pedido.id_pedido}</TableCell>
+                        <TableCell className="font-medium">{pedido.cliente_nombre}</TableCell>
+                        <TableCell className="max-w-xs truncate" title={pedido.productos}>
+                          {pedido.productos}
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            <div className="font-medium">{pedido.canton}</div>
+                            <div className="text-gray-500">
+                              {pedido.provincia} - {pedido.distrito}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate" title={pedido.direccion}>
+                          {pedido.direccion}
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant="outline" 
+                            className={
+                              pedido.estado_pedido === 'PENDIENTE' 
+                                ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                                : pedido.estado_pedido === 'REAGENDADO'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : 'bg-red-50 text-red-700 border-red-200'
+                            }
+                          >
+                            {pedido.estado_pedido}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-600">
+                          {pedido.mensajero_asignado || 'Sin asignar'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {selectedDevolverOrders.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <Package className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>No hay productos para devolver</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-4 border-t">
+              <Button onClick={() => setShowDevolverModal(false)} className="px-6">
+                Cerrar
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
@@ -2741,7 +3071,12 @@ const PedidosTable = ({
                       {pedido.metodo_pago === 'SINPE' && <Smartphone className="w-3 h-3 text-blue-600" />}
                       {pedido.metodo_pago === 'EFECTIVO' && <Banknote className="w-3 h-3 text-green-600" />}
                       {pedido.metodo_pago === 'TARJETA' && <CreditCard className="w-3 h-3 text-purple-600" />}
-                      {pedido.metodo_pago === '2PAGOS' && <Receipt className="w-3 h-3 text-orange-600" />}
+                      {pedido.metodo_pago === '2PAGOS' && (
+                        <div className="flex items-center gap-0.5">
+                          <Receipt className="w-3 h-3 text-orange-600" />
+                          <Receipt className="w-3 h-3 text-orange-600" />
+                        </div>
+                      )}
                       <span 
                         className="text-xs" 
                         title={pedido.metodo_pago === '2PAGOS' ? 

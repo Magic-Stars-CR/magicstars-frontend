@@ -102,6 +102,8 @@ export interface Order {
   origin: OrderOrigin;
   numero_sinpe?: string; // Número SINPE de la tienda
   comprobante_sinpe?: string; // URL del comprobante SINPE
+  efectivo_2_pagos?: string; // Monto en efectivo para pedidos de 2 pagos
+  sinpe_2_pagos?: string; // Monto en SINPE para pedidos de 2 pagos
   deliveryMethod?: DeliveryMethod;
   createdAt: string;
   updatedAt: string;
