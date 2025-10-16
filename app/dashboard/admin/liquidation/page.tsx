@@ -3276,10 +3276,11 @@ const PedidosTable = ({
                     <div className="flex flex-col gap-1">
                 <Button
                         size="sm"
-                  variant="outline"
+                        variant="outline"
                         onClick={() => onEditOrder(pedido)}
                         className="text-xs px-2 py-1 h-6 w-full"
                         title="Editar estado"
+                        disabled={true}
                       >
                         Editar
                 </Button>
