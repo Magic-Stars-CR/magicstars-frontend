@@ -4401,6 +4401,7 @@ export default function MiRutaHoy() {
                   <TableHead>SINPE</TableHead>
                   <TableHead>Total</TableHead>
                   <TableHead>Fecha Entrega</TableHead>
+                  <TableHead>Comprobante SINPE</TableHead>
                   <TableHead>Estado</TableHead>
                 </TableRow>
               </TableHeader>
@@ -4425,6 +4426,22 @@ export default function MiRutaHoy() {
                       </TableCell>
                       <TableCell className="text-sm text-gray-500">
                         {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : '-'}
+                      </TableCell>
+                      <TableCell>
+                        {order.comprobante_sinpe ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => window.open(order.comprobante_sinpe, '_blank')}
+                            className="h-6 px-2 text-xs bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
+                            title="Ver comprobante SINPE"
+                          >
+                            <ExternalLink className="w-3 h-3 mr-1" />
+                            Ver
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">Sin comprobante</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">

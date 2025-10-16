@@ -138,6 +138,9 @@ export default function AdminLiquidationPage() {
   const [selectedSinpeOrders, setSelectedSinpeOrders] = useState<PedidoTest[]>([]);
   const [selectedTarjetaOrders, setSelectedTarjetaOrders] = useState<PedidoTest[]>([]);
   const [selectedDevolverOrders, setSelectedDevolverOrders] = useState<PedidoTest[]>([]);
+  const [showPendingNotification, setShowPendingNotification] = useState(false);
+  const [showPendingModal, setShowPendingModal] = useState(false);
+  const [pendingLiquidations, setPendingLiquidations] = useState<any[]>([]);
   
   // Estados para modal de cambio de estado
   const [isUpdateStatusModalOpen, setIsUpdateStatusModalOpen] = useState(false);
@@ -180,9 +183,11 @@ export default function AdminLiquidationPage() {
         const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
         const costaRicaDate = getCostaRicaDateISO();
         setSelectedDate(costaRicaDate);
-        console.log('📅 Fecha inicializada para Costa Rica:', costaRicaDate);
         return;
       }
+      
+      // Cargar liquidaciones pendientes al inicializar
+      loadPendingLiquidations();
     }
     
     initializeDate();
@@ -191,17 +196,16 @@ export default function AdminLiquidationPage() {
   // Recargar datos cuando cambie la fecha
   useEffect(() => {
     if (selectedDate) {
-      console.log('📅 Fecha cambiada, recargando datos:', selectedDate);
       loadData();
       loadCalculations();
       loadTiendaCalculations();
+      loadPendingLiquidations(); // Cargar liquidaciones pendientes
     }
   }, [selectedDate]);
 
   // Recargar tiendas cuando cambien las fechas del rango
   useEffect(() => {
     if (usarRangoFechas && tiendaFechaInicio && tiendaFechaFin) {
-      console.log('📅 Rango de fechas de tiendas cambiado, recargando:', tiendaFechaInicio, 'a', tiendaFechaFin);
       loadTiendaCalculations();
     }
   }, [tiendaFechaInicio, tiendaFechaFin, usarRangoFechas]);
@@ -224,7 +228,6 @@ export default function AdminLiquidationPage() {
 
   const loadCalculations = async (isReload = false) => {
     try {
-      console.log('🚀 Iniciando loadCalculations para fecha:', selectedDate, isReload ? '(recarga)' : '');
       
       setIsLoadingData(true);
       
@@ -247,45 +250,15 @@ export default function AdminLiquidationPage() {
       if (!fechaParaUsar) {
         const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
         fechaParaUsar = getCostaRicaDateISO();
-        console.log('📅 Usando fecha de Costa Rica por defecto:', fechaParaUsar);
       }
       
       const liquidacionesReales = await getLiquidacionesReales(fechaParaUsar);
       
       
       if (liquidacionesReales.length > 0) {
-        console.log('📋 Primeros 3 pedidos de ejemplo:');
-        liquidacionesReales[0].pedidos.slice(0, 3).forEach((pedido, index) => {
-          console.log(`  ${index + 1}. ID: ${pedido.id_pedido}, Fecha: ${pedido.fecha_creacion}`);
-        });
       }
       
-      // Log básico de liquidaciones cargadas
-      console.log(`✅ Liquidaciones cargadas: ${liquidacionesReales.length} mensajeros`);
       
-      // DEBUG: Mostrar liquidaciones de la tabla 'liquidaciones' para hoy
-      const { createClient } = await import('@/utils/supabase/client');
-      const supabase = createClient();
-      const { data: rawLiquidaciones, error: rawLiquidacionesError } = await supabase
-        .from('liquidaciones')
-        .select('*')
-        .eq('fecha', fechaParaUsar);
-
-      if (rawLiquidacionesError) {
-        console.error('❌ Error al obtener liquidaciones de la tabla "liquidaciones":', rawLiquidacionesError);
-      } else {
-        console.clear(); // Clear console before showing specific log
-        console.log('📊 LIQUIDACIONES EN LA TABLA "liquidaciones" PARA HOY:', rawLiquidaciones);
-        
-        // DEBUG: Verificar estado de liquidación para cada mensajero
-        console.log('🔍 VERIFICANDO ESTADO DE LIQUIDACIÓN:');
-        liquidacionesReales.forEach(liq => {
-          const liquidacionEnTabla = rawLiquidaciones?.find(r => 
-            r.mensajero?.toUpperCase() === liq.mensajero?.toUpperCase()
-          );
-          console.log(`  - ${liq.mensajero}: isLiquidated=${liq.isLiquidated}, en tabla=${!!liquidacionEnTabla}, ya_liquidado=${liquidacionEnTabla?.ya_liquidado}`);
-        });
-      }
       
       
       
@@ -349,7 +322,6 @@ export default function AdminLiquidationPage() {
       setIsLoadingData(false);
       
         if (isReload) {
-          console.log('✅ Datos actualizados correctamente');
         }
       
     } catch (error) {
@@ -366,13 +338,11 @@ export default function AdminLiquidationPage() {
 
   const loadTiendaCalculations = async () => {
     try {
-      console.log('🚀 Iniciando loadTiendaCalculations para fecha:', selectedDate);
       
       let liquidacionesReales = [];
       
       // Si está habilitado el rango de fechas para tiendas, obtener datos del rango
       if (usarRangoFechas && tiendaFechaInicio && tiendaFechaFin) {
-        console.log('📅 Usando rango de fechas para tiendas:', tiendaFechaInicio, 'a', tiendaFechaFin);
         setLoadingRangoFechas(true);
         
         // Obtener datos de cada fecha en el rango y consolidarlos
@@ -383,8 +353,6 @@ export default function AdminLiquidationPage() {
         for (let fecha = new Date(fechaInicio); fecha <= fechaFin; fecha = new Date(fecha.getTime() + 24 * 60 * 60 * 1000)) {
           fechas.push(fecha.toISOString().split('T')[0]);
         }
-        
-        console.log('📅 Fechas a procesar:', fechas);
         
         // Obtener datos de cada fecha
         const promesasFechas = fechas.map(fecha => getLiquidacionesRealesByTienda(fecha));
@@ -455,14 +423,11 @@ export default function AdminLiquidationPage() {
       if (!fechaParaUsar) {
         const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
         fechaParaUsar = getCostaRicaDateISO();
-        console.log('📅 Usando fecha de Costa Rica por defecto:', fechaParaUsar);
       }
       
         liquidacionesReales = await getLiquidacionesRealesByTienda(fechaParaUsar);
       }
       
-      console.log('✅ Liquidaciones por tienda obtenidas:', liquidacionesReales.length);
-      console.log('📊 Datos de liquidaciones por tienda:', liquidacionesReales);
       
       setTiendaCalculations(liquidacionesReales as unknown as TiendaLiquidationCalculation[]);
       
@@ -471,6 +436,58 @@ export default function AdminLiquidationPage() {
       setTiendaCalculations([]);
     } finally {
       setLoadingRangoFechas(false);
+    }
+  };
+
+  const loadPendingLiquidations = async () => {
+    try {
+      console.log('🚀 Obteniendo liquidaciones pendientes...');
+      
+      const response = await fetch("https://primary-production-85ff.up.railway.app/webhook/alerta-liquidaciones-vencidas", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error HTTP: ${response.status}`);
+      }
+
+      const pendingLiquidations = await response.json();
+      
+      console.log('📋 Liquidaciones pendientes obtenidas:', pendingLiquidations);
+      console.log('📊 Total de liquidaciones pendientes:', Array.isArray(pendingLiquidations) ? pendingLiquidations.length : 'No es un array');
+      
+      // Guardar liquidaciones pendientes para la notificación
+      if (Array.isArray(pendingLiquidations) && pendingLiquidations.length > 0) {
+        setPendingLiquidations(pendingLiquidations);
+        setShowPendingNotification(true);
+      } else {
+        setPendingLiquidations([]);
+        setShowPendingNotification(false);
+      }
+      
+      // Mostrar detalles de cada liquidación pendiente
+      if (Array.isArray(pendingLiquidations)) {
+        pendingLiquidations.forEach((liquidation, index) => {
+          console.log(`📄 Liquidación ${index + 1}:`, {
+            fecha: liquidation.fecha,
+            mensajero: liquidation.mensajero,
+            total_recaudado: liquidation.total_recaudado,
+            ya_liquidado: liquidation.ya_liquidado,
+            created_at: liquidation.created_at
+          });
+        });
+      } else {
+        console.log('⚠️ La respuesta no es un array:', pendingLiquidations);
+      }
+
+      return pendingLiquidations;
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo liquidaciones pendientes:', error);
+      return [];
     }
   };
 
@@ -563,6 +580,13 @@ export default function AdminLiquidationPage() {
         window.open(pedido.comprobante_sinpe, '_blank');
       } else {
         alert(`No hay comprobante de tarjeta disponible para el pedido ${pedido.id_pedido}`);
+      }
+    } else if (pedido.metodo_pago === '2PAGOS') {
+      // Para 2 pagos, mostrar el comprobante SINPE (ya que es el único comprobante que tienen)
+      if (pedido.comprobante_sinpe) {
+        window.open(pedido.comprobante_sinpe, '_blank');
+      } else {
+        alert(`No hay comprobante SINPE disponible para el pedido ${pedido.id_pedido}`);
       }
     } else {
       alert(`Ver comprobante del pedido ${pedido.id_pedido}`);
@@ -712,7 +736,6 @@ export default function AdminLiquidationPage() {
         );
       }
       
-      console.log(`🔍 Liquidación para ${calculation.messengerName} en ${fechaParaVerificar}: ${isCompleted ? 'COMPLETADA' : 'PENDIENTE'}`);
     } catch (error) {
       console.error('❌ Error verificando estado de liquidación:', error);
       setIsLiquidationCompleted(false);
@@ -721,9 +744,6 @@ export default function AdminLiquidationPage() {
 
   const handleViewTiendaLiquidation = async (tiendaCalculation: TiendaLiquidationCalculation) => {
     try {
-      console.log('🏪 Datos originales de la tienda:', tiendaCalculation);
-      console.log('📦 Pedidos de la tienda:', tiendaCalculation.orders?.length || 0);
-      console.log('📦 Pedidos detalle:', tiendaCalculation.orders);
       
       // Convertir TiendaLiquidationCalculation a LiquidationCalculation para el modal
       const calculation: LiquidationCalculation = {
@@ -742,13 +762,10 @@ export default function AdminLiquidationPage() {
         canEdit: true
       };
 
-      console.log('🔄 Cálculo convertido para el modal:', calculation);
-      console.log('📦 Pedidos en el cálculo:', calculation.orders?.length || 0);
     
     setSelectedViewAndLiquidate(calculation);
     setShowViewAndLiquidateModal(true);
       
-      console.log(`🔍 Liquidación para tienda ${tiendaCalculation.tienda}:`, calculation);
     } catch (error) {
       console.error('❌ Error abriendo liquidación de tienda:', error);
     }
@@ -789,7 +806,6 @@ export default function AdminLiquidationPage() {
       if (!response.ok) {
         // Si ya existe la liquidación, marcamos como liquidada localmente
         if (responseData.error && responseData.error.includes('duplicate key value violates unique constraint')) {
-          console.log('⚠️ Liquidación ya existe, marcando como liquidada');
       setCalculations(prev => 
         prev.map(calc => 
           calc.messengerId === calculation.messengerId 
@@ -804,7 +820,6 @@ export default function AdminLiquidationPage() {
           throw new Error(`Error: ${responseData.error || responseData.message || response.status}`);
         }
       } else {
-        console.log('✅ Liquidación enviada exitosamente');
         setCalculations(prev => 
           prev.map(calc => 
             calc.messengerId === calculation.messengerId 
@@ -862,7 +877,6 @@ export default function AdminLiquidationPage() {
         tienda: selectedOrderForUpdate.tienda || 'ALL STARS'
       };
 
-      console.log('🔄 Actualizando estado del pedido:', webhookData);
 
       const response = await fetch("https://primary-production-2b25b.up.railway.app/webhook/actualizar-pedido", {
         method: "POST",
@@ -873,7 +887,6 @@ export default function AdminLiquidationPage() {
       });
 
       const resultado = await response.json();
-      console.log("📡 Respuesta del webhook:", resultado);
 
       if (response.ok) {
         await loadTiendaCalculations();
@@ -1213,7 +1226,7 @@ export default function AdminLiquidationPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Calculator className="w-5 h-5 text-white" />
-                    </div>
+      </div>
                     <div>
                       <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Total a Entregar</p>
                       <p className="text-xs text-purple-600 font-medium">Efectivo - Gastos</p>
@@ -1355,7 +1368,7 @@ export default function AdminLiquidationPage() {
                                 .reduce((s, o) => s + parseFloat(o.efectivo_2_pagos || '0') + parseFloat(o.sinpe_2_pagos || '0'), 0);
                             }, 0);
                             return formatCurrency(dosPagosTotal);
-                          })()}
+            })()}
                         </span>
                       </div>
                       <div className="text-xs text-orange-600 mt-1">
@@ -1370,8 +1383,8 @@ export default function AdminLiquidationPage() {
                   </div>
                   <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
                 </div>
-              </CardContent>
-            </Card>
+          </CardContent>
+        </Card>
 
       </div>
 
@@ -1667,7 +1680,7 @@ export default function AdminLiquidationPage() {
                   </div>
                   </div>
                   <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                  </div>
+                </div>
                 </CardContent>
               </Card>
 
@@ -1683,7 +1696,7 @@ export default function AdminLiquidationPage() {
                       <p className="text-lg font-bold text-orange-900 mt-1">
                         {tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)}
                       </p>
-            </div>
+                  </div>
                   </div>
                   <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
                 </div>
@@ -1696,16 +1709,16 @@ export default function AdminLiquidationPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shadow-lg">
                       <CheckCircle className="w-5 h-5 text-white" />
-                      </div>
+                  </div>
                       <div>
                       <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Entregados</p>
                       <p className="text-lg font-bold text-green-900 mt-1">
-                        {tiendaCalculations.reduce((sum, t) => sum + t.deliveredOrders, 0)}
+                    {tiendaCalculations.reduce((sum, t) => sum + t.deliveredOrders, 0)}
                       </p>
-                      </div>
-                      </div>
+                  </div>
+                  </div>
                   <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                      </div>
+                </div>
               </CardContent>
             </Card>
 
@@ -1715,21 +1728,21 @@ export default function AdminLiquidationPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-yellow-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Clock className="w-5 h-5 text-white" />
-                        </div>
+                  </div>
                     <div>
                       <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide">Pendientes</p>
                       <p className="text-lg font-bold text-yellow-900 mt-1">
-                        {tiendaCalculations.reduce((sum, t) => sum + t.pendingOrders, 0)}
+                    {tiendaCalculations.reduce((sum, t) => sum + t.pendingOrders, 0)}
                         {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'PENDIENTE' && !o.mensajero_asignado).length, 0) > 0 && (
                           <span className="text-xs text-orange-600 ml-2">
                             ({tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'PENDIENTE' && !o.mensajero_asignado).length, 0)} sin asignar)
                                       </span>
                         )}
                       </p>
-                                      </div>
-                        </div>
+                  </div>
+                  </div>
                   <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-            </div>
+                </div>
           </CardContent>
         </Card>
 
@@ -1739,16 +1752,16 @@ export default function AdminLiquidationPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-red-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Package className="w-5 h-5 text-white" />
-                    </div>
+                  </div>
                     <div>
                       <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Devoluciones</p>
                       <p className="text-lg font-bold text-red-900 mt-1">
-                        {tiendaCalculations.reduce((sum, t) => sum + t.returnedOrders, 0)}
+                    {tiendaCalculations.reduce((sum, t) => sum + t.returnedOrders, 0)}
                       </p>
-                            </div>
-                            </div>
+                  </div>
+                  </div>
                   <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
-            </div>
+                </div>
           </CardContent>
         </Card>
 
@@ -1762,14 +1775,14 @@ export default function AdminLiquidationPage() {
                   <div>
                       <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Reagendados</p>
                       <p className="text-lg font-bold text-blue-900 mt-1">
-                        {tiendaCalculations.reduce((sum, t) => sum + t.rescheduledOrders, 0)}
+                    {tiendaCalculations.reduce((sum, t) => sum + t.rescheduledOrders, 0)}
                       </p>
                   </div>
                   </div>
                   <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
                   </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
             {/* Segunda fila: Total Recibido, Total Efectivo, SINPE, Tarjeta, Otros */}
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-purple-50 to-purple-100">
@@ -1778,19 +1791,19 @@ export default function AdminLiquidationPage() {
                       <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center shadow-lg">
                       <DollarSign className="w-5 h-5 text-white" />
-                        </div>
+                  </div>
                         <div>
                       <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Total Recibido</p>
                       <p className="text-xs text-purple-600">(todos los medios)</p>
                       <p className="text-lg font-bold text-purple-900 mt-1">
                         {formatCurrency(tiendaCalculations.reduce((sum, t) => sum + t.totalCollected, 0))}
                           </p>
-                        </div>
+            </div>
                   </div>
                   <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                </div>
+              </CardContent>
+            </Card>
 
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-green-50 to-green-100">
                     <CardContent className="p-4">
@@ -1798,7 +1811,7 @@ export default function AdminLiquidationPage() {
                       <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Banknote className="w-5 h-5 text-white" />
-                        </div>
+                      </div>
                         <div>
                       <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Total Efectivo</p>
                       <p className="text-lg font-bold text-green-900 mt-1">
@@ -1815,8 +1828,8 @@ export default function AdminLiquidationPage() {
                           return `${efectivoCount} pedidos`;
                         })()}
                           </p>
-                        </div>
-                  </div>
+                    </div>
+                      </div>
                   <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                       </div>
                     </CardContent>
@@ -1828,8 +1841,8 @@ export default function AdminLiquidationPage() {
                       <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Smartphone className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
+                      </div>
+                      <div>
                       <p className="text-xs font-semibold text-cyan-700 uppercase tracking-wide">SINPE</p>
                       <p className="text-lg font-bold text-cyan-900 mt-1">
                         {formatCurrency(tiendaCalculations.reduce((sum, t) => sum + t.sinpePayments, 0))}
@@ -1845,10 +1858,10 @@ export default function AdminLiquidationPage() {
                           return `${sinpeCount} pedidos`;
                         })()}
                           </p>
-                        </div>
-                  </div>
-                  <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
                       </div>
+                      </div>
+                  <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
+                    </div>
                     </CardContent>
                   </Card>
 
@@ -1876,14 +1889,14 @@ export default function AdminLiquidationPage() {
                         })()}
                           </p>
                         </div>
-                  </div>
+                        </div>
                   <div className="w-2 h-2 bg-pink-400 rounded-full animate-pulse"></div>
                       </div>
                     </CardContent>
                   </Card>
 
-                </div>
-
+                      </div>
+                      
           {/* Tabla de Liquidaciones por Tienda */}
           <Card className={loadingRangoFechas ? 'opacity-50 pointer-events-none' : ''}>
                   <CardHeader>
@@ -1897,9 +1910,9 @@ export default function AdminLiquidationPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
                     <TableHead>Tienda</TableHead>
                     <TableHead>Pedidos por Estado</TableHead>
                     <TableHead>Valor Total</TableHead>
@@ -1908,10 +1921,10 @@ export default function AdminLiquidationPage() {
                     <TableHead>Efectivo</TableHead>
                     <TableHead>Gastos</TableHead>
                     <TableHead>Monto Final</TableHead>
-                    <TableHead>Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+                                <TableHead>Acciones</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
                   {tiendaCalculations.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={9} className="text-center py-8">
@@ -1933,7 +1946,7 @@ export default function AdminLiquidationPage() {
                           </div>
                         </TableCell>
                         
-                        <TableCell>
+                                    <TableCell>
                       <div className="flex flex-wrap gap-2">
                             {(() => {
                               const statusCounts: Record<string, { count: number; color: string; label: string }> = {
@@ -1963,34 +1976,34 @@ export default function AdminLiquidationPage() {
                                 ));
                             })()}
                       </div>
-                        </TableCell>
+                                    </TableCell>
                         
-                        <TableCell>
+                                    <TableCell>
                           <div className="flex items-center gap-2">
                             <DollarSign className="w-4 h-4 text-purple-600" />
                             <span className="font-medium text-purple-600">
                               {formatCurrency(tienda.totalValue)}
                                     </span>
                                   </div>
-                        </TableCell>
+                                    </TableCell>
                         
-                        <TableCell>
+                                    <TableCell>
                           <div className="flex items-center gap-2">
                             <DollarSign className="w-4 h-4 text-green-600" />
                             <span className="font-medium text-green-600">
                               {formatCurrency(tienda.totalCollected)}
-                            </span>
+                                      </span>
                                 </div>
-                        </TableCell>
+                                    </TableCell>
                         
-                        <TableCell>
+                                    <TableCell>
                           <div className="flex items-center gap-2">
                             <Smartphone className="w-4 h-4 text-blue-600" />
                             <span className="font-medium text-blue-600">
                               {formatCurrency(tienda.sinpePayments)}
                             </span>
-                                </div>
-                        </TableCell>
+                                      </div>
+                                    </TableCell>
                         
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -1998,7 +2011,7 @@ export default function AdminLiquidationPage() {
                             <span className="font-medium text-green-600">
                               {formatCurrency(tienda.cashPayments)}
                             </span>
-                                </div>
+                        </div>
                         </TableCell>
                         
                         <TableCell>
@@ -2016,29 +2029,29 @@ export default function AdminLiquidationPage() {
                             <span className="font-medium text-purple-600">
                               {formatCurrency(tienda.finalAmount)}
                                     </span>
-                                  </div>
+                              </div>
                         </TableCell>
                         
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                <Button 
-                              size="sm"
-                  variant="outline" 
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
                               onClick={() => handleViewTiendaLiquidation(tienda)}
                               className="h-8"
-                >
+                                >
                               <Eye className="w-4 h-4 mr-1" />
                               Ver Detalles
-                </Button>
-              </div>
+                                </Button>
+                              </div>
                         </TableCell>
                       </TableRow>
                     ))
                   )}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
+          </CardContent>
+        </Card>
         </TabsContent>
       </Tabs>
 
@@ -2064,11 +2077,11 @@ export default function AdminLiquidationPage() {
                   <strong>Debug:</strong> Pedidos: {selectedViewAndLiquidate.orders.length}, 
                   Filtro Estado: {orderStatusFilter}, 
                   Filtro Pago: {orderPaymentFilter}
-                </div>
+                          </div>
               )}
 
               {/* Sección Superior */}
-              <div className="space-y-4">
+            <div className="space-y-4">
                 {/* Resumen Financiero con Tamaño Fijo */}
                 <div className="flex gap-4">
                 {/* Total a Entregar */}
@@ -2079,7 +2092,7 @@ export default function AdminLiquidationPage() {
                       <p className="text-2xl font-bold truncate">{formatCurrency(selectedViewAndLiquidate.finalAmount)}</p>
                   </div>
                     <CheckCircle className="w-8 h-8 text-purple-200 flex-shrink-0 ml-2" />
-                </div>
+                  </div>
                   </div>
 
                 {/* Total Recaudado */}
@@ -2088,19 +2101,19 @@ export default function AdminLiquidationPage() {
                     <div className="min-w-0 flex-1">
                       <p className="text-blue-100 text-sm truncate">Total Recaudado</p>
                       <p className="text-2xl font-bold truncate">{formatCurrency(selectedViewAndLiquidate.totalCollected)}</p>
-                </div>
+                  </div>
                     <DollarSign className="w-8 h-8 text-blue-200 flex-shrink-0 ml-2" />
+                  </div>
+                </div>
               </div>
-            </div>
-              </div>
-
+              
               {/* Métodos de Pago Compactos */}
               <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-4 overflow-hidden">
                 <div className="bg-green-50 rounded-lg p-2 border border-green-200">
                   <div className="flex items-center gap-1 mb-1">
                     <Banknote className="w-3 h-3 text-green-600 flex-shrink-0" />
                     <span className="font-medium text-green-800 text-xs">Efectivo</span>
-                          </div>
+              </div>
                   <p className="text-sm font-bold text-green-600 truncate">
                     {formatCurrency(selectedViewAndLiquidate.cashPayments)}
                   </p>
@@ -2112,14 +2125,14 @@ export default function AdminLiquidationPage() {
                       ).length;
                       return `${efectivoCount} pedidos`;
                     })()}
-                  </p>
-                      </div>
+                          </p>
+                        </div>
                       
                 <div className="bg-blue-50 rounded-lg p-2 border border-blue-200">
                   <div className="flex items-center gap-1 mb-1">
                     <Smartphone className="w-3 h-3 text-blue-600 flex-shrink-0" />
                     <span className="font-medium text-blue-800 text-xs">SINPE</span>
-                          </div>
+                        </div>
                   <p className="text-sm font-bold text-blue-600 truncate">
                     {formatCurrency(selectedViewAndLiquidate.sinpePayments)}
                   </p>
@@ -2131,14 +2144,14 @@ export default function AdminLiquidationPage() {
                       ).length;
                       return `${sinpeCount} pedidos`;
                     })()}
-                  </p>
-                      </div>
+                          </p>
+                        </div>
                       
                 <div className="bg-purple-50 rounded-lg p-2 border border-purple-200">
                   <div className="flex items-center gap-1 mb-1">
                     <CreditCard className="w-3 h-3 text-purple-600 flex-shrink-0" />
                     <span className="font-medium text-purple-800 text-xs">Tarjeta</span>
-                            </div>
+                        </div>
                   <p className="text-sm font-bold text-purple-600 truncate">
                     {formatCurrency(selectedViewAndLiquidate.tarjetaPayments || 0)}
                   </p>
@@ -2150,14 +2163,14 @@ export default function AdminLiquidationPage() {
                       ).length;
                       return `${tarjetaCount} pedidos`;
                     })()}
-                            </p>
-                          </div>
+                          </p>
+                        </div>
 
                 <div className="bg-orange-50 rounded-lg p-2 border border-orange-200">
                   <div className="flex items-center gap-1 mb-1">
                     <Receipt className="w-3 h-3 text-orange-600 flex-shrink-0" />
                     <span className="font-medium text-orange-800 text-xs">2 Pagos</span>
-                  </div>
+                        </div>
                   <p className="text-sm font-bold text-orange-600 truncate">
                     {(() => {
                       const dosPagosTotal = selectedViewAndLiquidate.orders
@@ -2185,7 +2198,7 @@ export default function AdminLiquidationPage() {
                         .reduce((sum, o) => sum + parseFloat(o.sinpe_2_pagos || '0'), 0);
                       return `Ef: ${formatCurrency(dosPagosEfectivo)} | S: ${formatCurrency(dosPagosSinpe)}`;
                     })()}
-                  </div>
+                        </div>
                 </div>
 
                 <div className="bg-gray-50 rounded-lg p-2 border border-gray-200">
@@ -2193,7 +2206,7 @@ export default function AdminLiquidationPage() {
                     <div className="flex items-center gap-1 min-w-0">
                       <Minus className="w-3 h-3 text-gray-600 flex-shrink-0" />
                       <span className="font-medium text-gray-800 text-xs">Gastos</span>
-                        </div>
+                          </div>
                     <Button
                       size="sm"
                       variant="outline"
@@ -2202,12 +2215,12 @@ export default function AdminLiquidationPage() {
                     >
                       <Receipt className="w-3 h-3" />
                     </Button>
-                            </div>
+                        </div>
                   <p className="text-sm font-bold text-gray-600 truncate">
                             {formatCurrency(selectedViewAndLiquidate.totalSpent)}
                   </p>
                         </div>
-                      </div>
+                          </div>
 
               {/* Filtros Compactos */}
               <div className="bg-gray-50 rounded-lg p-4">
@@ -2216,7 +2229,7 @@ export default function AdminLiquidationPage() {
                   
                   {/* Filtro Total */}
                   <button
-                    onClick={() => setOrderStatusFilter('all')}
+                            onClick={() => setOrderStatusFilter('all')}
                     className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
                             orderStatusFilter === 'all' 
                         ? 'bg-blue-500 text-white' 
@@ -2318,13 +2331,13 @@ export default function AdminLiquidationPage() {
                   >
                     2 Pagos
                   </button>
-                            </div>
-                  
+                                </div>
+                                
                   {/* Botón de Productos para Devolver - Esquina Derecha */}
                   <div className="flex justify-end mt-2">
-                    <Button
+                                    <Button
                       onClick={handleViewDevolverOrders}
-                      variant="outline"
+                                      variant="outline"
                       className="bg-red-50 border-red-200 text-red-700 hover:bg-red-100 hover:border-red-300"
                     >
                       <Package className="w-4 h-4 mr-2" />
@@ -2336,10 +2349,10 @@ export default function AdminLiquidationPage() {
                           pedido.estado_pedido === 'DEVOLUCION'
                         ).length;
                       })()})
-                    </Button>
-                  </div>
-                </div>
-              </div>
+                                    </Button>
+                                </div>
+                              </div>
+                                </div>
               
               {/* Componente de Tabla de Pedidos */}
               <PedidosTable
@@ -2361,14 +2374,14 @@ export default function AdminLiquidationPage() {
                   if (esTienda || selectedViewAndLiquidate.isLiquidated) {
                     // Para tiendas o liquidaciones ya completadas, mostrar solo cerrar
                     return (
-                      <Button
+                <Button 
                         size="lg" 
                         className="bg-gray-600 hover:bg-gray-700 text-white px-8 py-3"
                         onClick={() => setShowViewAndLiquidateModal(false)}
-                      >
+                >
                         <X className="w-5 h-5 mr-2" />
-                        Cerrar
-                      </Button>
+                  Cerrar
+                </Button>
                     );
                   } else {
                     // Para mensajeros no liquidados, mostrar botón de confirmar liquidación
@@ -2407,17 +2420,17 @@ export default function AdminLiquidationPage() {
       {isUpdateStatusModalOpen && selectedOrderForUpdate && (
         <Dialog open={isUpdateStatusModalOpen} onOpenChange={setIsUpdateStatusModalOpen}>
           <DialogContent>
-            <DialogHeader>
+          <DialogHeader>
               <DialogTitle>Actualizar Estado del Pedido</DialogTitle>
-            </DialogHeader>
+          </DialogHeader>
             
             <div className="space-y-4">
-              <div>
+                  <div>
                 <Label>Pedido: {selectedOrderForUpdate.id_pedido}</Label>
                 <p className="text-sm text-gray-600">{selectedOrderForUpdate.cliente_nombre}</p>
-                </div>
-              
-                      <div>
+              </div>
+
+                <div>
                 <Label htmlFor="status">Nuevo Estado</Label>
                 <Select value={newStatus} onValueChange={setNewStatus}>
                   <SelectTrigger>
@@ -2445,10 +2458,10 @@ export default function AdminLiquidationPage() {
                       <SelectItem value="TARJETA">Tarjeta</SelectItem>
                     </SelectContent>
                   </Select>
-                            </div>
+                </div>
               )}
-              
-                            <div>
+
+                <div>
                 <Label htmlFor="comment">Comentario (opcional)</Label>
                 <Textarea
                   id="comment"
@@ -2456,14 +2469,14 @@ export default function AdminLiquidationPage() {
                   onChange={(e) => setStatusComment(e.target.value)}
                   placeholder="Agregar comentario..."
                 />
-                            </div>
-                          </div>
+                  </div>
+                </div>
             
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={() => setIsUpdateStatusModalOpen(false)}>
                 Cancelar
               </Button>
-                            <Button
+                <Button 
                 onClick={handleUpdateOrderStatus}
                 disabled={updatingOrder === selectedOrderForUpdate.id_pedido}
               >
@@ -2478,10 +2491,10 @@ export default function AdminLiquidationPage() {
                     Actualizar
                 </>
               )}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+                </Button>
+              </div>
+        </DialogContent>
+      </Dialog>
       )}
 
       {/* Modal de Gastos */}
@@ -2492,9 +2505,9 @@ export default function AdminLiquidationPage() {
               <DialogTitle className="flex items-center gap-2 text-xl">
                 <Receipt className="w-6 h-6 text-red-600" />
                 Gastos del Mensajero - {selectedExpenses.mensajero}
-              </DialogTitle>
-            </DialogHeader>
-            
+            </DialogTitle>
+          </DialogHeader>
+          
             <div className="space-y-4">
               {selectedExpenses.gastos && selectedExpenses.gastos.length > 0 ? (
                 <div className="space-y-4">
@@ -2504,16 +2517,16 @@ export default function AdminLiquidationPage() {
                       <div className="flex items-center gap-2">
                         <Receipt className="w-5 h-5 text-red-600" />
                         <span className="font-semibold text-red-800">Total de Gastos</span>
-                      </div>
+                          </div>
                       <span className="text-2xl font-bold text-red-600">
                         {formatCurrency(selectedExpenses.gastos.reduce((sum: number, gasto: any) => sum + gasto.monto, 0))}
                       </span>
-                    </div>
+                        </div>
                     <p className="text-sm text-red-700 mt-1">
                       {selectedExpenses.gastos.length} {selectedExpenses.gastos.length === 1 ? 'gasto registrado' : 'gastos registrados'}
                         </p>
                       </div>
-
+                      
                   {/* Lista de gastos */}
                   <div className="space-y-3 max-h-96 overflow-y-auto">
                     {selectedExpenses.gastos.map((gasto: any, index: number) => (
@@ -2523,46 +2536,46 @@ export default function AdminLiquidationPage() {
                             {gasto.tipo === 'gasolina' ? (
                               <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                                 <Fuel className="w-5 h-5 text-blue-600" />
-                    </div>
+                          </div>
                             ) : gasto.tipo === 'mantenimiento' ? (
                               <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
                                 <Wrench className="w-5 h-5 text-orange-600" />
-                  </div>
+                        </div>
                             ) : gasto.tipo === 'peaje' ? (
                               <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
                                 <Car className="w-5 h-5 text-purple-600" />
-                              </div>
+                      </div>
                             ) : (
                               <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
                                 <DollarSign className="w-5 h-5 text-gray-600" />
-                  </div>
-              )}
-            </div>
+                            </div>
+                              )}
+                            </div>
                           <div className="min-w-0 flex-1">
                             <p className="font-medium text-gray-900 truncate">{gasto.descripcion}</p>
                             <div className="flex items-center gap-2 mt-1">
                               <span className="text-sm text-gray-600 capitalize">{gasto.tipo}</span>
                               <span className="text-xs text-gray-400">•</span>
                               <span className="text-xs text-gray-500">{gasto.fecha}</span>
-                </div>
-                      </div>
-                      </div>
+                          </div>
+                            </div>
+                          </div>
                         <div className="text-right flex-shrink-0">
                           <p className="text-lg font-bold text-red-600">{formatCurrency(gasto.monto)}</p>
-                    </div>
-                  </div>
+                        </div>
+                      </div>
                     ))}
-                            </div>
-                            </div>
+                        </div>
+                      </div>
               ) : (
                 <div className="text-center py-12">
                   <Receipt className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No hay gastos registrados</h3>
                   <p className="text-gray-500">Este mensajero no tiene gastos registrados para la fecha seleccionada</p>
-                          </div>
+                        </div>
               )}
-                          </div>
-            
+                      </div>
+
             <div className="flex justify-end pt-4 border-t">
                             <Button
                 onClick={() => setShowExpensesModal(false)}
@@ -2570,7 +2583,7 @@ export default function AdminLiquidationPage() {
               >
                 Cerrar
                             </Button>
-            </div>
+                            </div>
           </DialogContent>
         </Dialog>
       )}
@@ -2600,8 +2613,8 @@ export default function AdminLiquidationPage() {
                   <p className="text-sm font-medium">Pedido: {selectedOrderForUpdate.id_pedido}</p>
                   <p className="text-sm text-gray-600">{selectedOrderForUpdate.cliente_nombre}</p>
                   <p className="text-sm text-gray-600">{formatCurrency(selectedOrderForUpdate.valor_total)}</p>
-                  </div>
-
+                              </div>
+                              
                   <div className="space-y-3">
                   <Label className="text-sm font-semibold">Nuevo Estado *</Label>
                   <div className="grid grid-cols-1 gap-2">
@@ -2638,26 +2651,26 @@ export default function AdminLiquidationPage() {
                     >
                       Reagendado
                     </Button>
-                            </div>
-                            </div>
+                          </div>
+                        </div>
 
                 {/* Sección de método de pago para entregado */}
                 {newStatus === 'ENTREGADO' && (
                   <div className="space-y-3 p-3 bg-green-50 rounded-lg border border-green-200">
-                    <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2">
                       <Label className="text-sm font-semibold">Confirmar Método de Pago *</Label>
                       <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
                         {selectedOrderForUpdate.metodo_pago === 'EFECTIVO' ? 'Efectivo' :
                          selectedOrderForUpdate.metodo_pago === 'SINPE' ? 'SINPE' :
                          selectedOrderForUpdate.metodo_pago === 'TARJETA' ? 'Tarjeta' :
                          'Cambio'}
-                      </Badge>
-                          </div>
+                              </Badge>
+                            </div>
                     <p className="text-xs text-gray-600">
                       Confirma el método de pago que el cliente está utilizando para esta entrega
                             </p>
                     <div className="grid grid-cols-2 gap-2">
-                            <Button
+                                <Button
                         variant={paymentMethod === 'EFECTIVO' ? 'default' : 'outline'}
                         onClick={() => setPaymentMethod('EFECTIVO')}
                         className={`h-8 text-xs font-medium ${
@@ -2667,8 +2680,8 @@ export default function AdminLiquidationPage() {
                         }`}
                       >
                         Efectivo
-                      </Button>
-                      <Button
+                                </Button>
+                                <Button
                         variant={paymentMethod === 'SINPE' ? 'default' : 'outline'}
                         onClick={() => setPaymentMethod('SINPE')}
                         className={`h-8 text-xs font-medium ${
@@ -2678,8 +2691,8 @@ export default function AdminLiquidationPage() {
                         }`}
                       >
                         SINPE
-                      </Button>
-                      <Button
+                                </Button>
+                                <Button
                         variant={paymentMethod === 'TARJETA' ? 'default' : 'outline'}
                         onClick={() => setPaymentMethod('TARJETA')}
                         className={`h-8 text-xs font-medium ${
@@ -2689,8 +2702,8 @@ export default function AdminLiquidationPage() {
                         }`}
                       >
                         Tarjeta
-                      </Button>
-                      <Button
+                                </Button>
+                                <Button
                         variant={paymentMethod === 'CAMBIO' ? 'default' : 'outline'}
                         onClick={() => setPaymentMethod('CAMBIO')}
                         className={`h-8 text-xs font-medium ${
@@ -2700,7 +2713,7 @@ export default function AdminLiquidationPage() {
                         }`}
                       >
                         Cambio
-                            </Button>
+                                </Button>
                           </div>
                     
                     {/* Campos de comprobante para entregados */}
@@ -2714,7 +2727,6 @@ export default function AdminLiquidationPage() {
                             const file = e.target.files?.[0];
                             if (file) {
                               // Aquí se manejaría la subida de la imagen
-                              console.log('Subiendo comprobante SINPE:', file);
                             }
                           }}
                           className="text-sm"
@@ -2732,7 +2744,6 @@ export default function AdminLiquidationPage() {
                             const file = e.target.files?.[0];
                             if (file) {
                               // Aquí se manejaría la subida de la imagen
-                              console.log('Subiendo comprobante de tarjeta:', file);
                             }
                           }}
                           className="text-sm"
@@ -2750,14 +2761,13 @@ export default function AdminLiquidationPage() {
                             const file = e.target.files?.[0];
                             if (file) {
                               // Aquí se manejaría la subida de la imagen
-                              console.log('Subiendo comprobante de efectivo:', file);
                             }
                           }}
                           className="text-sm"
                         />
-              </div>
+                            </div>
                     )}
-              </div>
+                      </div>
                 )}
 
                 {/* Sección de fecha de reagendación */}
@@ -2791,24 +2801,23 @@ export default function AdminLiquidationPage() {
               
             <div className="flex-shrink-0 p-4 pt-2 border-t">
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
+                    <Button
+                      variant="outline"
                   onClick={() => setIsUpdateStatusModalOpen(false)}
                   className="flex-1"
-                >
-                  Cancelar
-                </Button>
-                <Button
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
                   onClick={() => {
                     // Aquí iría la lógica para actualizar el estado
-                    console.log('Actualizando estado:', { newStatus, paymentMethod, statusComment });
                     setIsUpdateStatusModalOpen(false);
                   }}
                   className="flex-1"
                   disabled={updatingOrder === selectedOrderForUpdate?.id_pedido}
                 >
                   {updatingOrder === selectedOrderForUpdate?.id_pedido ? 'Actualizando...' : 'Actualizar Estado'}
-                </Button>
+                    </Button>
               </div>
             </div>
           </div>
@@ -2823,7 +2832,7 @@ export default function AdminLiquidationPage() {
               <>
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
                   <CheckCircle className="w-8 h-8 text-green-600" />
-                  </div>
+                      </div>
                 
                 <div className="text-center">
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -2831,8 +2840,8 @@ export default function AdminLiquidationPage() {
                   </h3>
                   <p className="text-sm text-gray-600">
                     {successMessage}
-                  </p>
-                </div>
+                        </p>
+                      </div>
                 
                 <div className="flex items-center space-x-2 text-xs text-gray-500">
                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -2843,7 +2852,7 @@ export default function AdminLiquidationPage() {
               <>
                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
                   <AlertCircle className="w-8 h-8 text-red-600" />
-              </div>
+                  </div>
 
                 <div className="text-center">
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -2851,18 +2860,18 @@ export default function AdminLiquidationPage() {
                   </h3>
                   <p className="text-sm text-gray-600">
                     {successMessage}
-                  </p>
-              </div>
+                              </p>
+                            </div>
 
                 <div className="flex items-center space-x-2 text-xs text-gray-500">
                   <Clock className="w-3 h-3" />
                   <span>Cerrando automáticamente...</span>
-                </div>
-              </>
-            )}
-              </div>
-        </DialogContent>
-      </Dialog>
+                  </div>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
 
       {/* Modal de Productos para Devolver */}
       {showDevolverModal && (
@@ -2880,7 +2889,7 @@ export default function AdminLiquidationPage() {
                 Lista de todos los productos que necesitan ser devueltos (Pendientes + Reagendados + Devoluciones)
               </DialogDescription>
             </DialogHeader>
-
+            
             <div className="space-y-4">
               {/* Resumen por estado */}
               <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
@@ -2895,50 +2904,50 @@ export default function AdminLiquidationPage() {
                     {selectedDevolverOrders.filter(p => p.estado_pedido === 'REAGENDADO').length}
                   </p>
                   <p className="text-sm text-gray-600">Reagendados</p>
-                </div>
+                      </div>
                 <div className="text-center">
                   <p className="text-2xl font-bold text-red-600">
                     {selectedDevolverOrders.filter(p => p.estado_pedido === 'DEVOLUCION').length}
                   </p>
                   <p className="text-sm text-gray-600">Devoluciones</p>
-                </div>
-              </div>
+                    </div>
+                  </div>
 
               {/* Tabla de pedidos */}
               <div className="max-h-96 overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
                       <TableHead>ID</TableHead>
-                      <TableHead>Cliente</TableHead>
+                          <TableHead>Cliente</TableHead>
                       <TableHead>Producto</TableHead>
                       <TableHead>Ubicación</TableHead>
                       <TableHead>Dirección</TableHead>
-                      <TableHead>Estado</TableHead>
+                          <TableHead>Estado</TableHead>
                       <TableHead>Mensajero</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                     {selectedDevolverOrders.map((pedido) => (
                       <TableRow key={pedido.idx}>
                         <TableCell className="font-mono text-sm">{pedido.id_pedido}</TableCell>
                         <TableCell className="font-medium">{pedido.cliente_nombre}</TableCell>
                         <TableCell className="max-w-xs truncate" title={pedido.productos}>
                           {pedido.productos}
-                        </TableCell>
-                        <TableCell>
+                            </TableCell>
+                            <TableCell>
                           <div className="text-sm">
                             <div className="font-medium">{pedido.canton}</div>
                             <div className="text-gray-500">
                               {pedido.provincia} - {pedido.distrito}
                             </div>
-                          </div>
-                        </TableCell>
+                              </div>
+                            </TableCell>
                         <TableCell className="max-w-xs truncate" title={pedido.direccion}>
                           {pedido.direccion}
-                        </TableCell>
-                        <TableCell>
-                          <Badge 
+                            </TableCell>
+                            <TableCell>
+                              <Badge 
                             variant="outline" 
                             className={
                               pedido.estado_pedido === 'PENDIENTE' 
@@ -2949,34 +2958,190 @@ export default function AdminLiquidationPage() {
                             }
                           >
                             {pedido.estado_pedido}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-gray-600">
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
                           {pedido.mensajero_asignado || 'Sin asignar'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
 
               {selectedDevolverOrders.length === 0 && (
                 <div className="text-center py-8 text-gray-500">
                   <Package className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                   <p>No hay productos para devolver</p>
-                </div>
-              )}
-            </div>
+                          </div>
+                        )}
+                      </div>
 
             <div className="flex justify-end pt-4 border-t">
               <Button onClick={() => setShowDevolverModal(false)} className="px-6">
                 Cerrar
-              </Button>
+                            </Button>
             </div>
           </DialogContent>
         </Dialog>
       )}
-    </div>
+
+      {/* Notificación de Liquidaciones Pendientes */}
+      {showPendingNotification && (
+        <div className="fixed top-4 right-4 z-50 max-w-md">
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 shadow-lg rounded-lg">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <AlertTriangle className="h-5 w-5 text-yellow-400" />
+                </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-sm font-medium text-yellow-800">
+                  Liquidaciones Pendientes
+                </h3>
+                <p className="mt-1 text-sm text-yellow-700">
+                  Hay {pendingLiquidations.length} liquidación(es) pendiente(s) de otros días que requieren tu atención.
+                </p>
+                <div className="mt-3 flex space-x-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-yellow-800 border-yellow-300 hover:bg-yellow-100"
+                    onClick={() => setShowPendingModal(true)}
+                  >
+                    Ver Detalles
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-yellow-600 hover:bg-yellow-100"
+                    onClick={() => setShowPendingNotification(false)}
+                  >
+                    Cerrar
+                  </Button>
+                      </div>
+                      </div>
+              <div className="ml-4 flex-shrink-0">
+                            <Button
+                              size="sm"
+                  variant="ghost"
+                  className="text-yellow-600 hover:bg-yellow-100"
+                  onClick={() => setShowPendingNotification(false)}
+                >
+                  <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                      </div>
+                  </div>
+            </div>
+      )}
+
+      {/* Modal de Liquidaciones Pendientes */}
+      {showPendingModal && (
+        <Dialog open={showPendingModal} onOpenChange={setShowPendingModal}>
+          <DialogContent className="sm:max-w-[90vw] lg:max-w-[80vw] xl:max-w-[70vw] max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <AlertTriangle className="w-6 h-6 text-yellow-600" />
+                Liquidaciones Pendientes
+                <span className="text-sm font-normal text-gray-500">
+                  ({pendingLiquidations.length} liquidaciones)
+                </span>
+              </DialogTitle>
+              <DialogDescription>
+                Lista de liquidaciones de días anteriores que aún no han sido procesadas
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {/* Resumen */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                      <div>
+                    <p className="font-medium text-yellow-800">
+                      Atención Requerida
+                    </p>
+                    <p className="text-sm text-yellow-700">
+                      Estas liquidaciones necesitan ser revisadas y procesadas para mantener el control financiero actualizado.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+              {/* Tabla de liquidaciones pendientes */}
+              <div className="max-h-96 overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fecha Liquidación</TableHead>
+                      <TableHead>Mensajero</TableHead>
+                      <TableHead>Total Recaudado</TableHead>
+                      <TableHead>Plata Inicial</TableHead>
+                      <TableHead>Gastos</TableHead>
+                      <TableHead>Monto Final</TableHead>
+                      <TableHead>Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pendingLiquidations.map((liquidation, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-medium">
+                          {liquidation.fecha}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                            {liquidation.mensajero}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-semibold text-green-600">
+                          {formatCurrency(parseFloat(liquidation.total_recaudado || '0'))}
+                        </TableCell>
+                        <TableCell className="text-gray-600">
+                          {formatCurrency(parseFloat(liquidation.plata_inicial || '0'))}
+                        </TableCell>
+                        <TableCell className="text-red-600">
+                          {formatCurrency(parseFloat(liquidation.gastos || '0'))}
+                        </TableCell>
+                        <TableCell className="font-bold text-purple-600">
+                          {formatCurrency(parseFloat(liquidation.monto_final || '0'))}
+                        </TableCell>
+                        <TableCell>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                            onClick={() => {
+                              // Aquí se podría agregar lógica para navegar a esa fecha
+                              setSelectedDate(liquidation.fecha);
+                              setShowPendingModal(false);
+                            }}
+                            className="text-xs"
+                          >
+                            Ir al Día de la Liquidación
+                            </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                  </div>
+
+              {pendingLiquidations.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>No hay liquidaciones pendientes</p>
+                </div>
+              )}
+              </div>
+              
+            <div className="flex justify-end pt-4 border-t">
+              <Button onClick={() => setShowPendingModal(false)} className="px-6">
+                Cerrar
+                </Button>
+              </div>
+        </DialogContent>
+      </Dialog>
+      )}
+                  </div>
   );
 }
 
@@ -3075,8 +3240,8 @@ const PedidosTable = ({
                         <div className="flex items-center gap-0.5">
                           <Receipt className="w-3 h-3 text-orange-600" />
                           <Receipt className="w-3 h-3 text-orange-600" />
-                        </div>
-                      )}
+                </div>
+              )}
                       <span 
                         className="text-xs" 
                         title={pedido.metodo_pago === '2PAGOS' ? 
@@ -3089,7 +3254,7 @@ const PedidosTable = ({
                          pedido.metodo_pago === '2PAGOS' ? '2 PAGOS' :
                          'SIN_METODO'}
                       </span>
-                  </div>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
@@ -3104,7 +3269,7 @@ const PedidosTable = ({
                          pedido.estado_pedido === 'REAGENDADO' ? 'REA' :
                          pedido.estado_pedido || 'PEN'}
                       </span>
-                </div>
+                  </div>
                   </TableCell>
                   <TableCell className="text-xs whitespace-nowrap">{pedido.fecha_creacion.split('T')[0]}</TableCell>
                   <TableCell>
