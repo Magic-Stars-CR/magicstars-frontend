@@ -13,6 +13,9 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarUI } from '@/components/ui/calendar';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -54,6 +57,10 @@ import {
   Wrench,
   Car,
   ChevronDown,
+  Camera,
+  ImageIcon,
+  Calendar as CalendarIcon,
+  Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -150,8 +157,29 @@ export default function AdminLiquidationPage() {
   const [paymentMethod, setPaymentMethod] = useState<string>('efectivo');
   const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
   
+  // Estados para comprobantes
+  const [uploadedReceipts, setUploadedReceipts] = useState<string[]>([]);
+  const [uploadedCommunicationProof, setUploadedCommunicationProof] = useState<string | null>(null);
+  
+  // Estados para modal de carga de actualización
+  const [isUpdatingOrder, setIsUpdatingOrder] = useState(false);
+  const [updateOrderMessage, setUpdateOrderMessage] = useState('');
+  const [forceRefresh, setForceRefresh] = useState(0);
+  
+  // Estados para 2 pagos
+  const [isDualPayment, setIsDualPayment] = useState(false);
+  const [firstPaymentMethod, setFirstPaymentMethod] = useState('efectivo');
+  const [secondPaymentMethod, setSecondPaymentMethod] = useState('');
+  const [firstPaymentAmount, setFirstPaymentAmount] = useState('');
+  const [secondPaymentAmount, setSecondPaymentAmount] = useState('');
+  const [firstPaymentReceipt, setFirstPaymentReceipt] = useState<string | null>(null);
+  const [secondPaymentReceipt, setSecondPaymentReceipt] = useState<string | null>(null);
+  
   // Estados para fecha de reagendación
   const [fechaReagendacion, setFechaReagendacion] = useState('');
+  const [reagendadoDate, setReagendadoDate] = useState<Date | null>(null);
+  const [isReagendadoDatePickerOpen, setIsReagendadoDatePickerOpen] = useState(false);
+  const [isReagendadoAsChange, setIsReagendadoAsChange] = useState(false);
   
   // Estados para detalles de pedidos
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -209,6 +237,14 @@ export default function AdminLiquidationPage() {
       loadTiendaCalculations();
     }
   }, [tiendaFechaInicio, tiendaFechaFin, usarRangoFechas]);
+
+  // Forzar actualización del modal cuando se actualiza un pedido
+  useEffect(() => {
+    if (forceRefresh > 0 && selectedViewAndLiquidate) {
+      // Forzar re-render del modal actualizando el estado
+      setSelectedViewAndLiquidate(prev => prev ? { ...prev } : null);
+    }
+  }, [forceRefresh]);
 
   const loadData = async () => {
     try {
@@ -557,6 +593,61 @@ export default function AdminLiquidationPage() {
     setShowDevolverModal(true);
   };
 
+  const handleViewPruebaLiquidation = async () => {
+    try {
+      // Hacer consulta simple como los otros mensajeros
+      const { getLiquidacionesReales } = await import('@/lib/supabase-pedidos');
+      const liquidacionesReales = await getLiquidacionesReales(selectedDate);
+      
+      // Buscar específicamente la liquidación de PRUEBA
+      const pruebaLiquidation = liquidacionesReales.find(liq => 
+        liq.mensajero?.toUpperCase() === 'PRUEBA'
+      );
+      
+      if (pruebaLiquidation) {
+        // Crear el cálculo con los pedidos reales
+        const pruebaCalculation: LiquidationCalculation = {
+          messengerId: 'PRUEBA',
+          messengerName: 'PRUEBA',
+          routeDate: selectedDate,
+          initialAmount: pruebaLiquidation.initialAmount,
+          totalCollected: pruebaLiquidation.totalCollected,
+          totalSpent: pruebaLiquidation.totalSpent,
+          sinpePayments: pruebaLiquidation.sinpePayments,
+          cashPayments: pruebaLiquidation.cashPayments,
+          tarjetaPayments: pruebaLiquidation.tarjetaPayments,
+          finalAmount: pruebaLiquidation.finalAmount,
+          orders: pruebaLiquidation.pedidos || [], // Pedidos reales
+          isLiquidated: pruebaLiquidation.isLiquidated,
+          canEdit: true
+        };
+        setSelectedViewAndLiquidate(pruebaCalculation);
+        setShowViewAndLiquidateModal(true);
+      } else {
+        // Si no se encuentra, crear uno temporal con los datos de pruebaMetrics
+        const tempPruebaCalculation: LiquidationCalculation = {
+          messengerId: 'PRUEBA',
+          messengerName: 'PRUEBA',
+          routeDate: selectedDate,
+          initialAmount: 0,
+          totalCollected: pruebaMetrics?.totalCollected || 0,
+          totalSpent: pruebaMetrics?.totalSpent || 0,
+          sinpePayments: pruebaMetrics?.sinpePayments || 0,
+          cashPayments: pruebaMetrics?.cashPayments || 0,
+          tarjetaPayments: pruebaMetrics?.tarjetaPayments || 0,
+          finalAmount: pruebaMetrics?.finalAmount || 0,
+          orders: [], // Sin pedidos disponibles
+          isLiquidated: false,
+          canEdit: true
+        };
+        setSelectedViewAndLiquidate(tempPruebaCalculation);
+        setShowViewAndLiquidateModal(true);
+      }
+    } catch (error) {
+      console.error('Error cargando liquidación de PRUEBA:', error);
+    }
+  };
+
   const handleEditOrderStatus = (pedido: PedidoTest) => {
     setSelectedOrderForUpdate(pedido);
     setNewStatus(pedido.estado_pedido || 'ENTREGADO');
@@ -853,19 +944,108 @@ export default function AdminLiquidationPage() {
     }
   };
 
+  // Función para manejar la subida de archivos
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'receipt' | 'communication') => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        if (type === 'receipt') {
+          setUploadedReceipts(prev => [...prev, result]);
+        } else {
+          setUploadedCommunicationProof(result);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Función específica para comprobantes de pagos duales
+  const handleDualPaymentFileUpload = (e: React.ChangeEvent<HTMLInputElement>, paymentType: 'first' | 'second') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (paymentType === 'first') {
+        setFirstPaymentReceipt(result);
+      } else {
+        setSecondPaymentReceipt(result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleUpdateOrderStatus = async () => {
     if (!selectedOrderForUpdate || !newStatus) return;
     
     try {
       setUpdatingOrder(selectedOrderForUpdate.id_pedido);
+      setIsUpdatingOrder(true);
+      setUpdateOrderMessage('Actualizando estado del pedido...');
       
+      // Construir datos del método de pago y pagos detalle (igual que en mensajeros)
+      let metodoPagoData: string | null = null;
+      let pagosDetalle: any = null;
+
+      // Solo asignar método de pago si el estado es ENTREGADO
+      if (newStatus === 'ENTREGADO') {
+        if (paymentMethod === 'efectivo') {
+          metodoPagoData = 'efectivo';
+          pagosDetalle = null;
+        } else if (paymentMethod === 'sinpe') {
+          metodoPagoData = 'sinpe';
+          pagosDetalle = {
+            comprobante: uploadedReceipts[0] || null
+          };
+        } else if (paymentMethod === 'tarjeta') {
+          metodoPagoData = 'tarjeta';
+          pagosDetalle = {
+            comprobante: uploadedReceipts[0] || null
+          };
+        } else if (paymentMethod === '2pagos') {
+          metodoPagoData = '2pagos';
+          pagosDetalle = {
+            primerPago: {
+              metodo: firstPaymentMethod,
+              monto: parseFloat(firstPaymentAmount) || 0,
+              comprobante: firstPaymentReceipt
+            },
+            segundoPago: {
+              metodo: secondPaymentMethod,
+              monto: parseFloat(secondPaymentAmount) || 0,
+              comprobante: secondPaymentReceipt
+            }
+          };
+        }
+      } else {
+        // Para cualquier otro estado (DEVOLUCION, REAGENDADO, etc.), método de pago null
+        metodoPagoData = null;
+        pagosDetalle = null;
+        console.log('🔍 Método de pago establecido a NULL para estado:', newStatus);
+      }
+
       const webhookData = {
+        // Datos ya conocidos desde antes
         idPedido: selectedOrderForUpdate.id_pedido,
         mensajero: selectedOrderForUpdate.mensajero_concretado || selectedOrderForUpdate.mensajero_asignado || 'SIN_ASIGNAR',
-        usuario: user?.name || 'Admin',
+        usuario: user?.name || 'Admin', // Usuario que realiza la acción
+        
+        // Datos tomados del formulario
         estadoPedido: newStatus === 'REAGENDADO' ? 'REAGENDO' : newStatus,
-        metodoPago: newStatus === 'DEVOLUCION' || newStatus === 'REAGENDADO' ? null : paymentMethod,
+        metodoPago: metodoPagoData,
+        pagosDetalle: pagosDetalle,
         nota: statusComment || '',
+        
+        // Datos específicos para reagendado
+        reagendadoComoCambio: newStatus === 'REAGENDADO' ? isReagendadoAsChange : false,
+        fechaReagendado: newStatus === 'REAGENDADO' && reagendadoDate ? reagendadoDate.toISOString().split('T')[0] : null,
+        
+        // Datos adicionales del pedido
         clienteNombre: selectedOrderForUpdate.cliente_nombre,
         clienteTelefono: selectedOrderForUpdate.cliente_telefono || '',
         direccion: selectedOrderForUpdate.direccion || '',
@@ -874,11 +1054,70 @@ export default function AdminLiquidationPage() {
         distrito: selectedOrderForUpdate.distrito || '',
         valorTotal: selectedOrderForUpdate.valor_total,
         productos: selectedOrderForUpdate.productos || 'No especificados',
-        tienda: selectedOrderForUpdate.tienda || 'ALL STARS'
+        
+        // Base64 para imagen (CON prefijo data:image/...;base64,)
+        imagenBase64: uploadedReceipts.length > 0 ? uploadedReceipts[0] : uploadedCommunicationProof || null,
+        mimeType: uploadedReceipts.length > 0 || uploadedCommunicationProof ? "image/jpeg" : null
       };
 
+      // Log para confirmar que se envía null cuando corresponde
+      console.log('📤 WebhookData - metodoPago:', webhookData.metodoPago, 'pagosDetalle:', webhookData.pagosDetalle);
 
-      const response = await fetch("https://primary-production-2b25b.up.railway.app/webhook/actualizar-pedido", {
+      // Log detallado del cambio de estado (igual que en mensajeros)
+      console.log('🔄 ===== CAMBIO DE ESTADO DE PEDIDO (ADMIN) =====');
+      console.log('📦 PEDIDO COMPLETO:', {
+        id: selectedOrderForUpdate.id_pedido,
+        cliente: selectedOrderForUpdate.cliente_nombre,
+        telefono: selectedOrderForUpdate.cliente_telefono || '',
+        direccion: `${selectedOrderForUpdate.direccion || ''}, ${selectedOrderForUpdate.distrito || ''}, ${selectedOrderForUpdate.canton || ''}, ${selectedOrderForUpdate.provincia || ''}`,
+        valor: selectedOrderForUpdate.valor_total,
+        productos: selectedOrderForUpdate.productos || 'No especificados',
+        estadoAnterior: selectedOrderForUpdate.estado_pedido,
+        estadoNuevo: newStatus,
+        estadoEnviadoAlBackend: newStatus === 'REAGENDADO' ? 'REAGENDO' : newStatus,
+        mensajero: selectedOrderForUpdate.mensajero_concretado || selectedOrderForUpdate.mensajero_asignado || 'SIN_ASIGNAR',
+        usuario: user?.name || 'Admin',
+        nota: statusComment || '',
+        fechaReagendado: newStatus === 'REAGENDADO' && reagendadoDate ? reagendadoDate.toISOString().split('T')[0] : null,
+        reagendadoComoCambio: newStatus === 'REAGENDADO' ? isReagendadoAsChange : false,
+        metodoPago: metodoPagoData,
+        tieneEvidencia: uploadedCommunicationProof ? 'Sí' : 'No',
+        tieneComprobante: uploadedReceipts.length > 0 ? 'Sí' : 'No'
+      });
+      
+      // Log específico para comprobantes de pagos duales
+      if (pagosDetalle) {
+        console.log('💰 PAGOS DUALES DETALLE (ADMIN):');
+        console.log('🔍 Primer pago:', {
+          metodo: pagosDetalle.primerPago.metodo,
+          monto: pagosDetalle.primerPago.monto,
+          tieneComprobante: !!pagosDetalle.primerPago.comprobante
+        });
+        console.log('🔍 Segundo pago:', {
+          metodo: pagosDetalle.segundoPago.metodo,
+          monto: pagosDetalle.segundoPago.monto,
+          tieneComprobante: !!pagosDetalle.segundoPago.comprobante
+        });
+      }
+      
+      console.log('🔄 ===========================================');
+
+      // Log del Base64 para debugging
+      if (webhookData.imagenBase64) {
+        console.log('🔍 Base64 con prefijo para webhook (ADMIN):');
+        console.log('📏 Longitud del Base64 completo:', webhookData.imagenBase64.length);
+        console.log('🔍 Muestra del Base64:', webhookData.imagenBase64.substring(0, 100) + '...');
+        console.log('✅ Enviando CON prefijo data:image/...;base64,');
+      } else {
+        console.log('ℹ️ No hay imagen Base64 para enviar (ADMIN)');
+      }
+      
+      console.log('🚀 Enviando datos al webhook (ADMIN):', {
+        ...webhookData,
+        imagenBase64: webhookData.imagenBase64 ? `[${webhookData.imagenBase64.length} caracteres]` : null
+      });
+
+      const response = await fetch("https://primary-production-85ff.up.railway.app/webhook/actualizar-pedido", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -887,27 +1126,92 @@ export default function AdminLiquidationPage() {
       });
 
       const resultado = await response.json();
+      console.log("📡 Respuesta del webhook (ADMIN):", resultado);
+      
+      if (!response.ok) {
+        console.error('❌ Error en la respuesta del webhook (ADMIN):', resultado);
+        throw new Error(`Error del servidor: ${resultado.message || 'Error desconocido'}`);
+      } else {
+        console.log('✅ Webhook ejecutado exitosamente (ADMIN)');
+      }
 
       if (response.ok) {
-        await loadTiendaCalculations();
-        await loadCalculations(true);
+        setUpdateOrderMessage('Pedido actualizado exitosamente. Recargando datos...');
         
-        // Mostrar mensaje de éxito antes de resetear
-        alert(`Pedido ${selectedOrderForUpdate.id_pedido} actualizado a ${newStatus} exitosamente`);
+        // Actualizar el estado local inmediatamente para reflejar el cambio
+        setCalculations(prevCalculations => 
+          prevCalculations.map(calc => {
+            if (calc.messengerName?.toUpperCase() === (selectedOrderForUpdate.mensajero_concretado || selectedOrderForUpdate.mensajero_asignado)?.toUpperCase()) {
+              return {
+                ...calc,
+                orders: calc.orders.map(order => 
+                  order.id_pedido === selectedOrderForUpdate.id_pedido 
+                    ? { ...order, estado_pedido: newStatus }
+                    : order
+                )
+              };
+            }
+            return calc;
+          })
+        );
+
+        // También actualizar el selectedViewAndLiquidate si está abierto
+        if (selectedViewAndLiquidate) {
+          setSelectedViewAndLiquidate(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              orders: prev.orders.map(order => 
+                order.id_pedido === selectedOrderForUpdate.id_pedido 
+                  ? { ...order, estado_pedido: newStatus }
+                  : order
+              )
+            };
+          });
+        }
+
+        // Recargar datos en background para sincronizar con la base de datos
+        loadCalculations(true).catch(error => {
+          console.error('Error recargando datos:', error);
+        });
         
-        // Cerrar modal y resetear estado
-        setIsUpdateStatusModalOpen(false);
-        setSelectedOrderForUpdate(null);
-        setNewStatus('ENTREGADO');
-        setStatusComment('');
-        setPaymentMethod('efectivo');
+        // Mostrar modal de éxito
+        setUpdateOrderMessage('¡Pedido actualizado exitosamente!');
+        setForceRefresh(prev => prev + 1); // Forzar actualización del modal
+        
+        setTimeout(() => {
+          setIsUpdatingOrder(false);
+          setIsUpdateStatusModalOpen(false);
+          setSelectedOrderForUpdate(null);
+          setNewStatus('ENTREGADO');
+          setStatusComment('');
+          setPaymentMethod('efectivo');
+          setUploadedReceipts([]);
+          setUploadedCommunicationProof(null);
+          setFirstPaymentAmount('');
+          setSecondPaymentAmount('');
+          setSecondPaymentMethod('');
+          setFirstPaymentReceipt(null);
+          setSecondPaymentReceipt(null);
+          setReagendadoDate(null);
+          setIsReagendadoAsChange(false);
+        }, 1500);
       } else {
         throw new Error(resultado.message || 'Error al actualizar el pedido');
       }
     } catch (error) {
       console.error('Error updating order status:', error);
-      alert('Error al actualizar el pedido: ' + (error instanceof Error ? error.message : 'Error desconocido'));
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      setUpdateOrderMessage(`❌ Error: ${errorMessage}`);
+      
+      // Mostrar error por 3 segundos antes de cerrar
+      setTimeout(() => {
+        setIsUpdatingOrder(false);
+        setUpdateOrderMessage('');
+        setUpdatingOrder(null);
+      }, 3000);
     } finally {
+      // Limpiar estado de actualización
       setUpdatingOrder(null);
     }
   };
@@ -1009,7 +1313,7 @@ export default function AdminLiquidationPage() {
             }}
             disabled={isLoadingData}
           >
-            <Calendar className="w-4 h-4 mr-2" />
+            <CalendarIcon className="w-4 h-4 mr-2" />
             Hoy
           </Button>
             
@@ -1488,6 +1792,17 @@ export default function AdminLiquidationPage() {
                   </div>
                   <p className="text-lg font-bold text-blue-900">{formatCurrency(pruebaMetrics.finalAmount)}</p>
                 </div>
+              </div>
+
+              {/* Botón Ver Liquidación */}
+              <div className="flex justify-center mt-6">
+                <Button
+                  onClick={handleViewPruebaLiquidation}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center gap-2"
+                >
+                  <Eye className="w-4 h-4" />
+                  Ver Liquidación
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -2335,7 +2650,7 @@ export default function AdminLiquidationPage() {
                                 
                   {/* Botón de Productos para Devolver - Esquina Derecha */}
                   <div className="flex justify-end mt-2">
-                                    <Button
+                          <Button
                       onClick={handleViewDevolverOrders}
                                       variant="outline"
                       className="bg-red-50 border-red-200 text-red-700 hover:bg-red-100 hover:border-red-300"
@@ -2349,11 +2664,11 @@ export default function AdminLiquidationPage() {
                           pedido.estado_pedido === 'DEVOLUCION'
                         ).length;
                       })()})
-                                    </Button>
-                                </div>
-                              </div>
-                                </div>
-              
+                          </Button>
+                        </div>
+                        </div>
+                      </div>
+
               {/* Componente de Tabla de Pedidos */}
               <PedidosTable
                 orders={selectedViewAndLiquidate.orders}
@@ -2374,14 +2689,14 @@ export default function AdminLiquidationPage() {
                   if (esTienda || selectedViewAndLiquidate.isLiquidated) {
                     // Para tiendas o liquidaciones ya completadas, mostrar solo cerrar
                     return (
-                <Button 
+                                    <Button
                         size="lg" 
                         className="bg-gray-600 hover:bg-gray-700 text-white px-8 py-3"
                         onClick={() => setShowViewAndLiquidateModal(false)}
                 >
                         <X className="w-5 h-5 mr-2" />
                   Cerrar
-                </Button>
+                                    </Button>
                     );
                   } else {
                     // Para mensajeros no liquidados, mostrar botón de confirmar liquidación
@@ -2389,7 +2704,7 @@ export default function AdminLiquidationPage() {
                     const puedeLiquidar = pedidosPendientes === 0;
                     
                     return (
-                      <Button
+                                    <Button
                         size="lg" 
                         className={`px-8 py-3 ${
                           puedeLiquidar 
@@ -2405,12 +2720,12 @@ export default function AdminLiquidationPage() {
                       >
                         <CheckCircle className="w-5 h-5 mr-2" />
                         {puedeLiquidar ? 'Confirmar Liquidación' : `No se puede liquidar (${pedidosPendientes} pendientes)`}
-                      </Button>
+                                    </Button>
                     );
                   }
                 })()}
-              </div>
-            </div>
+                                </div>
+                                </div>
           )}
         </DialogContent>
       </Dialog>
@@ -2428,8 +2743,8 @@ export default function AdminLiquidationPage() {
                   <div>
                 <Label>Pedido: {selectedOrderForUpdate.id_pedido}</Label>
                 <p className="text-sm text-gray-600">{selectedOrderForUpdate.cliente_nombre}</p>
-              </div>
-
+                                </div>
+                                
                 <div>
                 <Label htmlFor="status">Nuevo Estado</Label>
                 <Select value={newStatus} onValueChange={setNewStatus}>
@@ -2443,8 +2758,8 @@ export default function AdminLiquidationPage() {
                     <SelectItem value="REAGENDADO">Reagendado</SelectItem>
                   </SelectContent>
                 </Select>
-                  </div>
-
+                                </div>
+                                
               {newStatus === 'ENTREGADO' && (
                 <div>
                   <Label htmlFor="payment">Método de Pago</Label>
@@ -2458,7 +2773,7 @@ export default function AdminLiquidationPage() {
                       <SelectItem value="TARJETA">Tarjeta</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
+                                </div>
               )}
 
                 <div>
@@ -2469,8 +2784,8 @@ export default function AdminLiquidationPage() {
                   onChange={(e) => setStatusComment(e.target.value)}
                   placeholder="Agregar comentario..."
                 />
-                  </div>
-                </div>
+                                  </div>
+                                  </div>
             
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={() => setIsUpdateStatusModalOpen(false)}>
@@ -2492,7 +2807,7 @@ export default function AdminLiquidationPage() {
                 </>
               )}
                 </Button>
-              </div>
+          </div>
         </DialogContent>
       </Dialog>
       )}
@@ -2501,7 +2816,7 @@ export default function AdminLiquidationPage() {
       {showExpensesModal && selectedExpenses && (
         <Dialog open={showExpensesModal} onOpenChange={setShowExpensesModal}>
           <DialogContent className="sm:max-w-[90vw] lg:max-w-[80vw] xl:max-w-[70vw] max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-xl">
                 <Receipt className="w-6 h-6 text-red-600" />
                 Gastos del Mensajero - {selectedExpenses.mensajero}
@@ -2517,15 +2832,15 @@ export default function AdminLiquidationPage() {
                       <div className="flex items-center gap-2">
                         <Receipt className="w-5 h-5 text-red-600" />
                         <span className="font-semibold text-red-800">Total de Gastos</span>
-                          </div>
+                  </div>
                       <span className="text-2xl font-bold text-red-600">
                         {formatCurrency(selectedExpenses.gastos.reduce((sum: number, gasto: any) => sum + gasto.monto, 0))}
                       </span>
-                        </div>
+                  </div>
                     <p className="text-sm text-red-700 mt-1">
                       {selectedExpenses.gastos.length} {selectedExpenses.gastos.length === 1 ? 'gasto registrado' : 'gastos registrados'}
                         </p>
-                      </div>
+                  </div>
                       
                   {/* Lista de gastos */}
                   <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -2536,30 +2851,30 @@ export default function AdminLiquidationPage() {
                             {gasto.tipo === 'gasolina' ? (
                               <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                                 <Fuel className="w-5 h-5 text-blue-600" />
-                          </div>
+                  </div>
                             ) : gasto.tipo === 'mantenimiento' ? (
                               <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
                                 <Wrench className="w-5 h-5 text-orange-600" />
-                        </div>
+                </div>
                             ) : gasto.tipo === 'peaje' ? (
                               <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
                                 <Car className="w-5 h-5 text-purple-600" />
-                      </div>
+              </div>
                             ) : (
                               <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
                                 <DollarSign className="w-5 h-5 text-gray-600" />
-                            </div>
-                              )}
-                            </div>
+                </div>
+              )}
+                  </div>
                           <div className="min-w-0 flex-1">
                             <p className="font-medium text-gray-900 truncate">{gasto.descripcion}</p>
                             <div className="flex items-center gap-2 mt-1">
                               <span className="text-sm text-gray-600 capitalize">{gasto.tipo}</span>
                               <span className="text-xs text-gray-400">•</span>
                               <span className="text-xs text-gray-500">{gasto.fecha}</span>
-                          </div>
-                            </div>
-                          </div>
+                </div>
+                  </div>
+                </div>
                         <div className="text-right flex-shrink-0">
                           <p className="text-lg font-bold text-red-600">{formatCurrency(gasto.monto)}</p>
                         </div>
@@ -2572,20 +2887,20 @@ export default function AdminLiquidationPage() {
                   <Receipt className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No hay gastos registrados</h3>
                   <p className="text-gray-500">Este mensajero no tiene gastos registrados para la fecha seleccionada</p>
-                        </div>
+                </div>
               )}
                       </div>
 
             <div className="flex justify-end pt-4 border-t">
-                            <Button
+                <Button 
                 onClick={() => setShowExpensesModal(false)}
                 className="px-6"
-              >
-                Cerrar
-                            </Button>
-                            </div>
-          </DialogContent>
-        </Dialog>
+                >
+                  Cerrar
+                </Button>
+              </div>
+        </DialogContent>
+      </Dialog>
       )}
 
       {/* Progress Loader */}
@@ -2600,225 +2915,553 @@ export default function AdminLiquidationPage() {
         />
       )}
 
-      {/* Modal para actualizar estado del pedido - Como mi ruta de hoy */}
+      {/* Modal para actualizar estado del pedido - Idéntico a Mi Ruta Hoy */}
       <Dialog open={isUpdateStatusModalOpen} onOpenChange={setIsUpdateStatusModalOpen}>
-        <DialogContent className="sm:max-w-[500px] max-h-[90vh] p-0">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] p-0">
           <div className="flex flex-col h-full max-h-[90vh]">
-            <DialogHeader className="flex-shrink-0 p-4 pb-2">
-              <DialogTitle className="text-lg">Actualizar Estado del Pedido</DialogTitle>
+            <DialogHeader className="flex-shrink-0 p-6 pb-4">
+              <DialogTitle>Actualizar Estado del Pedido</DialogTitle>
             </DialogHeader>
             {selectedOrderForUpdate && (
-              <div className="flex-1 overflow-y-auto px-4 space-y-4 min-h-0">
+              <div className="flex-1 overflow-y-auto px-6 space-y-4 min-h-0">
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <p className="text-sm font-medium">Pedido: {selectedOrderForUpdate.id_pedido}</p>
                   <p className="text-sm text-gray-600">{selectedOrderForUpdate.cliente_nombre}</p>
                   <p className="text-sm text-gray-600">{formatCurrency(selectedOrderForUpdate.valor_total)}</p>
-                              </div>
+                          </div>
                               
-                  <div className="space-y-3">
-                  <Label className="text-sm font-semibold">Nuevo Estado *</Label>
-                  <div className="grid grid-cols-1 gap-2">
+                <div className="space-y-3">
+                  <Label>Nuevo Estado *</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <Button
                       variant={newStatus === 'ENTREGADO' ? 'default' : 'outline'}
                       onClick={() => setNewStatus('ENTREGADO')}
-                      className={`h-10 text-sm font-medium ${
+                      className={`h-12 text-sm font-medium ${
                         newStatus === 'ENTREGADO' 
                           ? 'bg-green-600 hover:bg-green-700 text-white' 
                           : 'border-green-200 hover:border-green-300 hover:bg-green-50 text-green-700'
                       }`}
                     >
-                      Entregado
+                      ✅ Entregado
                     </Button>
                     <Button
                       variant={newStatus === 'DEVOLUCION' ? 'default' : 'outline'}
                       onClick={() => setNewStatus('DEVOLUCION')}
-                      className={`h-10 text-sm font-medium ${
+                      className={`h-12 text-sm font-medium ${
                         newStatus === 'DEVOLUCION' 
                           ? 'bg-red-600 hover:bg-red-700 text-white' 
                           : 'border-red-200 hover:border-red-300 hover:bg-red-50 text-red-700'
                       }`}
                     >
-                      Devolución
+                      ❌ Devolución
                     </Button>
                     <Button
                       variant={newStatus === 'REAGENDADO' ? 'default' : 'outline'}
                       onClick={() => setNewStatus('REAGENDADO')}
-                      className={`h-10 text-sm font-medium ${
+                      className={`h-12 text-sm font-medium ${
                         newStatus === 'REAGENDADO' 
                           ? 'bg-orange-600 hover:bg-orange-700 text-white' 
                           : 'border-orange-200 hover:border-orange-300 hover:bg-orange-50 text-orange-700'
                       }`}
                     >
-                      Reagendado
+                      📅 Reagendado
                     </Button>
-                          </div>
                         </div>
-
+                      </div>
+                      
                 {/* Sección de método de pago para entregado */}
                 {newStatus === 'ENTREGADO' && (
-                  <div className="space-y-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <div className="space-y-3 p-4 bg-green-50 rounded-lg border border-green-200">
                         <div className="flex items-center gap-2">
                       <Label className="text-sm font-semibold">Confirmar Método de Pago *</Label>
                       <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
-                        {selectedOrderForUpdate.metodo_pago === 'EFECTIVO' ? 'Efectivo' :
-                         selectedOrderForUpdate.metodo_pago === 'SINPE' ? 'SINPE' :
-                         selectedOrderForUpdate.metodo_pago === 'TARJETA' ? 'Tarjeta' :
-                         'Cambio'}
+                        {selectedOrderForUpdate.metodo_pago === 'EFECTIVO' ? '💵 Efectivo' :
+                         selectedOrderForUpdate.metodo_pago === 'SINPE' ? '📱 SINPE' :
+                         selectedOrderForUpdate.metodo_pago === 'TARJETA' ? '💳 Tarjeta' :
+                         '🔄 Cambio'}
                               </Badge>
-                            </div>
+                          </div>
                     <p className="text-xs text-gray-600">
                       Confirma el método de pago que el cliente está utilizando para esta entrega
-                            </p>
-                    <div className="grid grid-cols-2 gap-2">
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                 <Button
-                        variant={paymentMethod === 'EFECTIVO' ? 'default' : 'outline'}
-                        onClick={() => setPaymentMethod('EFECTIVO')}
-                        className={`h-8 text-xs font-medium ${
-                          paymentMethod === 'EFECTIVO' 
+                        variant={paymentMethod === 'efectivo' ? 'default' : 'outline'}
+                        onClick={() => setPaymentMethod('efectivo')}
+                        className={`h-10 text-xs font-medium ${
+                          paymentMethod === 'efectivo' 
                             ? 'bg-green-600 hover:bg-green-700 text-white' 
                             : 'border-green-200 hover:border-green-300 hover:bg-green-50 text-green-700'
                         }`}
                       >
-                        Efectivo
+                        💵 Efectivo
                                 </Button>
                                 <Button
-                        variant={paymentMethod === 'SINPE' ? 'default' : 'outline'}
-                        onClick={() => setPaymentMethod('SINPE')}
-                        className={`h-8 text-xs font-medium ${
-                          paymentMethod === 'SINPE' 
+                        variant={paymentMethod === 'sinpe' ? 'default' : 'outline'}
+                        onClick={() => setPaymentMethod('sinpe')}
+                        className={`h-10 text-xs font-medium ${
+                          paymentMethod === 'sinpe' 
                             ? 'bg-blue-600 hover:bg-blue-700 text-white' 
                             : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50 text-blue-700'
                         }`}
                       >
-                        SINPE
+                        📱 SINPE
                                 </Button>
                                 <Button
-                        variant={paymentMethod === 'TARJETA' ? 'default' : 'outline'}
-                        onClick={() => setPaymentMethod('TARJETA')}
-                        className={`h-8 text-xs font-medium ${
-                          paymentMethod === 'TARJETA' 
+                        variant={paymentMethod === 'tarjeta' ? 'default' : 'outline'}
+                        onClick={() => setPaymentMethod('tarjeta')}
+                        className={`h-10 text-xs font-medium ${
+                          paymentMethod === 'tarjeta' 
                             ? 'bg-purple-600 hover:bg-purple-700 text-white' 
                             : 'border-purple-200 hover:border-purple-300 hover:bg-purple-50 text-purple-700'
                         }`}
                       >
-                        Tarjeta
+                        💳 Tarjeta
                                 </Button>
-                                <Button
-                        variant={paymentMethod === 'CAMBIO' ? 'default' : 'outline'}
-                        onClick={() => setPaymentMethod('CAMBIO')}
-                        className={`h-8 text-xs font-medium ${
-                          paymentMethod === 'CAMBIO' 
-                            ? 'bg-gray-600 hover:bg-gray-700 text-white' 
-                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700'
+                      <Button
+                        variant={paymentMethod === '2pagos' ? 'default' : 'outline'}
+                            onClick={() => {
+                          setPaymentMethod('2pagos');
+                          setIsDualPayment(true);
+                          setFirstPaymentMethod('efectivo');
+                          setSecondPaymentMethod('');
+                        }}
+                        className={`h-10 text-xs font-medium ${
+                          paymentMethod === '2pagos' 
+                            ? 'bg-orange-600 hover:bg-orange-700 text-white' 
+                            : 'border-orange-200 hover:border-orange-300 hover:bg-orange-50 text-orange-700'
                         }`}
                       >
-                        Cambio
-                                </Button>
-                          </div>
-                    
-                    {/* Campos de comprobante para entregados */}
-                    {paymentMethod === 'SINPE' && (
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium text-gray-700">Comprobante SINPE *</Label>
-                        <Input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              // Aquí se manejaría la subida de la imagen
-                            }
-                          }}
-                          className="text-sm"
-                        />
-                      </div>
-                    )}
-                    
-                    {paymentMethod === 'TARJETA' && (
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium text-gray-700">Comprobante de Tarjeta *</Label>
-                        <Input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              // Aquí se manejaría la subida de la imagen
-                            }
-                          }}
-                          className="text-sm"
-                        />
-            </div>
-                    )}
-                    
-                    {paymentMethod === 'EFECTIVO' && (
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium text-gray-700">Comprobante de Efectivo *</Label>
-                        <Input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              // Aquí se manejaría la subida de la imagen
-                            }
-                          }}
-                          className="text-sm"
-                        />
+                        💰 2 Pagos
+                      </Button>
                             </div>
+                    
+                    {/* Comprobante para SINPE o Tarjeta */}
+                    {(paymentMethod === 'sinpe' || paymentMethod === 'tarjeta') && (
+                      <div className="space-y-2">
+                        <Label>Comprobante de Transacción *</Label>
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                          {uploadedReceipts.length > 0 ? (
+                      <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-2">
+                                {uploadedReceipts.map((receipt, index) => (
+                                  <div key={index} className="relative">
+                                    <img
+                                      src={receipt}
+                                      alt={`Comprobante ${index + 1}`}
+                                      className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                                    />
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => setUploadedReceipts(prev => prev.filter((_, i) => i !== index))}
+                                      className="absolute -top-2 -right-2 h-6 w-6 p-0 text-red-600 hover:text-red-700 bg-white border border-red-200"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </Button>
+                        </div>
+                                ))}
+                      </div>
+                              <div className="text-xs text-gray-500 text-center">
+                                {uploadedReceipts.length} comprobante{uploadedReceipts.length !== 1 ? 's' : ''} seleccionado{uploadedReceipts.length !== 1 ? 's' : ''}
+                        </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              <Camera className="w-8 h-8 mx-auto text-gray-400" />
+                              <p className="text-sm text-gray-600">Toca para seleccionar comprobantes (múltiples)</p>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) => handleFileUpload(e, 'receipt')}
+                                className="hidden"
+                                id="receipt-upload"
+                              />
+                              <Button
+                                variant="outline"
+                                onClick={() => document.getElementById('receipt-upload')?.click()}
+                              >
+                                <ImageIcon className="w-4 h-4 mr-2" />
+                                Seleccionar Comprobantes
+                              </Button>
+                            </div>
+                          )}
+                          </div>
+                        </div>
+                    )}
+                    
+                    {/* Sección para 2 pagos */}
+                    {paymentMethod === '2pagos' && (
+                      <div className="space-y-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-sm font-semibold">Configurar 2 Pagos *</Label>
+                          <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-700">
+                            💰 Pagos Múltiples
+                          </Badge>
+                      </div>
+                        <p className="text-xs text-gray-600">
+                          Especifica los dos tipos de pago y sus montos correspondientes
+                        </p>
+                        
+                        {/* Primer Pago */}
+                        <div className="space-y-3">
+                          <Label className="text-sm font-medium">Primer Pago</Label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-xs text-gray-600">Método</Label>
+                              <Select value={firstPaymentMethod} onValueChange={() => {}} disabled>
+                                <SelectTrigger className="h-8 bg-gray-100">
+                                  <SelectValue placeholder="Seleccionar" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="efectivo">💵 Efectivo</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <p className="text-xs text-gray-500 mt-1">El primer pago siempre es efectivo</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-gray-600">Monto (₡)</Label>
+                              <Input
+                                type="number"
+                                placeholder="0"
+                                value={firstPaymentAmount}
+                                onChange={(e) => setFirstPaymentAmount(e.target.value)}
+                                className="h-8"
+                              />
+                            </div>
+                        </div>
+                        
+                        {/* Comprobante para primer pago si es SINPE o Tarjeta */}
+                        {(firstPaymentMethod === 'sinpe' || firstPaymentMethod === 'tarjeta') && (
+                          <div className="space-y-2">
+                            <Label className="text-xs">Comprobante del Primer Pago *</Label>
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center">
+                              {firstPaymentReceipt ? (
+                                <div className="space-y-2">
+                                  <img
+                                    src={firstPaymentReceipt}
+                                    alt="Comprobante primer pago"
+                                    className="max-w-full h-24 object-contain mx-auto rounded-lg"
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setFirstPaymentReceipt(null)}
+                                    className="text-red-600 hover:text-red-700 h-6 text-xs"
+                                  >
+                                    <X className="w-3 h-3 mr-1" />
+                                    Eliminar
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  <Camera className="w-6 h-6 mx-auto text-gray-400" />
+                                  <p className="text-xs text-gray-600">Comprobante del primer pago</p>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => handleDualPaymentFileUpload(e, 'first')}
+                                    className="hidden"
+                                    id="first-payment-upload"
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => document.getElementById('first-payment-upload')?.click()}
+                                    className="h-6 text-xs"
+                                  >
+                                    <ImageIcon className="w-3 h-3 mr-1" />
+                                    Seleccionar
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                        {/* Segundo Pago */}
+                        <div className="space-y-3">
+                          <Label className="text-sm font-medium">Segundo Pago</Label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-xs text-gray-600">Método</Label>
+                              <Select value={secondPaymentMethod} onValueChange={setSecondPaymentMethod}>
+                                <SelectTrigger className="h-8">
+                                  <SelectValue placeholder="Seleccionar" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="sinpe">📱 SINPE</SelectItem>
+                                  <SelectItem value="tarjeta">💳 Tarjeta</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-gray-600">Monto (₡)</Label>
+                              <Input
+                                type="number"
+                                placeholder="0"
+                                value={secondPaymentAmount}
+                                onChange={(e) => setSecondPaymentAmount(e.target.value)}
+                                className="h-8"
+                              />
+                            </div>
+                        </div>
+                        
+                        {/* Comprobante para segundo pago si es SINPE o Tarjeta */}
+                        {(secondPaymentMethod === 'sinpe' || secondPaymentMethod === 'tarjeta') && (
+                          <div className="space-y-2">
+                            <Label className="text-xs">Comprobante del Segundo Pago *</Label>
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center">
+                              {secondPaymentReceipt ? (
+                                <div className="space-y-2">
+                                  <img
+                                    src={secondPaymentReceipt}
+                                    alt="Comprobante segundo pago"
+                                    className="max-w-full h-24 object-contain mx-auto rounded-lg"
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setSecondPaymentReceipt(null)}
+                                    className="text-red-600 hover:text-red-700 h-6 text-xs"
+                                  >
+                                    <X className="w-3 h-3 mr-1" />
+                                    Eliminar
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  <Camera className="w-6 h-6 mx-auto text-gray-400" />
+                                  <p className="text-xs text-gray-600">Comprobante del segundo pago</p>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => handleDualPaymentFileUpload(e, 'second')}
+                                    className="hidden"
+                                    id="second-payment-upload"
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => document.getElementById('second-payment-upload')?.click()}
+                                    className="h-6 text-xs"
+                                  >
+                                    <ImageIcon className="w-3 h-3 mr-1" />
+                                    Seleccionar
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                        {/* Resumen de pagos */}
+                        <div className="bg-white p-3 rounded-lg border border-orange-200">
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Total del Pedido:</span>
+                              <span className="font-semibold">{formatCurrency(selectedOrderForUpdate?.valor_total || 0)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Primer Pago:</span>
+                              <span className="font-medium">{formatCurrency(parseFloat(firstPaymentAmount) || 0)}</span>
+                              </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Segundo Pago:</span>
+                              <span className="font-medium">{formatCurrency(parseFloat(secondPaymentAmount) || 0)}</span>
+                                </div>
+                            <hr className="border-gray-200" />
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Diferencia:</span>
+                              <span className={`font-bold ${
+                                ((parseFloat(firstPaymentAmount) || 0) + (parseFloat(secondPaymentAmount) || 0)) === (selectedOrderForUpdate?.valor_total || 0)
+                                  ? 'text-green-600'
+                                  : 'text-red-600'
+                              }`}>
+                                {formatCurrency(((parseFloat(firstPaymentAmount) || 0) + (parseFloat(secondPaymentAmount) || 0)) - (selectedOrderForUpdate?.valor_total || 0))}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                     )}
                       </div>
                 )}
 
-                {/* Sección de fecha de reagendación */}
-                {newStatus === 'REAGENDADO' && (
-                  <div className="space-y-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
-                    <Label className="text-sm font-semibold">Fecha de Reagendación (opcional)</Label>
-                    <Input
-                      type="date"
-                      value={fechaReagendacion}
-                      onChange={(e) => setFechaReagendacion(e.target.value)}
-                      className="text-sm"
-                    />
+                {/* Comprobante de Comunicación para Devolución y Reagendado */}
+                {(newStatus === 'DEVOLUCION' || newStatus === 'REAGENDADO') && (
+                  <div className="space-y-3 p-4 bg-pink-50 rounded-lg border border-pink-200">
+                    <Label className="text-sm font-semibold">Comprobante de Comunicación *</Label>
                     <p className="text-xs text-gray-600">
-                      Si no se especifica, se mantendrá la fecha original
+                      Adjunta captura de pantalla del chat o llamada con el cliente para evidenciar la comunicación
                     </p>
-                </div>
-              )}
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                      {uploadedCommunicationProof ? (
+                        <div className="space-y-3">
+                          <img
+                            src={uploadedCommunicationProof}
+                            alt="Comprobante de comunicación"
+                            className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                          />
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                            onClick={() => setUploadedCommunicationProof(null)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <X className="w-3 h-3 mr-1" />
+                            Eliminar
+                                </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <Camera className="w-8 h-8 mx-auto text-gray-400" />
+                          <p className="text-sm text-gray-600">Toca para seleccionar comprobante</p>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleFileUpload(e, 'communication')}
+                            className="hidden"
+                            id="communication-upload"
+                          />
+                                <Button
+                                  variant="outline"
+                            onClick={() => document.getElementById('communication-upload')?.click()}
+                          >
+                            <ImageIcon className="w-4 h-4 mr-2" />
+                            Seleccionar Imagen
+                                </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
+                {/* Selector de fecha obligatorio para reagendado */}
+                {newStatus === 'REAGENDADO' && (
+                  <div className="space-y-3 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                    <Label>Seleccionar fecha a reagendar *</Label>
+                    <Popover open={isReagendadoDatePickerOpen} onOpenChange={setIsReagendadoDatePickerOpen}>
+                      <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !reagendadoDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {reagendadoDate ? reagendadoDate.toLocaleDateString('es-ES') : "Seleccionar fecha"}
+                                </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarUI
+                          mode="single"
+                          selected={reagendadoDate || undefined}
+                          onSelect={(date) => {
+                            setReagendadoDate(date || null);
+                            setIsReagendadoDatePickerOpen(false);
+                          }}
+                          disabled={(date) => date < new Date()}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                )}
+
+                {/* Checkbox opcional para marcar como cambio */}
+                {newStatus === 'REAGENDADO' && (
+                  <div className="space-y-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="reagendado-as-change"
+                        checked={isReagendadoAsChange}
+                        onCheckedChange={(checked) => setIsReagendadoAsChange(checked as boolean)}
+                      />
+                      <Label htmlFor="reagendado-as-change" className="text-sm font-medium">
+                        Marcar reagendado como cambio
+                      </Label>
+                            </div>
+                    <p className="text-xs text-gray-600">
+                      Opcional: Marca este pedido como un cambio en el backend para seguimiento especial
+                    </p>
+                      </div>
+                )}
+
+                {/* Comentarios */}
                 <div className="space-y-3">
                   <Label className="text-sm font-semibold">Comentarios (opcional)</Label>
-                <Textarea
+                  <Textarea
                     placeholder="Añadir comentarios sobre el pedido..."
-                  value={statusComment}
-                  onChange={(e) => setStatusComment(e.target.value)}
-                    rows={3}
-                    className="text-sm"
-                />
-              </div>
+                    value={statusComment}
+                    onChange={(e) => setStatusComment(e.target.value)}
+                    className="h-20 text-sm resize-none"
+                  />
+                </div>
               </div>
             )}
-              
-            <div className="flex-shrink-0 p-4 pt-2 border-t">
-              <div className="flex gap-2">
+            
+            <div className="flex-shrink-0 p-6 pt-4 border-t">
+              <div className="flex gap-3">
                     <Button
                       variant="outline"
                   onClick={() => setIsUpdateStatusModalOpen(false)}
-                  className="flex-1"
+                  className="flex-1 h-10"
                     >
                       Cancelar
                     </Button>
                     <Button
-                  onClick={() => {
-                    // Aquí iría la lógica para actualizar el estado
-                    setIsUpdateStatusModalOpen(false);
-                  }}
-                  className="flex-1"
+                  onClick={handleUpdateOrderStatus}
+                  className="flex-1 h-10"
                   disabled={updatingOrder === selectedOrderForUpdate?.id_pedido}
-                >
+                    >
                   {updatingOrder === selectedOrderForUpdate?.id_pedido ? 'Actualizando...' : 'Actualizar Estado'}
                     </Button>
               </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Carga para Actualización de Pedidos */}
+      <Dialog open={isUpdatingOrder} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-[400px]">
+          <div className="flex flex-col items-center space-y-4 py-6">
+            {updateOrderMessage.includes('❌') ? (
+              // Icono de error
+              <div className="rounded-full h-12 w-12 bg-red-100 flex items-center justify-center">
+                <X className="h-6 w-6 text-red-600" />
+              </div>
+            ) : updateOrderMessage.includes('¡') ? (
+              // Icono de éxito
+              <div className="rounded-full h-12 w-12 bg-green-100 flex items-center justify-center">
+                <Check className="h-6 w-6 text-green-600" />
+              </div>
+            ) : (
+              // Spinner de carga
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            )}
+            <div className="text-center">
+              <h3 className={`text-lg font-semibold ${
+                updateOrderMessage.includes('❌') ? 'text-red-900' : 
+                updateOrderMessage.includes('¡') ? 'text-green-900' : 
+                'text-gray-900'
+              }`}>
+                {updateOrderMessage.includes('❌') ? 'Error al Actualizar' : 
+                 updateOrderMessage.includes('¡') ? '¡Actualizado!' : 
+                 'Actualizando Pedido'}
+              </h3>
+              <p className={`text-sm mt-2 ${
+                updateOrderMessage.includes('❌') ? 'text-red-600' : 
+                updateOrderMessage.includes('¡') ? 'text-green-600' : 
+                'text-gray-600'
+              }`}>
+                {updateOrderMessage}
+              </p>
             </div>
           </div>
         </DialogContent>
@@ -3276,11 +3919,10 @@ const PedidosTable = ({
                     <div className="flex flex-col gap-1">
                 <Button
                         size="sm"
-                        variant="outline"
+                  variant="outline"
                         onClick={() => onEditOrder(pedido)}
                         className="text-xs px-2 py-1 h-6 w-full"
                         title="Editar estado"
-                        disabled={true}
                       >
                         Editar
                 </Button>
