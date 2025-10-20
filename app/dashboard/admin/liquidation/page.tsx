@@ -59,8 +59,8 @@ import {
   ChevronDown,
   Camera,
   ImageIcon,
-  Calendar as CalendarIcon,
   Check,
+  TrendingDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -129,6 +129,11 @@ export default function AdminLiquidationPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [modalType, setModalType] = useState<'success' | 'error'>('success');
+  
+  // Estados para modal de gastos de todos los mensajeros
+  const [showAllExpensesModal, setShowAllExpensesModal] = useState(false);
+  const [allExpensesData, setAllExpensesData] = useState<any[]>([]);
+  const [loadingAllExpenses, setLoadingAllExpenses] = useState(false);
   
   // Estados para modales adicionales
   const [showPendingOrdersModal, setShowPendingOrdersModal] = useState(false);
@@ -203,6 +208,30 @@ export default function AdminLiquidationPage() {
   const [tiendaFechaFin, setTiendaFechaFin] = useState<string>('');
   const [usarRangoFechas, setUsarRangoFechas] = useState(false);
   const [loadingRangoFechas, setLoadingRangoFechas] = useState(false);
+  const [fechasError, setFechasError] = useState<string>('');
+
+  // Función para validar fechas
+  const validarFechas = (fechaInicio: string, fechaFin: string) => {
+    if (fechaInicio && fechaFin) {
+      if (new Date(fechaInicio) > new Date(fechaFin)) {
+        setFechasError('La fecha de inicio no puede ser posterior a la fecha fin');
+        return false;
+      }
+    }
+    setFechasError('');
+    return true;
+  };
+
+  // Handlers para cambios de fecha
+  const handleFechaInicioChange = (fecha: string) => {
+    setTiendaFechaInicio(fecha);
+    validarFechas(fecha, tiendaFechaFin);
+  };
+
+  const handleFechaFinChange = (fecha: string) => {
+    setTiendaFechaFin(fecha);
+    validarFechas(tiendaFechaInicio, fecha);
+  };
 
   // Inicializar fecha al cargar el componente
   useEffect(() => {
@@ -548,6 +577,33 @@ export default function AdminLiquidationPage() {
         gastos: []
       });
       setShowExpensesModal(true);
+    }
+  };
+
+  const handleViewAllExpenses = async () => {
+    try {
+      setLoadingAllExpenses(true);
+      const { getGastosMensajeros } = await import('@/lib/supabase-pedidos');
+      
+      // Usar la fecha seleccionada en lugar de la fecha actual
+      let fechaParaUsar = selectedDate;
+      if (!fechaParaUsar) {
+        const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
+        fechaParaUsar = getCostaRicaDateISO();
+      }
+      
+      console.log('Buscando gastos para la fecha:', fechaParaUsar);
+      const gastosData = await getGastosMensajeros(fechaParaUsar);
+      console.log('Gastos encontrados:', gastosData);
+      
+      setAllExpensesData(gastosData);
+      setShowAllExpensesModal(true);
+    } catch (error) {
+      console.error('Error obteniendo gastos de todos los mensajeros:', error);
+      setAllExpensesData([]);
+      setShowAllExpensesModal(true);
+    } finally {
+      setLoadingAllExpenses(false);
     }
   };
 
@@ -1297,73 +1353,107 @@ export default function AdminLiquidationPage() {
           )}
           
           {/* Filtro de fecha simple */}
-          <div className="flex items-center gap-2">
-          <Input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="w-40"
-            disabled={isLoadingData}
-          />
-          <Button 
-            variant="outline"
-            onClick={() => {
-              const today = new Date().toISOString().split('T')[0];
-              setSelectedDate(today);
-            }}
-            disabled={isLoadingData}
-          >
-            <CalendarIcon className="w-4 h-4 mr-2" />
-            Hoy
-          </Button>
-            
-          </div>
+          {/* Selector de fecha única - se oculta cuando el rango de fechas está activo */}
+          {!(activeTab === 'tiendas' && usarRangoFechas) && (
+            <div className="flex items-center gap-2">
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="w-40"
+                disabled={isLoadingData}
+              />
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  const today = new Date().toISOString().split('T')[0];
+                  setSelectedDate(today);
+                }}
+                disabled={isLoadingData}
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                Hoy
+              </Button>
+            </div>
+          )}
 
           {/* Filtro de rango de fechas para tiendas */}
           {activeTab === 'tiendas' && (
-            <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">Rango:</label>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={usarRangoFechas}
-                    onChange={(e) => setUsarRangoFechas(e.target.checked)}
-                    className="sr-only peer"
-                    disabled={loadingRangoFechas}
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"></div>
-                </label>
-              </div>
-              
-              {usarRangoFechas && (
-                <div className="flex items-center gap-2">
-                  {loadingRangoFechas && (
-                    <div className="flex items-center gap-2 text-sm text-blue-600">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Cargando rango...</span>
+            <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-blue-600" />
+                      {!usarRangoFechas ? (
+                        <span className="text-xs whitespace-nowrap font-medium text-gray-700">Rango de fechas:</span>
+                      ) : (
+                        <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                          <span>
+                            {tiendaFechaInicio && tiendaFechaFin 
+                              ? `${Math.ceil((new Date(tiendaFechaFin).getTime() - new Date(tiendaFechaInicio).getTime()) / (1000 * 60 * 60 * 24)) + 1} días`
+                              : 'Selecciona fechas'
+                            }
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={usarRangoFechas}
+                        onChange={(e) => setUsarRangoFechas(e.target.checked)}
+                        className="sr-only peer"
+                        disabled={loadingRangoFechas}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"></div>
+                    </label>
+                  </div>
+                  
+                  {usarRangoFechas && (
+                    <div className="flex items-center gap-4">
+                      {loadingRangoFechas ? (
+                        <div className="flex items-center gap-2 text-sm text-blue-600">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Cargando rango...</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs ml-3 font-medium text-gray-600">Desde</Label>
+                            <Input
+                              type="date"
+                              value={tiendaFechaInicio}
+                              onChange={(e) => handleFechaInicioChange(e.target.value)}
+                              className={`w-36 h-9 text-sm ${fechasError ? 'border-red-500' : ''}`}
+                              disabled={loadingRangoFechas}
+                              max={tiendaFechaFin || undefined}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs font-medium text-gray-600">Hasta</Label>
+                            <Input
+                              type="date"
+                              value={tiendaFechaFin}
+                              onChange={(e) => handleFechaFinChange(e.target.value)}
+                              className={`w-36 h-9 text-sm ${fechasError ? 'border-red-500' : ''}`}
+                              disabled={loadingRangoFechas}
+                              min={tiendaFechaInicio || undefined}
+                            />
+                          </div>
+                          {fechasError && (
+                            <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
+                              <AlertCircle className="w-3 h-3" />
+                              <span>{fechasError}</span>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
-                  <Input
-                    type="date"
-                    value={tiendaFechaInicio}
-                    onChange={(e) => setTiendaFechaInicio(e.target.value)}
-                    className="w-36"
-                    placeholder="Desde"
-                    disabled={loadingRangoFechas}
-                  />
-                  <span className="text-gray-500">-</span>
-                  <Input
-                    type="date"
-                    value={tiendaFechaFin}
-                    onChange={(e) => setTiendaFechaFin(e.target.value)}
-                    className="w-36"
-                    placeholder="Hasta"
-                    disabled={loadingRangoFechas}
-                  />
                 </div>
-              )}
-            </div>
+              </CardContent>
+            </Card>
           )}
           
           <Button asChild>
@@ -1543,10 +1633,6 @@ export default function AdminLiquidationPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="text-right">
-                      <p className="text-xs text-purple-600">Fórmula:</p>
-                      <p className="text-xs text-purple-700 font-mono">Efectivo - Gastos</p>
-                    </div>
                     <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
                   </div>
                 </div>
@@ -1812,10 +1898,25 @@ export default function AdminLiquidationPage() {
           {/* Tabla de Liquidaciones de Mensajeros */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calculator className="w-5 h-5" />
-            Liquidaciones por Ruta - {selectedDate}
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Calculator className="w-5 h-5" />
+              Liquidaciones por Ruta - {selectedDate}
+            </CardTitle>
+            <Button 
+              onClick={handleViewAllExpenses} 
+              disabled={loadingAllExpenses}
+              size="sm"
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {loadingAllExpenses ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Receipt className="w-4 h-4 mr-2" />
+              )}
+              Reporte de Gastos
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
@@ -1826,7 +1927,7 @@ export default function AdminLiquidationPage() {
                 <TableHead>Total Recaudado</TableHead>
                     <TableHead>SINPE</TableHead>
                     <TableHead>Efectivo</TableHead>
-                <TableHead>Gastos</TableHead>
+                    <TableHead>Gastos</TableHead>
                     <TableHead>Monto Final</TableHead>
                 <TableHead>Acciones</TableHead>
               </TableRow>
@@ -1921,7 +2022,7 @@ export default function AdminLiquidationPage() {
                     
                     <TableCell>
                       <div className="flex items-center gap-2">
-                              <Receipt className="w-4 h-4 text-red-600" />
+                        <Receipt className="w-4 h-4 text-red-600" />
                               <span className="font-medium text-red-600">
                           {formatCurrency(calculated.totalSpent)}
                         </span>
@@ -2230,11 +2331,10 @@ export default function AdminLiquidationPage() {
                               <TableRow>
                     <TableHead>Tienda</TableHead>
                     <TableHead>Pedidos por Estado</TableHead>
-                    <TableHead>Valor Total</TableHead>
+                    <TableHead>Tasa de Entrega</TableHead>
                     <TableHead>Total Recaudado</TableHead>
                     <TableHead>SINPE</TableHead>
                     <TableHead>Efectivo</TableHead>
-                    <TableHead>Gastos</TableHead>
                     <TableHead>Monto Final</TableHead>
                                 <TableHead>Acciones</TableHead>
                               </TableRow>
@@ -2295,12 +2395,15 @@ export default function AdminLiquidationPage() {
                         
                                     <TableCell>
                           <div className="flex items-center gap-2">
-                            <DollarSign className="w-4 h-4 text-purple-600" />
-                            <span className="font-medium text-purple-600">
-                              {formatCurrency(tienda.totalValue)}
-                                    </span>
-                                  </div>
-                                    </TableCell>
+                            <CheckCircle className="w-4 h-4 text-blue-600" />
+                            <span className="font-medium text-blue-600">
+                              {tienda.totalOrders > 0 
+                                ? `${Math.round((tienda.deliveredOrders / tienda.totalOrders) * 100)}%`
+                                : '0%'
+                              }
+                            </span>
+                          </div>
+                        </TableCell>
                         
                                     <TableCell>
                           <div className="flex items-center gap-2">
@@ -2327,15 +2430,6 @@ export default function AdminLiquidationPage() {
                               {formatCurrency(tienda.cashPayments)}
                             </span>
                         </div>
-                        </TableCell>
-                        
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Receipt className="w-4 h-4 text-red-600" />
-                            <span className="font-medium text-red-600">
-                              {formatCurrency(tienda.totalSpent)}
-                                    </span>
-                                  </div>
                         </TableCell>
                         
                         <TableCell>
@@ -2526,9 +2620,10 @@ export default function AdminLiquidationPage() {
                       size="sm"
                       variant="outline"
                       onClick={() => handleViewExpenses(selectedViewAndLiquidate)}
-                      className="h-5 px-1 text-xs text-red-600 border-red-200 hover:bg-red-50 flex-shrink-0"
+                      className="h-7 px-2 text-xs text-red-600 border-red-200 hover:bg-red-50 flex-shrink-0 font-medium"
                     >
-                      <Receipt className="w-3 h-3" />
+                      <Receipt className="w-3 h-3 mr-1" />
+                      Ver Gastos
                     </Button>
                         </div>
                   <p className="text-sm font-bold text-gray-600 truncate">
@@ -2845,42 +2940,80 @@ export default function AdminLiquidationPage() {
                   {/* Lista de gastos */}
                   <div className="space-y-3 max-h-96 overflow-y-auto">
                     {selectedExpenses.gastos.map((gasto: any, index: number) => (
-                      <div key={index} className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0">
-                            {gasto.tipo === 'gasolina' ? (
-                              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                <Fuel className="w-5 h-5 text-blue-600" />
-                  </div>
-                            ) : gasto.tipo === 'mantenimiento' ? (
-                              <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                                <Wrench className="w-5 h-5 text-orange-600" />
-                </div>
-                            ) : gasto.tipo === 'peaje' ? (
-                              <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                                <Car className="w-5 h-5 text-purple-600" />
-              </div>
-                            ) : (
-                              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                                <DollarSign className="w-5 h-5 text-gray-600" />
-                </div>
-              )}
-                  </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium text-gray-900 truncate">{gasto.descripcion}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-sm text-gray-600 capitalize">{gasto.tipo}</span>
-                              <span className="text-xs text-gray-400">•</span>
-                              <span className="text-xs text-gray-500">{gasto.fecha}</span>
-                </div>
-                  </div>
-                </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-lg font-bold text-red-600">{formatCurrency(gasto.monto)}</p>
+                      <div key={index} className="p-4 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-4 flex-1">
+                            <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0">
+                              {gasto.tipo_gasto === 'gasolina' ? (
+                                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                                  <Fuel className="w-6 h-6 text-blue-600" />
+                                </div>
+                              ) : gasto.tipo_gasto === 'mantenimiento' ? (
+                                <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                                  <Wrench className="w-6 h-6 text-orange-600" />
+                                </div>
+                              ) : gasto.tipo_gasto === 'peaje' ? (
+                                <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                                  <Car className="w-6 h-6 text-purple-600" />
+                                </div>
+                              ) : (
+                                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
+                                  <DollarSign className="w-6 h-6 text-gray-600" />
+                                </div>
+                              )}
+                            </div>
+                            
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-lg font-semibold text-gray-900">
+                                  {gasto.tipo_gasto || 'Gasto'}
+                                </span>
+                                <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                                  #{index + 1}
+                                </span>
+                              </div>
+                              
+                              <p className="text-sm text-gray-600 mb-2">
+                                {gasto.descripcion || 'Sin descripción'}
+                              </p>
+                              
+                              <div className="flex items-center gap-4 text-xs text-gray-500">
+                                <div className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  <span>{new Date(gasto.fecha).toLocaleDateString('es-ES', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}</span>
+                                </div>
+                                
+                                {gasto.comprobante_link && (
+                                  <a 
+                                    href={gasto.comprobante_link} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium"
+                                  >
+                                    <Receipt className="w-3 h-3" />
+                                    Ver comprobante
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="text-right flex-shrink-0 ml-4">
+                            <p className="text-2xl font-bold text-red-600">
+                              {formatCurrency(gasto.monto)}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">Monto</p>
+                          </div>
                         </div>
                       </div>
                     ))}
-                        </div>
+                  </div>
                       </div>
               ) : (
                 <div className="text-center py-12">
@@ -2901,6 +3034,138 @@ export default function AdminLiquidationPage() {
               </div>
         </DialogContent>
       </Dialog>
+      )}
+
+      {/* Modal de Reporte de Gastos de Todos los Mensajeros */}
+      {showAllExpensesModal && (
+        <Dialog open={showAllExpensesModal} onOpenChange={setShowAllExpensesModal}>
+          <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Receipt className="w-6 h-6 text-red-600" />
+                Reporte de Gastos de Todos los Mensajeros
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {allExpensesData && allExpensesData.length > 0 ? (
+                <>
+                  {/* Resumen Total */}
+                  <Card className="bg-red-50 border-red-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                            <TrendingDown className="w-6 h-6 text-red-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-red-600 font-medium">Total de Gastos</p>
+                            <p className="text-2xl font-bold text-red-700">
+                              {formatCurrency(
+                                allExpensesData.reduce((total, mensajero) => 
+                                  total + mensajero.gastos.reduce((sum: number, gasto: any) => sum + gasto.monto, 0), 
+                                0)
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-red-600 font-medium">
+                            {allExpensesData.length} {allExpensesData.length === 1 ? 'mensajero' : 'mensajeros'}
+                          </p>
+                          <p className="text-xs text-red-500">
+                            {allExpensesData.reduce((sum, m) => sum + m.gastos.length, 0)} gastos totales
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Lista de Mensajeros con Gastos */}
+                  <div className="space-y-4">
+                    {allExpensesData.map((mensajero, index) => {
+                      const totalGastosMensajero = mensajero.gastos.reduce((sum: number, gasto: any) => sum + gasto.monto, 0);
+                      
+                      return (
+                        <Card key={index} className="border-l-4 border-l-red-500">
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                                  <User className="w-5 h-5 text-red-600" />
+                                </div>
+                                <div>
+                                  <h3 className="font-bold text-lg">{mensajero.mensajero}</h3>
+                                  <p className="text-sm text-gray-500">
+                                    {mensajero.gastos.length} {mensajero.gastos.length === 1 ? 'gasto' : 'gastos'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm text-gray-500 font-medium">Total</p>
+                                <p className="text-xl font-bold text-red-600">
+                                  {formatCurrency(totalGastosMensajero)}
+                                </p>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2">
+                              {mensajero.gastos.map((gasto: any, gastoIndex: number) => (
+                                <div 
+                                  key={gastoIndex} 
+                                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                                >
+                                  <div className="flex items-start gap-3 flex-1">
+                                    <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                      <Receipt className="w-4 h-4 text-red-600" />
+                                    </div>
+                                    <div className="flex-1">
+                                      <p className="font-medium text-gray-900">
+                                        {gasto.descripcion || 'Sin descripción'}
+                                      </p>
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        Gasto #{gastoIndex + 1}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="font-bold text-red-600">
+                                      {formatCurrency(gasto.monto)}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-12">
+                  <Receipt className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    No hay gastos registrados
+                  </h3>
+                  <p className="text-gray-500">
+                    No se encontraron gastos para el día de hoy
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-4 border-t">
+              <Button
+                onClick={() => setShowAllExpensesModal(false)}
+                variant="outline"
+              >
+                Cerrar
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Progress Loader */}
@@ -3353,7 +3618,7 @@ export default function AdminLiquidationPage() {
                             !reagendadoDate && "text-muted-foreground"
                           )}
                         >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          <Calendar className="mr-2 h-4 w-4" />
                           {reagendadoDate ? reagendadoDate.toLocaleDateString('es-ES') : "Seleccionar fecha"}
                                 </Button>
                       </PopoverTrigger>
@@ -3783,6 +4048,94 @@ export default function AdminLiquidationPage() {
               </div>
         </DialogContent>
       </Dialog>
+      )}
+
+      {/* Modal de Reporte de Gastos de Todos los Mensajeros */}
+      {showAllExpensesModal && (
+        <Dialog open={showAllExpensesModal} onOpenChange={setShowAllExpensesModal}>
+          <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Receipt className="w-6 h-6 text-red-600" />
+                Reporte de Gastos de Todos los Mensajeros
+              </DialogTitle>
+            </DialogHeader>
+            
+            {loadingAllExpenses ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                <span className="ml-2 text-gray-600">Cargando gastos...</span>
+              </div>
+            ) : allExpensesData.length === 0 ? (
+              <div className="text-center py-8">
+                <Receipt className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">No hay gastos registrados</h3>
+                <p className="text-gray-500">No se encontraron gastos para el día seleccionado</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Resumen total */}
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <TrendingDown className="w-5 h-5 text-red-600" />
+                      <span className="font-semibold text-red-800">Total de Gastos</span>
+                    </div>
+                    <span className="text-2xl font-bold text-red-600">
+                      {formatCurrency(allExpensesData.reduce((sum, mensajero) => sum + mensajero.totalGastos, 0))}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Lista de mensajeros con gastos */}
+                <div className="space-y-4">
+                  {allExpensesData.map((mensajero, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <User className="w-5 h-5 text-blue-600" />
+                          <span className="font-semibold text-gray-800">{mensajero.mensajero}</span>
+                        </div>
+                        <span className="text-lg font-bold text-red-600">
+                          {formatCurrency(mensajero.totalGastos)}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {mensajero.gastos.map((gasto: any, gastoIndex: number) => (
+                          <div key={gastoIndex} className="flex items-center justify-between bg-gray-50 rounded p-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-600">{gasto.tipo_gasto}</span>
+                              {gasto.comprobante_link && (
+                                <a 
+                                  href={gasto.comprobante_link} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 text-xs"
+                                >
+                                  Ver comprobante
+                                </a>
+                              )}
+                            </div>
+                            <span className="font-medium text-gray-800">
+                              {formatCurrency(gasto.monto)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div className="flex justify-end pt-4 border-t">
+              <Button onClick={() => setShowAllExpensesModal(false)} className="px-6">
+                Cerrar
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
                   </div>
   );

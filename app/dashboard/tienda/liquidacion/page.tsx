@@ -45,7 +45,6 @@ interface LiquidacionTiendaData {
   sinpePayments: number;
   cashPayments: number;
   tarjetaPayments: number;
-  totalSpent: number;
   initialAmount: number;
   finalAmount: number;
   deliveredOrders: number;
@@ -103,7 +102,6 @@ export default function TiendaLiquidacion() {
           sinpePayments: liquidacionTienda.sinpePayments,
           cashPayments: liquidacionTienda.cashPayments,
           tarjetaPayments: liquidacionTienda.tarjetaPayments,
-          totalSpent: liquidacionTienda.totalSpent,
           initialAmount: liquidacionTienda.totalValue,
           finalAmount: liquidacionTienda.finalAmount,
           deliveredOrders: liquidacionTienda.deliveredOrders,
@@ -764,10 +762,6 @@ export default function TiendaLiquidacion() {
                     <div className="flex justify-between">
                       <span className="text-sm">Promedio por pedido:</span>
                       <span className="font-semibold text-green-600">{formatCurrency(liquidacion.averageOrderValue)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm">Gastos:</span>
-                      <span className="font-semibold text-red-600">{formatCurrency(liquidacion.totalSpent)}</span>
                     </div>
                   </div>
                 </div>

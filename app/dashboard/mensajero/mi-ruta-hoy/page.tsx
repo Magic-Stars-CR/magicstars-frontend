@@ -212,6 +212,11 @@ export default function MiRutaHoy() {
   const [isDevolverModalOpen, setIsDevolverModalOpen] = useState(false);
   const [isLiquidationCompleted, setIsLiquidationCompleted] = useState(false);
 
+  // Función helper para normalizar el nombre del usuario
+  const getNormalizedUserName = () => {
+    return user?.name?.trim().toUpperCase();
+  };
+
   useEffect(() => {
     if (user) {
       const loadData = async () => {
@@ -229,7 +234,7 @@ export default function MiRutaHoy() {
     console.log('💰 Gastos actuales:', gastosReales);
     
     if (gastosReales.length > 0) {
-      const gastosDelMensajero = gastosReales.find(g => g.mensajero === user?.name);
+      const gastosDelMensajero = gastosReales.find(g => g.mensajero === getNormalizedUserName());
       if (gastosDelMensajero) {
         const totalGastos = gastosDelMensajero.gastos?.reduce((sum, gasto) => sum + gasto.monto, 0) || 0;
         console.log('✅ Actualizando total de gastos en UI:', totalGastos);
@@ -473,7 +478,7 @@ export default function MiRutaHoy() {
       const mockExpenses: Expense[] = [];
 
       // Calcular total de gastos del mensajero actual
-      const gastosDelMensajero = gastosReales.find(g => g.mensajero === user?.name);
+      const gastosDelMensajero = gastosReales.find(g => g.mensajero === getNormalizedUserName());
       const totalExpenses = gastosDelMensajero?.gastos?.reduce((sum, gasto) => sum + gasto.monto, 0) || 0;
       const completedOrders = orders.filter(order => order.status === 'entregado').length;
       // Solo contar pedidos entregados para el total del día
@@ -657,11 +662,20 @@ export default function MiRutaHoy() {
   // Función para cargar gastos reales desde Supabase
   const loadGastosReales = async () => {
     try {
-      const targetDate = getCostaRicaDate();
+      // Usar la fecha seleccionada en lugar de la fecha actual
+      let targetDate;
+      if (selectedDate) {
+        targetDate = selectedDate;
+      } else {
+        targetDate = getCostaRicaDate();
+      }
+      
       const targetDateString = targetDate.toISOString().split('T')[0];
       
       console.log('🔄 Cargando gastos reales para:', targetDateString);
       console.log('👤 Usuario actual:', user?.name);
+      console.log('📅 Fecha seleccionada:', selectedDate);
+      console.log('📅 Fecha objetivo:', targetDate);
       
       const gastos = await getGastosMensajeros(targetDateString);
       console.log('💰 Gastos reales obtenidos:', gastos);
@@ -670,8 +684,9 @@ export default function MiRutaHoy() {
       setGastosReales(gastos);
       
       // Actualizar total de gastos con los datos reales
-      const gastosDelMensajero = gastos.find(g => g.mensajero === user?.name);
+      const gastosDelMensajero = gastos.find(g => g.mensajero === getNormalizedUserName());
       console.log('🔍 Gastos del mensajero actual:', gastosDelMensajero);
+      console.log('🔍 Nombre usuario normalizado:', getNormalizedUserName());
       
       if (gastosDelMensajero) {
         console.log('💰 Total de gastos del mensajero:', gastosDelMensajero.totalGastos);
@@ -2386,10 +2401,10 @@ export default function MiRutaHoy() {
                     </div>
                   </div>
                   <p className="text-lg font-bold text-purple-800">
-                    {formatCurrency(accountingMetrics.totalCash - (gastosReales.find(g => g.mensajero === user?.name)?.totalGastos || 0))}
+                    {formatCurrency(accountingMetrics.totalCash - (gastosReales.find(g => g.mensajero === getNormalizedUserName())?.totalGastos || 0))}
                   </p>
                   <div className="text-xs text-purple-500">
-                    Efectivo: {formatCurrency(accountingMetrics.totalCash)} - Gastos: {formatCurrency(gastosReales.find(g => g.mensajero === user?.name)?.totalGastos || 0)}
+                    Efectivo: {formatCurrency(accountingMetrics.totalCash)} - Gastos: {formatCurrency(gastosReales.find(g => g.mensajero === getNormalizedUserName())?.totalGastos || 0)}
                   </div>
                 </div>
               </CardContent>
@@ -2627,7 +2642,7 @@ export default function MiRutaHoy() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {(() => {
-                  const gastosDelMensajero = gastosReales.find(g => g.mensajero === user?.name);
+                  const gastosDelMensajero = gastosReales.find(g => g.mensajero === getNormalizedUserName());
                   const gastos = gastosDelMensajero?.gastos || [];
                   
                   if (gastos.length === 0) {
@@ -2734,7 +2749,7 @@ export default function MiRutaHoy() {
                   </p>
                   <p className="text-xs text-orange-600">
                     {(() => {
-                      const gastosDelMensajero = gastosReales.find(g => g.mensajero === user?.name);
+                      const gastosDelMensajero = gastosReales.find(g => g.mensajero === getNormalizedUserName());
                       return gastosDelMensajero?.gastos?.length || 0;
                     })()} gastos
                   </p>
@@ -4489,7 +4504,7 @@ export default function MiRutaHoy() {
                     <span className="text-sm font-medium text-red-800">Total Gastos</span>
                   </div>
                   <p className="text-xl font-bold text-red-700 mt-1">
-                    {formatCurrency(gastosReales.find(g => g.mensajero === user?.name)?.totalGastos || 0)}
+                    {formatCurrency(gastosReales.find(g => g.mensajero === getNormalizedUserName())?.totalGastos || 0)}
                   </p>
                   <p className="text-xs text-red-600">
                     Gastos del día
@@ -4503,7 +4518,7 @@ export default function MiRutaHoy() {
                     <span className="text-sm font-medium text-purple-800">Total a Entregar</span>
                   </div>
                   <p className="text-xl font-bold text-purple-700 mt-1">
-                    {formatCurrency(accountingMetrics.totalCash - (gastosReales.find(g => g.mensajero === user?.name)?.totalGastos || 0))}
+                    {formatCurrency(accountingMetrics.totalCash - (gastosReales.find(g => g.mensajero === getNormalizedUserName())?.totalGastos || 0))}
                   </p>
                   <p className="text-xs text-purple-600">
                     Efectivo - Gastos
@@ -4521,7 +4536,7 @@ export default function MiRutaHoy() {
               </p>
               <p className="text-sm text-gray-600 mt-2">
                 <span className="font-mono bg-gray-200 px-2 py-1 rounded">
-                  {formatCurrency(accountingMetrics.totalCash)} - {formatCurrency(gastosReales.find(g => g.mensajero === user?.name)?.totalGastos || 0)} = {formatCurrency(accountingMetrics.totalCash - (gastosReales.find(g => g.mensajero === user?.name)?.totalGastos || 0))}
+                  {formatCurrency(accountingMetrics.totalCash)} - {formatCurrency(gastosReales.find(g => g.mensajero === getNormalizedUserName())?.totalGastos || 0)} = {formatCurrency(accountingMetrics.totalCash - (gastosReales.find(g => g.mensajero === getNormalizedUserName())?.totalGastos || 0))}
                 </span>
               </p>
             </div>

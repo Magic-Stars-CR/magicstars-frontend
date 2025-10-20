@@ -553,6 +553,7 @@ export default function MensajeroDashboard() {
     });
   };
 
+
   const getStatusBorderColor = (status: string) => {
     switch (status) {
       case 'en_ruta': return 'border-l-blue-500';
@@ -688,6 +689,7 @@ export default function MensajeroDashboard() {
           </Link>
         </Button>
       </div>
+
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 gap-3">
@@ -1454,6 +1456,7 @@ Total: ${formatCurrency(order.totalAmount)}
           )}
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }
