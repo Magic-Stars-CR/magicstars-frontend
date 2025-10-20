@@ -7,6 +7,7 @@ import { Order, Stats, User, PedidoTest } from '@/lib/types';
 import { StatsCard } from '@/components/dashboard/stats-card';
 import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { API_URLS, apiRequest } from '@/lib/config';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -96,11 +97,8 @@ export default function AdminDashboard() {
       
       console.log('Iniciando sincronización de registros...');
       
-      const response = await fetch('https://primary-production-2b25b.up.railway.app/webhook/Sync-Today-Registries', {
+      const response = await apiRequest(API_URLS.SYNC_TODAY_REGISTRIES, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
       });
 
       if (!response.ok) {

@@ -1141,19 +1141,24 @@ export default function AdminLiquidationPage() {
         tieneComprobante: uploadedReceipts.length > 0 ? 'Sí' : 'No'
       });
       
-      // Log específico para comprobantes de pagos duales
+      // Log específico para pagos: distinguir simple vs 2 pagos para evitar acceder a propiedades inexistentes
       if (pagosDetalle) {
-        console.log('💰 PAGOS DUALES DETALLE (ADMIN):');
-        console.log('🔍 Primer pago:', {
-          metodo: pagosDetalle.primerPago.metodo,
-          monto: pagosDetalle.primerPago.monto,
-          tieneComprobante: !!pagosDetalle.primerPago.comprobante
-        });
-        console.log('🔍 Segundo pago:', {
-          metodo: pagosDetalle.segundoPago.metodo,
-          monto: pagosDetalle.segundoPago.monto,
-          tieneComprobante: !!pagosDetalle.segundoPago.comprobante
-        });
+        const esDosPagos = Boolean((pagosDetalle as any).primerPago && (pagosDetalle as any).segundoPago);
+        if (esDosPagos) {
+          console.log('💰 PAGOS DUALES DETALLE (ADMIN):');
+          console.log('🔍 Primer pago:', {
+            metodo: (pagosDetalle as any).primerPago.metodo,
+            monto: (pagosDetalle as any).primerPago.monto,
+            tieneComprobante: !!(pagosDetalle as any).primerPago.comprobante
+          });
+          console.log('🔍 Segundo pago:', {
+            metodo: (pagosDetalle as any).segundoPago.metodo,
+            monto: (pagosDetalle as any).segundoPago.monto,
+            tieneComprobante: !!(pagosDetalle as any).segundoPago.comprobante
+          });
+        } else {
+          console.log('💳 PAGO SIMPLE DETALLE (ADMIN):', pagosDetalle);
+        }
       }
       
       console.log('🔄 ===========================================');
@@ -1195,6 +1200,7 @@ export default function AdminLiquidationPage() {
         setUpdateOrderMessage('Pedido actualizado exitosamente. Recargando datos...');
         
         // Actualizar el estado local inmediatamente para reflejar el cambio
+        console.log('🔄 Actualización optimista - Estado:', newStatus, 'Método:', paymentMethod);
         setCalculations(prevCalculations => 
           prevCalculations.map(calc => {
             if (calc.messengerName?.toUpperCase() === (selectedOrderForUpdate.mensajero_concretado || selectedOrderForUpdate.mensajero_asignado)?.toUpperCase()) {
@@ -1202,7 +1208,12 @@ export default function AdminLiquidationPage() {
                 ...calc,
                 orders: calc.orders.map(order => 
                   order.id_pedido === selectedOrderForUpdate.id_pedido 
-                    ? { ...order, estado_pedido: newStatus }
+                    ? { 
+                        ...order, 
+                        estado_pedido: newStatus,
+                        metodo_pago: newStatus === 'ENTREGADO' ? paymentMethod?.toUpperCase() : order.metodo_pago,
+                        comprobante_sinpe: newStatus === 'ENTREGADO' && paymentMethod === 'sinpe' && uploadedReceipts[0] ? uploadedReceipts[0] : order.comprobante_sinpe
+                      }
                     : order
                 )
               };
@@ -1219,7 +1230,12 @@ export default function AdminLiquidationPage() {
               ...prev,
               orders: prev.orders.map(order => 
                 order.id_pedido === selectedOrderForUpdate.id_pedido 
-                  ? { ...order, estado_pedido: newStatus }
+                  ? { 
+                      ...order, 
+                      estado_pedido: newStatus,
+                      metodo_pago: newStatus === 'ENTREGADO' ? paymentMethod?.toUpperCase() : order.metodo_pago,
+                      comprobante_sinpe: newStatus === 'ENTREGADO' && paymentMethod === 'sinpe' && uploadedReceipts[0] ? uploadedReceipts[0] : order.comprobante_sinpe
+                    }
                   : order
               )
             };

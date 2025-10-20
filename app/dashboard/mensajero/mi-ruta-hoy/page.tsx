@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { mockApi } from '@/lib/mock-api';
 import { Order, PedidoTest, OrderStatus } from '@/lib/types';
 import { getPedidosByMensajero, getPedidosDelDiaByMensajero, updatePedido, getGastosMensajeros } from '@/lib/supabase-pedidos';
+import { API_URLS, apiRequest } from '@/lib/config';
 import { supabasePedidos } from '@/lib/supabase-pedidos';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -214,7 +215,16 @@ export default function MiRutaHoy() {
 
   // Función helper para normalizar el nombre del usuario
   const getNormalizedUserName = () => {
-    return user?.name?.trim().toUpperCase();
+    return (user?.name ?? '').trim().toUpperCase();
+  };
+
+  // Helper consistente para obtener gastos del mensajero actual en la fecha seleccionada
+  const getCurrentMessengerExpenses = () => {
+    const mensajero = getNormalizedUserName();
+    const gastosDelMensajero = gastosReales.find(g => g.mensajero === mensajero);
+    const lista = gastosDelMensajero?.gastos || [];
+    const total = lista.reduce((sum, gasto) => sum + (gasto?.monto || 0), 0);
+    return { lista, total };
   };
 
   useEffect(() => {
@@ -676,6 +686,7 @@ export default function MiRutaHoy() {
       console.log('👤 Usuario actual:', user?.name);
       console.log('📅 Fecha seleccionada:', selectedDate);
       console.log('📅 Fecha objetivo:', targetDate);
+      console.log('🔍 ¿Es fecha diferente a hoy?', targetDateString !== getCostaRicaDate().toISOString().split('T')[0]);
       
       const gastos = await getGastosMensajeros(targetDateString);
       console.log('💰 Gastos reales obtenidos:', gastos);
@@ -878,19 +889,32 @@ export default function MiRutaHoy() {
         'other': newExpense.customType || 'Otro'
       };
 
+      // Determinar la fecha objetivo para el gasto
+      let targetDate;
+      if (selectedDate) {
+        targetDate = selectedDate;
+      } else {
+        targetDate = getCostaRicaDate();
+      }
+      const targetDateString = targetDate.toISOString().split('T')[0];
+
       // Preparar datos para envío
       const requestData = {
         mensajero: user?.name || '',
         comprobante_base64: base64Image,
         monto: parseFloat(newExpense.amount),
-        tipo_gasto: tipoGastoMap[newExpense.type] || newExpense.type
+        tipo_gasto: tipoGastoMap[newExpense.type] || newExpense.type,
+        fecha: targetDateString, // Agregar fecha seleccionada
+        descripcion: newExpense.customType || tipoGastoMap[newExpense.type] || newExpense.type
       };
       
       console.log('📤 Enviando datos al endpoint:', {
         mensajero: requestData.mensajero,
         comprobante_base64: base64Image, // BASE64 COMPLETO
         monto: requestData.monto,
-        tipo_gasto: requestData.tipo_gasto
+        tipo_gasto: requestData.tipo_gasto,
+        fecha: requestData.fecha,
+        descripcion: requestData.descripcion
       });
       
       // Log adicional con información de longitud
@@ -900,12 +924,9 @@ export default function MiRutaHoy() {
         tamañoArchivo: newExpense.receipt?.size || 0
       });
       
-      // Enviar al endpoint
-      const response = await fetch('https://primary-production-2b25b.up.railway.app/webhook/add-gasto-mensajero', {
+      // Enviar al endpoint usando configuración centralizada
+      const response = await apiRequest(API_URLS.ADD_GASTO_MENSAJERO, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(requestData)
       });
 
@@ -919,6 +940,39 @@ export default function MiRutaHoy() {
         const errorText = await response.text();
         console.error('❌ Error del servidor:', errorText);
         throw new Error(`Error al enviar gasto al servidor: ${response.status} - ${errorText}`);
+      }
+
+      // Actualización optimista inmediata
+      try {
+        const mensajeroNormalizado = getNormalizedUserName();
+        const gastoOptimista: any = {
+          id: `temp-${Date.now()}`,
+          monto: parseFloat(newExpense.amount),
+          tipo_gasto: tipoGastoMap[newExpense.type] || newExpense.type,
+          comprobante_link: '',
+          fecha: `${targetDateString}T12:00:00`
+        };
+
+        setGastosReales(prev => {
+          const copia = [...prev];
+          const idx = copia.findIndex(g => g.mensajero === mensajeroNormalizado);
+          if (idx >= 0) {
+            const lista = [...(copia[idx].gastos || []), gastoOptimista];
+            const totalGastos = lista.reduce((sum, g:any) => sum + (g?.monto || 0), 0);
+            copia[idx] = { ...copia[idx], gastos: lista, totalGastos };
+          } else {
+            copia.push({ mensajero: mensajeroNormalizado, gastos: [gastoOptimista], totalGastos: gastoOptimista.monto });
+          }
+          return copia;
+        });
+
+        // Reflejar en métricas locales de inmediato
+        setRouteData(prev => ({
+          ...prev,
+          totalExpenses: (getCurrentMessengerExpenses().total || 0)
+        }));
+      } catch (e) {
+        console.warn('⚠️ Error en actualización optimista, continuamos:', e);
       }
 
         const responseData = await response.json();
@@ -938,9 +992,9 @@ export default function MiRutaHoy() {
         // Mostrar indicador de actualización
         setIsAddingExpense(true);
         
-        // Pequeño delay para asegurar que el servidor procesó el gasto
-        console.log('⏳ Esperando 3 segundos para que el servidor procese el gasto...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // Pequeño delay y reconciliación con servidor
+        console.log('⏳ Esperando 1.2s para reconciliar con el servidor...');
+        await new Promise(resolve => setTimeout(resolve, 1200));
         
         // Recargar gastos reales desde Supabase
         console.log('🔄 Recargando gastos desde Supabase...');
@@ -952,6 +1006,9 @@ export default function MiRutaHoy() {
         
         // Ocultar indicador de actualización
         setIsAddingExpense(false);
+        
+        // Mostrar mensaje de éxito
+        console.log('✅ Gasto agregado exitosamente');
 
       setNewExpense({
         type: 'fuel',
@@ -1116,11 +1173,8 @@ export default function MiRutaHoy() {
           imagenBase64: webhookData.imagenBase64 ? `[${webhookData.imagenBase64.length} caracteres]` : null
         });
 
-        const response = await fetch("https://primary-production-2b25b.up.railway.app/webhook/actualizar-pedido", {
+        const response = await apiRequest(API_URLS.UPDATE_PEDIDO, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
           body: JSON.stringify(webhookData)
         });
 
@@ -1529,12 +1583,18 @@ export default function MiRutaHoy() {
     const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
                        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     
+    const isToday = targetDate.toDateString() === new Date().toDateString();
+    const isDifferentDate = selectedDate && !isToday;
+    
     return {
       dayName: dayNames[targetDate.getDay()],
       day: targetDate.getDate(),
       month: monthNames[targetDate.getMonth()],
       year: targetDate.getFullYear(),
-      fullDate: targetDate.toLocaleDateString('es-CR')
+      fullDate: targetDate.toLocaleDateString('es-CR'),
+      isToday,
+      isDifferentDate,
+      dateString: targetDate.toISOString().split('T')[0]
     };
   };
 
@@ -1668,7 +1728,7 @@ export default function MiRutaHoy() {
           >
             <Package className="w-4 h-4" />
             Pedidos de Hoy
-            <Badge variant="secondary" className="ml-2 bg-blue-100 text-blue-700">
+            <Badge variant="secondary" className="ml-1 bg-blue-100 text-blue-700 px-2 py-0.5 text-xs">
               {routeData.orders.length}
             </Badge>
             </TabsTrigger>
@@ -1682,7 +1742,7 @@ export default function MiRutaHoy() {
           >
             <DollarSign className="w-4 h-4" />
             Contabilidad
-            <Badge variant="secondary" className="ml-2 bg-green-100 text-green-700">
+            <Badge variant="secondary" className="ml-1 bg-green-100 text-green-700 px-2 py-0.5 text-xs">
               {formatCurrency(accountingMetrics.totalCash + accountingMetrics.totalSinpe + accountingMetrics.totalTarjeta)}
             </Badge>
             </TabsTrigger>
@@ -2401,10 +2461,10 @@ export default function MiRutaHoy() {
                     </div>
                   </div>
                   <p className="text-lg font-bold text-purple-800">
-                    {formatCurrency(accountingMetrics.totalCash - (gastosReales.find(g => g.mensajero === getNormalizedUserName())?.totalGastos || 0))}
+                    {formatCurrency(accountingMetrics.totalCash - (getCurrentMessengerExpenses().total || 0))}
                   </p>
                   <div className="text-xs text-purple-500">
-                    Efectivo: {formatCurrency(accountingMetrics.totalCash)} - Gastos: {formatCurrency(gastosReales.find(g => g.mensajero === getNormalizedUserName())?.totalGastos || 0)}
+                    Efectivo: {formatCurrency(accountingMetrics.totalCash)} - Gastos: {formatCurrency(getCurrentMessengerExpenses().total || 0)}
                   </div>
                 </div>
               </CardContent>
@@ -2491,6 +2551,16 @@ export default function MiRutaHoy() {
                     </CardTitle>
                     <div className="text-sm text-orange-600 mt-1">
                       <span className="font-medium">{user?.name}</span> • {getSelectedDateInfo().dayName} {getSelectedDateInfo().day} de {getSelectedDateInfo().month}
+                      {getSelectedDateInfo().isDifferentDate && (
+                        <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                          Fecha seleccionada
+                        </span>
+                      )}
+                      {isAddingExpense && (
+                        <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">
+                          Cargando gastos...
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -2642,8 +2712,7 @@ export default function MiRutaHoy() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {(() => {
-                  const gastosDelMensajero = gastosReales.find(g => g.mensajero === getNormalizedUserName());
-                  const gastos = gastosDelMensajero?.gastos || [];
+                  const gastos = getCurrentMessengerExpenses().lista;
                   
                   if (gastos.length === 0) {
                     return (
@@ -2745,13 +2814,10 @@ export default function MiRutaHoy() {
                     <span className="text-sm font-medium text-orange-800">Gastos</span>
                   </div>
                   <p className="text-2xl font-bold text-orange-700">
-                    {formatCurrency(routeData.totalExpenses)}
+                    {formatCurrency(getCurrentMessengerExpenses().total || 0)}
                   </p>
                   <p className="text-xs text-orange-600">
-                    {(() => {
-                      const gastosDelMensajero = gastosReales.find(g => g.mensajero === getNormalizedUserName());
-                      return gastosDelMensajero?.gastos?.length || 0;
-                    })()} gastos
+                    {getCurrentMessengerExpenses().lista.length} gastos
                   </p>
                 </div>
 
@@ -4504,7 +4570,7 @@ export default function MiRutaHoy() {
                     <span className="text-sm font-medium text-red-800">Total Gastos</span>
                   </div>
                   <p className="text-xl font-bold text-red-700 mt-1">
-                    {formatCurrency(gastosReales.find(g => g.mensajero === getNormalizedUserName())?.totalGastos || 0)}
+                    {formatCurrency(getCurrentMessengerExpenses().total || 0)}
                   </p>
                   <p className="text-xs text-red-600">
                     Gastos del día
@@ -4518,7 +4584,7 @@ export default function MiRutaHoy() {
                     <span className="text-sm font-medium text-purple-800">Total a Entregar</span>
                   </div>
                   <p className="text-xl font-bold text-purple-700 mt-1">
-                    {formatCurrency(accountingMetrics.totalCash - (gastosReales.find(g => g.mensajero === getNormalizedUserName())?.totalGastos || 0))}
+                    {formatCurrency(accountingMetrics.totalCash - (getCurrentMessengerExpenses().total || 0))}
                   </p>
                   <p className="text-xs text-purple-600">
                     Efectivo - Gastos
@@ -4536,7 +4602,7 @@ export default function MiRutaHoy() {
               </p>
               <p className="text-sm text-gray-600 mt-2">
                 <span className="font-mono bg-gray-200 px-2 py-1 rounded">
-                  {formatCurrency(accountingMetrics.totalCash)} - {formatCurrency(gastosReales.find(g => g.mensajero === getNormalizedUserName())?.totalGastos || 0)} = {formatCurrency(accountingMetrics.totalCash - (gastosReales.find(g => g.mensajero === getNormalizedUserName())?.totalGastos || 0))}
+                  {formatCurrency(accountingMetrics.totalCash)} - {formatCurrency(getCurrentMessengerExpenses().total || 0)} = {formatCurrency(accountingMetrics.totalCash - (getCurrentMessengerExpenses().total || 0))}
                 </span>
               </p>
             </div>
