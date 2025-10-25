@@ -1940,6 +1940,7 @@ export default function AdminLiquidationPage() {
               <TableRow>
                 <TableHead>Mensajero</TableHead>
                     <TableHead>Pedidos por Estado</TableHead>
+                <TableHead>Tasa de Entrega</TableHead>
                 <TableHead>Total Recaudado</TableHead>
                     <TableHead>SINPE</TableHead>
                     <TableHead>Efectivo</TableHead>
@@ -1951,7 +1952,7 @@ export default function AdminLiquidationPage() {
             <TableBody>
               {calculations.length === 0 ? (
                 <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8">
+                      <TableCell colSpan={9} className="text-center py-8">
                         <div className="flex flex-col items-center gap-2">
                           <Package className="w-8 h-8 text-gray-400" />
                           <p className="text-gray-500">
@@ -2006,6 +2007,18 @@ export default function AdminLiquidationPage() {
                                     </div>
                                   ));
                               })()}
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <span className="font-medium text-green-600">
+                          {calculated.orders.length > 0 
+                            ? `${Math.round((calculated.orders.filter(o => o.estado_pedido === 'ENTREGADO').length / calculated.orders.length) * 100)}%`
+                            : '0%'
+                          }
+                        </span>
                       </div>
                     </TableCell>
                     
@@ -2411,8 +2424,8 @@ export default function AdminLiquidationPage() {
                         
                                     <TableCell>
                           <div className="flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-blue-600" />
-                            <span className="font-medium text-blue-600">
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                            <span className="font-medium text-green-600">
                               {tienda.totalOrders > 0 
                                 ? `${Math.round((tienda.deliveredOrders / tienda.totalOrders) * 100)}%`
                                 : '0%'

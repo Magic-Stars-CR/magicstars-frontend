@@ -51,6 +51,7 @@ const demoUsers = [
   { email: 'jeank@magicstars.com', role: 'Mensajero - JeanK', password: 'JeanK1234' },
   { email: 'cristopher@magicstars.com', role: 'Mensajero - Cristopher', password: 'Cristopher5678' },
   { email: 'scott@magicstars.com', role: 'Mensajero - Scott', password: 'Scott1234' },
+  { email: 'wayner@magicstars.com', role: 'Mensajero - Wayner', password: 'Wayner1234' },
   { email: 'prueba@magicstars.com', role: 'Usuario Prueba', password: 'prueba' },
 ];
 
