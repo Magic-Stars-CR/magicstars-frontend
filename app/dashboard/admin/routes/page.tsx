@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { mockApi } from '@/lib/mock-api';
+import { mockMessengers } from '@/lib/mock-messengers';
 import { Order, User } from '@/lib/types';
 import { API_URLS, apiRequest } from '@/lib/config';
 import { useToast } from '@/hooks/use-toast';
@@ -29,7 +30,8 @@ import {
   Zap,
   Edit,
   Calendar,
-  RefreshCw
+  RefreshCw,
+  AlertTriangle
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -47,6 +49,12 @@ export default function AdminRoutesPage() {
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [generateRouteDate, setGenerateRouteDate] = useState(new Date().toISOString().split('T')[0]);
 
+  // Estados para reasignación masiva de mensajero
+  const [showReassignDialog, setShowReassignDialog] = useState(false);
+  const [oldMessengerId, setOldMessengerId] = useState<string>('');
+  const [newMessengerId, setNewMessengerId] = useState<string>('');
+  const [reassignRouteDate, setReassignRouteDate] = useState(new Date().toISOString().split('T')[0]);
+
   // Estados para asignar pedido individual - mapa de pedido ID a mensajero ID
   const [messengerSelections, setMessengerSelections] = useState<Record<string, string>>({});
 
@@ -57,12 +65,11 @@ export default function AdminRoutesPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [ordersRes, usersRes] = await Promise.all([
-        mockApi.getOrders(),
-        mockApi.getUsers(),
-      ]);
+      const ordersRes = await mockApi.getOrders();
       setOrders(ordersRes);
-      setUsers(usersRes);
+
+      // Usar mockMessengers como fuente de usuarios mensajeros
+      setUsers(mockMessengers);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -151,14 +158,15 @@ export default function AdminRoutesPage() {
   };
 
   // 3. Función para reasignar todos los pedidos de un mensajero a otro
-  const handleReassignMessenger = async (oldMessengerId: string, newMessengerId: string, routeDate: string) => {
+  const confirmReassignMessenger = async () => {
     try {
       setLoading(true);
+      setShowReassignDialog(false);
 
-      console.log('🚀 Reasignando pedidos:', {
+      console.log('🚀 Reasignando pedidos masivamente:', {
         mensajero_antiguo: oldMessengerId,
         mensajero_actual: newMessengerId,
-        fecha_ruta: routeDate
+        fecha_ruta: reassignRouteDate
       });
 
       const response = await apiRequest(API_URLS.REASIGNAR_PEDIDOS_MENSAJERO, {
@@ -166,7 +174,7 @@ export default function AdminRoutesPage() {
         body: JSON.stringify({
           mensajero_antiguo: oldMessengerId,
           mensajero_actual: newMessengerId,
-          fecha_ruta: routeDate
+          fecha_ruta: reassignRouteDate
         })
       });
 
@@ -174,10 +182,18 @@ export default function AdminRoutesPage() {
       console.log('📡 Respuesta del servidor:', result);
 
       if (response.ok && result === 'generado exitosamente') {
+        const oldMessengerName = messengers.find((m: User) => m.id === oldMessengerId)?.name || oldMessengerId;
+        const newMessengerName = messengers.find((m: User) => m.id === newMessengerId)?.name || newMessengerId;
+
         toast({
           title: "¡Pedidos reasignados exitosamente!",
-          description: `Los pedidos han sido reasignados correctamente.`,
+          description: `Todos los pedidos de ${oldMessengerName} han sido reasignados a ${newMessengerName}.`,
         });
+
+        // Limpiar selecciones
+        setOldMessengerId('');
+        setNewMessengerId('');
+
         await loadData();
       } else {
         throw new Error(result.message || 'Error al reasignar pedidos');
@@ -269,6 +285,10 @@ export default function AdminRoutesPage() {
           <Button onClick={handleGenerateRoutes} disabled={loading}>
             <Route className="w-4 h-4 mr-2" />
             Generar Rutas
+          </Button>
+          <Button onClick={() => setShowReassignDialog(true)} disabled={loading} variant="outline">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Reasignar Mensajero
           </Button>
           <Button variant="outline">
             <Download className="w-4 h-4 mr-2" />
@@ -594,6 +614,96 @@ export default function AdminRoutesPage() {
                 <>
                   <RefreshCw className="mr-2 h-4 w-4" />
                   Generar Rutas
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo para reasignar pedidos masivamente de un mensajero a otro */}
+      <Dialog open={showReassignDialog} onOpenChange={setShowReassignDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reasignar Pedidos de Mensajero</DialogTitle>
+            <DialogDescription>
+              Reasigna todos los pedidos de un mensajero a otro para una fecha específica.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="old-messenger">Mensajero Origen</Label>
+              <Select value={oldMessengerId} onValueChange={setOldMessengerId}>
+                <SelectTrigger id="old-messenger">
+                  <SelectValue placeholder="Selecciona mensajero origen..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {messengers.map((messenger: User) => (
+                    <SelectItem key={messenger.id} value={messenger.id}>
+                      {messenger.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="new-messenger">Mensajero Destino</Label>
+              <Select value={newMessengerId} onValueChange={setNewMessengerId}>
+                <SelectTrigger id="new-messenger">
+                  <SelectValue placeholder="Selecciona mensajero destino..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {messengers.map((messenger: User) => (
+                    <SelectItem key={messenger.id} value={messenger.id}>
+                      {messenger.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reassign-date">Fecha de Ruta</Label>
+              <Input
+                id="reassign-date"
+                type="date"
+                value={reassignRouteDate}
+                onChange={(e) => setReassignRouteDate(e.target.value)}
+                className="w-full"
+              />
+            </div>
+
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                Esta acción reasignará TODOS los pedidos del mensajero origen al mensajero destino para la fecha seleccionada.
+              </AlertDescription>
+            </Alert>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowReassignDialog(false)}
+              disabled={loading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmReassignMessenger}
+              disabled={!oldMessengerId || !newMessengerId || oldMessengerId === newMessengerId || loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Reasignando...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Reasignar Pedidos
                 </>
               )}
             </Button>
