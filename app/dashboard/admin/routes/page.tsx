@@ -111,9 +111,30 @@ export default function AdminRoutesPage() {
       const pedidosSupabase = await getPedidosByFecha(selectedDate);
       console.log('📦 Pedidos obtenidos de Supabase:', pedidosSupabase.length);
 
+      // Log de muestra de estados originales
+      if (pedidosSupabase.length > 0) {
+        console.log('📋 Muestra de estados originales:',
+          pedidosSupabase.slice(0, 5).map(p => ({
+            id: p.id_pedido,
+            estado: p.estado_pedido,
+            mensajero: p.mensajero_asignado
+          }))
+        );
+      }
+
       // Convertir a formato Order
       const ordersConverted = pedidosSupabase.map(convertPedidoToOrder);
       setOrders(ordersConverted);
+
+      // Log después de conversión
+      console.log('📊 Pedidos convertidos:', ordersConverted.length);
+      console.log('📋 Muestra convertida:',
+        ordersConverted.slice(0, 5).map(o => ({
+          id: o.id,
+          status: o.status,
+          hasMessenger: !!o.assignedMessenger
+        }))
+      );
 
       // Usar mockMessengers como fuente de usuarios mensajeros
       setUsers(mockMessengers);
@@ -318,17 +339,21 @@ export default function AdminRoutesPage() {
   };
 
   const getUnassignedOrders = () => {
-    return orders.filter(order => 
-      !order.assignedMessenger && 
-      ['confirmado', 'reagendado'].includes(order.status)
-    );
+    return orders.filter(order => {
+      const hasNoMessenger = !order.assignedMessenger;
+      const status = order.status.toLowerCase();
+      const isValidStatus = ['pendiente', 'confirmado', 'reagendado'].includes(status);
+      return hasNoMessenger && isValidStatus;
+    });
   };
 
   const getAssignedOrders = () => {
-    return orders.filter(order => 
-      order.assignedMessenger && 
-      ['en_ruta', 'confirmado'].includes(order.status)
-    );
+    return orders.filter(order => {
+      const hasMessenger = !!order.assignedMessenger;
+      const status = order.status.toLowerCase();
+      const isValidStatus = ['en_ruta', 'confirmado', 'pendiente', 'reagendado'].includes(status);
+      return hasMessenger && isValidStatus;
+    });
   };
 
   const filteredOrders = orders.filter(order => {
@@ -346,6 +371,27 @@ export default function AdminRoutesPage() {
   const messengers = users.filter(u => u.role === 'mensajero' && u.isActive);
   const unassignedOrders = getUnassignedOrders();
   const assignedOrders = getAssignedOrders();
+
+  // Log para depuración
+  useEffect(() => {
+    console.log('📊 Estado actual de pedidos:');
+    console.log('  - Total orders:', orders.length);
+    console.log('  - Unassigned orders:', unassignedOrders.length);
+    console.log('  - Assigned orders:', assignedOrders.length);
+
+    if (orders.length > 0 && unassignedOrders.length === 0 && assignedOrders.length === 0) {
+      console.warn('⚠️ Hay pedidos pero ninguno aparece en las listas!');
+      console.log('📋 Muestra de pedidos disponibles:',
+        orders.slice(0, 3).map((o: Order) => ({
+          id: o.id,
+          status: o.status,
+          statusType: typeof o.status,
+          hasMessenger: !!o.assignedMessenger,
+          messenger: o.assignedMessenger?.name
+        }))
+      );
+    }
+  }, [orders, unassignedOrders, assignedOrders]);
 
   if (loading) {
     return (
