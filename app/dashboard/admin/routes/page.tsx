@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { mockApi } from '@/lib/mock-api';
+import { mockMessengers } from '@/lib/mock-messengers';
 import { Order, User } from '@/lib/types';
 import { API_URLS, apiRequest } from '@/lib/config';
 import { useToast } from '@/hooks/use-toast';
@@ -57,12 +58,11 @@ export default function AdminRoutesPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [ordersRes, usersRes] = await Promise.all([
-        mockApi.getOrders(),
-        mockApi.getUsers(),
-      ]);
+      const ordersRes = await mockApi.getOrders();
       setOrders(ordersRes);
-      setUsers(usersRes);
+
+      // Usar mockMessengers como fuente de usuarios mensajeros
+      setUsers(mockMessengers);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
