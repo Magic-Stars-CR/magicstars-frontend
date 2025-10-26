@@ -36,6 +36,13 @@ export const API_ENDPOINTS = {
   SYNC: {
     SYNC_TODAY_REGISTRIES: '/webhook/Sync-Today-Registries',
   },
+
+  // Gestión de Rutas
+  ROUTES: {
+    GENERAR_RUTAS: '/webhook/generar_rutas',
+    ASIGNAR_PEDIDO_INDIVIDUAL: '/webhook/Asignar-Pedido-Individual',
+    REASIGNAR_PEDIDOS_MENSAJERO: '/webhook/reasignar-pedidos-de-un-mensajero-a-otro',
+  },
 } as const;
 
 // Configuración de servidor activo
@@ -61,6 +68,11 @@ export const API_URLS = {
   
   // Sincronización
   SYNC_TODAY_REGISTRIES: buildApiUrl(API_ENDPOINTS.SYNC.SYNC_TODAY_REGISTRIES),
+
+  // Rutas
+  GENERAR_RUTAS: buildApiUrl(API_ENDPOINTS.ROUTES.GENERAR_RUTAS),
+  ASIGNAR_PEDIDO_INDIVIDUAL: buildApiUrl(API_ENDPOINTS.ROUTES.ASIGNAR_PEDIDO_INDIVIDUAL),
+  REASIGNAR_PEDIDOS_MENSAJERO: buildApiUrl(API_ENDPOINTS.ROUTES.REASIGNAR_PEDIDOS_MENSAJERO),
 } as const;
 
 // URLs del servidor legacy (para migración gradual)
