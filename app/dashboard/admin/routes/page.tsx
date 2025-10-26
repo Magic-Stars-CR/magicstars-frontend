@@ -342,17 +342,20 @@ export default function AdminRoutesPage() {
     return orders.filter(order => {
       const hasNoMessenger = !order.assignedMessenger;
       const status = order.status.toLowerCase();
-      const isValidStatus = ['pendiente', 'confirmado', 'reagendado'].includes(status);
-      return hasNoMessenger && isValidStatus;
+      // Excluir solo estados finales (entregado, devolucion) o eliminados
+      const excludedStatuses = ['entregado', 'devolucion', 'cancelado', 'eliminado'];
+      const isNotExcluded = !excludedStatuses.includes(status);
+
+      return hasNoMessenger && isNotExcluded;
     });
   };
 
   const getAssignedOrders = () => {
     return orders.filter(order => {
       const hasMessenger = !!order.assignedMessenger;
-      const status = order.status.toLowerCase();
-      const isValidStatus = ['en_ruta', 'confirmado', 'pendiente', 'reagendado'].includes(status);
-      return hasMessenger && isValidStatus;
+      // Mostrar todos los pedidos asignados, sin importar el estado
+      // Esto permite ver pedidos en cualquier etapa del proceso
+      return hasMessenger;
     });
   };
 
