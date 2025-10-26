@@ -3,18 +3,23 @@
 import { useState, useEffect } from 'react';
 import { mockApi } from '@/lib/mock-api';
 import { Order, User } from '@/lib/types';
+import { API_URLS, apiRequest } from '@/lib/config';
+import { useToast } from '@/hooks/use-toast';
 import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  Truck, 
-  Search, 
-  Filter, 
-  Plus, 
-  Download, 
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Truck,
+  Search,
+  Filter,
+  Plus,
+  Download,
   MapPin,
   Route,
   UserCheck,
@@ -22,18 +27,28 @@ import {
   Package,
   Navigation,
   Zap,
-  Edit
+  Edit,
+  Calendar,
+  RefreshCw
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminRoutesPage() {
+  const { toast } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [messengerFilter, setMessengerFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Estados para generar rutas
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+  const [generateRouteDate, setGenerateRouteDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Estados para asignar pedido individual - mapa de pedido ID a mensajero ID
+  const [messengerSelections, setMessengerSelections] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadData();
@@ -50,6 +65,130 @@ export default function AdminRoutesPage() {
       setUsers(usersRes);
     } catch (error) {
       console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 1. Función para generar rutas automáticamente
+  const handleGenerateRoutes = () => {
+    setShowGenerateDialog(true);
+  };
+
+  const confirmGenerateRoutes = async () => {
+    try {
+      setLoading(true);
+      setShowGenerateDialog(false);
+
+      console.log('🚀 Generando rutas para fecha:', generateRouteDate);
+
+      const response = await apiRequest(API_URLS.GENERAR_RUTAS, {
+        method: 'POST',
+        body: JSON.stringify({ fecha: generateRouteDate })
+      });
+
+      const result = await response.json();
+      console.log('📡 Respuesta del servidor:', result);
+
+      if (response.ok && result === 'generado exitosamente') {
+        toast({
+          title: "¡Rutas generadas exitosamente!",
+          description: `Las rutas para ${generateRouteDate} se han generado correctamente.`,
+        });
+        await loadData();
+      } else {
+        throw new Error(result.message || 'Error al generar rutas');
+      }
+    } catch (error) {
+      console.error('❌ Error al generar rutas:', error);
+      toast({
+        title: "Error al generar rutas",
+        description: error instanceof Error ? error.message : 'Error desconocido',
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 2. Función para asignar pedido individual
+  const handleAssignOrder = async (orderId: string, messengerId: string) => {
+    try {
+      setLoading(true);
+
+      console.log('🚀 Asignando pedido:', { id_pedido: orderId, mensajero_asignado: messengerId });
+
+      const response = await apiRequest(API_URLS.ASIGNAR_PEDIDO_INDIVIDUAL, {
+        method: 'POST',
+        body: JSON.stringify({
+          id_pedido: orderId,
+          mensajero_asignado: messengerId
+        })
+      });
+
+      const result = await response.json();
+      console.log('📡 Respuesta del servidor:', result);
+
+      if (response.ok && result === 'generado exitosamente') {
+        toast({
+          title: "¡Pedido asignado exitosamente!",
+          description: `El pedido ${orderId} ha sido asignado correctamente.`,
+        });
+        await loadData();
+      } else {
+        throw new Error(result.message || 'Error al asignar pedido');
+      }
+    } catch (error) {
+      console.error('❌ Error al asignar pedido:', error);
+      toast({
+        title: "Error al asignar pedido",
+        description: error instanceof Error ? error.message : 'Error desconocido',
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 3. Función para reasignar todos los pedidos de un mensajero a otro
+  const handleReassignMessenger = async (oldMessengerId: string, newMessengerId: string, routeDate: string) => {
+    try {
+      setLoading(true);
+
+      console.log('🚀 Reasignando pedidos:', {
+        mensajero_antiguo: oldMessengerId,
+        mensajero_actual: newMessengerId,
+        fecha_ruta: routeDate
+      });
+
+      const response = await apiRequest(API_URLS.REASIGNAR_PEDIDOS_MENSAJERO, {
+        method: 'POST',
+        body: JSON.stringify({
+          mensajero_antiguo: oldMessengerId,
+          mensajero_actual: newMessengerId,
+          fecha_ruta: routeDate
+        })
+      });
+
+      const result = await response.json();
+      console.log('📡 Respuesta del servidor:', result);
+
+      if (response.ok && result === 'generado exitosamente') {
+        toast({
+          title: "¡Pedidos reasignados exitosamente!",
+          description: `Los pedidos han sido reasignados correctamente.`,
+        });
+        await loadData();
+      } else {
+        throw new Error(result.message || 'Error al reasignar pedidos');
+      }
+    } catch (error) {
+      console.error('❌ Error al reasignar pedidos:', error);
+      toast({
+        title: "Error al reasignar pedidos",
+        description: error instanceof Error ? error.message : 'Error desconocido',
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -127,9 +266,9 @@ export default function AdminRoutesPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button onClick={handleGenerateRoutes} disabled={loading}>
             <Route className="w-4 h-4 mr-2" />
-            Optimizar Rutas
+            Generar Rutas
           </Button>
           <Button variant="outline">
             <Download className="w-4 h-4 mr-2" />
@@ -293,7 +432,10 @@ export default function AdminRoutesPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Select>
+                  <Select
+                    value={messengerSelections[order.id] || ''}
+                    onValueChange={(value) => setMessengerSelections(prev => ({ ...prev, [order.id]: value }))}
+                  >
                     <SelectTrigger className="w-40">
                       <SelectValue placeholder="Asignar a..." />
                     </SelectTrigger>
@@ -305,7 +447,11 @@ export default function AdminRoutesPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button size="sm">
+                  <Button
+                    size="sm"
+                    onClick={() => handleAssignOrder(order.id, messengerSelections[order.id])}
+                    disabled={!messengerSelections[order.id] || loading}
+                  >
                     <Zap className="w-4 h-4 mr-2" />
                     Asignar
                   </Button>
@@ -367,10 +513,28 @@ export default function AdminRoutesPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
-                    <Edit className="w-4 h-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
+                  <Select
+                    value={messengerSelections[order.id] || order.assignedMessenger?.id || ''}
+                    onValueChange={(value) => setMessengerSelections(prev => ({ ...prev, [order.id]: value }))}
+                  >
+                    <SelectTrigger className="w-40">
+                      <SelectValue placeholder="Cambiar a..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {messengers.map(messenger => (
+                        <SelectItem key={messenger.id} value={messenger.id}>
+                          {messenger.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700"
+                    onClick={() => handleAssignOrder(order.id, messengerSelections[order.id])}
+                    disabled={!messengerSelections[order.id] || messengerSelections[order.id] === order.assignedMessenger?.id || loading}
+                  >
                     Reasignar
                   </Button>
                 </div>
@@ -379,6 +543,63 @@ export default function AdminRoutesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Diálogo para generar rutas */}
+      <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generar Rutas Automáticamente</DialogTitle>
+            <DialogDescription>
+              Selecciona la fecha para la cual deseas generar las rutas de los mensajeros.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="route-date">Fecha de Ruta</Label>
+              <Input
+                id="route-date"
+                type="date"
+                value={generateRouteDate}
+                onChange={(e) => setGenerateRouteDate(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            <Alert>
+              <Calendar className="h-4 w-4" />
+              <AlertDescription>
+                Se generarán automáticamente las rutas con 30 pedidos por mensajero para la fecha seleccionada.
+              </AlertDescription>
+            </Alert>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowGenerateDialog(false)}
+              disabled={loading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmGenerateRoutes}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generando...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Generar Rutas
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
