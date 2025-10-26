@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { mockApi } from '@/lib/mock-api';
 import { mockMessengers } from '@/lib/mock-messengers';
 import { Order, User } from '@/lib/types';
 import { API_URLS, apiRequest } from '@/lib/config';
 import { useToast } from '@/hooks/use-toast';
+import { getPedidosByFecha, getCostaRicaDateISO, supabasePedidos } from '@/lib/supabase-pedidos';
 import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,11 +39,16 @@ import Link from 'next/link';
 export default function AdminRoutesPage() {
   const { toast } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [unassignedAllDates, setUnassignedAllDates] = useState<Order[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingUnassigned, setLoadingUnassigned] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [messengerFilter, setMessengerFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Nuevo: Estado para fecha seleccionada (por defecto día actual)
+  const [selectedDate, setSelectedDate] = useState(getCostaRicaDateISO());
 
   // Estados para generar rutas
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
@@ -60,20 +65,99 @@ export default function AdminRoutesPage() {
 
   useEffect(() => {
     loadData();
+  }, [selectedDate]);
+
+  useEffect(() => {
+    loadUnassignedAllDates();
   }, []);
+
+  // Función para convertir PedidoTest de Supabase a Order del frontend
+  const convertPedidoToOrder = (pedido: any): Order => {
+    // Encontrar mensajero por nombre (case-insensitive)
+    const mensajeroName = pedido.mensajero_asignado || pedido.mensajero_concretado;
+    const assignedMessenger = mensajeroName
+      ? mockMessengers.find(m => m.name.toUpperCase() === mensajeroName.toUpperCase())
+      : undefined;
+
+    return {
+      id: pedido.id_pedido,
+      customerName: pedido.cliente_nombre,
+      customerPhone: pedido.cliente_telefono,
+      customerAddress: pedido.direccion || '',
+      customerProvince: pedido.provincia || '',
+      customerCanton: pedido.canton || '',
+      customerDistrict: pedido.distrito,
+      customerLocationLink: pedido.link_ubicacion || undefined,
+      items: [],
+      productos: pedido.productos,
+      totalAmount: Number(pedido.valor_total),
+      status: pedido.estado_pedido?.toLowerCase() as any || 'pendiente',
+      paymentMethod: pedido.metodo_pago?.toLowerCase() as any || 'efectivo',
+      createdAt: pedido.fecha_creacion,
+      updatedAt: pedido.fecha_creacion,
+      origin: 'manual' as const,
+      assignedMessenger: assignedMessenger,
+      deliveryAddress: pedido.direccion || '',
+      notes: pedido.notas || undefined
+    };
+  };
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const ordersRes = await mockApi.getOrders();
-      setOrders(ordersRes);
+      console.log('🔍 Cargando pedidos para fecha:', selectedDate);
+
+      // Consultar pedidos desde Supabase por fecha
+      const pedidosSupabase = await getPedidosByFecha(selectedDate);
+      console.log('📦 Pedidos obtenidos de Supabase:', pedidosSupabase.length);
+
+      // Convertir a formato Order
+      const ordersConverted = pedidosSupabase.map(convertPedidoToOrder);
+      setOrders(ordersConverted);
 
       // Usar mockMessengers como fuente de usuarios mensajeros
       setUsers(mockMessengers);
     } catch (error) {
       console.error('Error loading data:', error);
+      toast({
+        title: "Error al cargar pedidos",
+        description: "No se pudieron cargar los pedidos desde la base de datos",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Cargar pedidos sin asignar de todas las fechas
+  const loadUnassignedAllDates = async () => {
+    try {
+      setLoadingUnassigned(true);
+      console.log('🔍 Cargando pedidos sin asignar de todas las fechas');
+
+      // Consultar todos los pedidos sin mensajero asignado
+      const { data, error } = await supabasePedidos
+        .from('pedidos')
+        .select('*')
+        .is('mensajero_asignado', null)
+        .in('estado_pedido', ['PENDIENTE', 'CONFIRMADO', 'REAGENDADO'])
+        .order('fecha_creacion', { ascending: false })
+        .limit(100);
+
+      if (error) {
+        console.error('Error al cargar pedidos sin asignar:', error);
+        return;
+      }
+
+      console.log('📦 Pedidos sin asignar obtenidos:', data?.length || 0);
+
+      // Convertir a formato Order
+      const ordersConverted = (data || []).map(convertPedidoToOrder);
+      setUnassignedAllDates(ordersConverted);
+    } catch (error) {
+      console.error('Error loading unassigned orders:', error);
+    } finally {
+      setLoadingUnassigned(false);
     }
   };
 
@@ -296,6 +380,33 @@ export default function AdminRoutesPage() {
           </Button>
         </div>
       </div>
+
+      {/* Selector de Fecha */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <Calendar className="w-5 h-5 text-muted-foreground" />
+            <Label htmlFor="date-filter" className="font-semibold">Fecha de rutas:</Label>
+            <Input
+              id="date-filter"
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="w-auto"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedDate(getCostaRicaDateISO())}
+            >
+              Hoy
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Mostrando {orders.length} pedidos
+            </span>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -563,6 +674,115 @@ export default function AdminRoutesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Pedidos Sin Asignar - Todas las Fechas */}
+      {unassignedAllDates.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-orange-600" />
+                Pedidos Sin Asignar - Historial ({unassignedAllDates.length})
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadUnassignedAllDates}
+                disabled={loadingUnassigned}
+              >
+                {loadingUnassigned ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Cargando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Actualizar
+                  </>
+                )}
+              </Button>
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Pedidos pendientes de asignación de fechas anteriores
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {unassignedAllDates.map((order) => (
+                <div key={order.id} className="flex items-center justify-between p-4 border border-orange-200 rounded-lg bg-orange-50">
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-6 gap-4 items-center">
+                    <div className="flex items-center gap-3">
+                      <Package className="w-5 h-5 text-orange-600" />
+                      <div>
+                        <p className="font-semibold text-sm">{order.id}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {order.createdAt}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="font-medium text-sm">{order.customerName}</p>
+                      <p className="text-xs text-muted-foreground">{order.customerPhone || 'Sin teléfono'}</p>
+                    </div>
+
+                    <div>
+                      <p className="font-bold text-sm">{formatCurrency(order.totalAmount)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {order.paymentMethod === 'sinpe' ? 'SINPE' :
+                         order.paymentMethod === 'tarjeta' ? 'Tarjeta' : 'Efectivo'}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm truncate">{order.customerDistrict}</span>
+                    </div>
+
+                    <div>
+                      <OrderStatusBadge status={order.status} />
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Select
+                        value={messengerSelections[order.id] || ''}
+                        onValueChange={(value) => setMessengerSelections(prev => ({ ...prev, [order.id]: value }))}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Asignar a..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {messengers.map(messenger => (
+                            <SelectItem key={messenger.id} value={messenger.id}>
+                              {messenger.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="ml-4">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        handleAssignOrder(order.id, messengerSelections[order.id]);
+                        // Recargar la lista después de asignar
+                        setTimeout(loadUnassignedAllDates, 1000);
+                      }}
+                      disabled={!messengerSelections[order.id] || loading}
+                    >
+                      <Zap className="w-4 h-4 mr-2" />
+                      Asignar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Diálogo para generar rutas */}
       <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
