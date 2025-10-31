@@ -1256,12 +1256,34 @@ export const getGastosMensajeros = async (fecha: string): Promise<{
   try {
     console.log(`🔍 Obteniendo gastos para fecha: ${fecha}`);
     
-    // Obtener todos los gastos del día
+    // Convertir la fecha de Costa Rica a UTC para el filtro
+    // Costa Rica es UTC-6, así que necesitamos ajustar el rango
+    // Si queremos el día 30 de octubre en Costa Rica (00:00 - 23:59):
+    // - Inicio: 2025-10-30 00:00:00 CR = 2025-10-30 06:00:00 UTC (CR está 6h atrás, así que sumamos 6h)
+    // - Fin: 2025-10-30 23:59:59 CR = 2025-10-31 05:59:59 UTC (CR está 6h atrás, así que sumamos 6h)
+    
+    // Parsear la fecha (formato YYYY-MM-DD)
+    const [year, month, day] = fecha.split('-').map(Number);
+    
+    // Crear fechas UTC directamente que corresponden al inicio y fin del día en Costa Rica
+    // 00:00:00 en Costa Rica = 06:00:00 en UTC (Costa Rica está 6 horas detrás)
+    const inicioDiaUTC = new Date(Date.UTC(year, month - 1, day, 6, 0, 0, 0));
+    
+    // 23:59:59.999 en Costa Rica = 05:59:59.999 del día siguiente en UTC
+    const finDiaUTC = new Date(Date.UTC(year, month - 1, day + 1, 5, 59, 59, 999));
+    
+    const inicioUTCString = inicioDiaUTC.toISOString();
+    const finUTCString = finDiaUTC.toISOString();
+    
+    console.log(`📅 Fecha objetivo (Costa Rica): ${fecha}`);
+    console.log(`📅 Rango UTC: ${inicioUTCString} a ${finUTCString}`);
+    
+    // Obtener todos los gastos del día usando el rango UTC
     const { data: gastos, error } = await supabasePedidos
       .from('gastos_mensajeros')
       .select('*')
-      .gte('fecha', `${fecha}T00:00:00`)
-      .lt('fecha', `${fecha}T23:59:59`)
+      .gte('fecha', inicioUTCString)
+      .lte('fecha', finUTCString)
       .order('fecha', { ascending: true });
 
     if (error) {
