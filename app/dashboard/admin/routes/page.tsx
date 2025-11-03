@@ -918,7 +918,22 @@ export default function AdminRoutesPage() {
                     onValueChange={(value) => setMessengerSelections(prev => ({ ...prev, [order.id]: value }))}
                   >
                     <SelectTrigger className="w-40">
-                      <SelectValue placeholder="Cambiar a..." />
+                      <SelectValue placeholder="Cambiar a...">
+                        {/* Mostrar el nombre del mensajero actual o seleccionado */}
+                        {(() => {
+                          const selectedId = messengerSelections[order.id] || order.assignedMessenger?.id;
+                          if (!selectedId) return 'Cambiar a...';
+
+                          // Si hay una selección nueva, buscar en messengers
+                          if (messengerSelections[order.id]) {
+                            const selected = messengers.find((m: User) => m.id === messengerSelections[order.id]);
+                            return selected?.name || 'Cambiar a...';
+                          }
+
+                          // Si no hay selección nueva, mostrar el mensajero asignado actual
+                          return order.assignedMessenger?.name || 'Cambiar a...';
+                        })()}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {messengers.map(messenger => (
