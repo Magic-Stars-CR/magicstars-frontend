@@ -76,11 +76,30 @@ export default function AdminRoutesPage() {
 
   // Función para convertir PedidoTest de Supabase a Order del frontend
   const convertPedidoToOrder = (pedido: any): Order => {
-    // Encontrar mensajero por nombre (case-insensitive)
+    // Encontrar mensajero por nombre (case-insensitive y trimmed)
     const mensajeroName = pedido.mensajero_asignado || pedido.mensajero_concretado;
-    const assignedMessenger = mensajeroName
-      ? mockMessengers.find(m => m.name.toUpperCase() === mensajeroName.toUpperCase())
-      : undefined;
+
+    let assignedMessenger = undefined;
+
+    if (mensajeroName) {
+      const mensajeroNameTrimmed = mensajeroName.trim();
+
+      // Intentar encontrar por nombre exacto (case-insensitive)
+      assignedMessenger = mockMessengers.find(m =>
+        m.name.toUpperCase() === mensajeroNameTrimmed.toUpperCase()
+      );
+
+      // Si no se encontró, intentar por ID (por si el endpoint guardó el ID en vez del nombre)
+      if (!assignedMessenger) {
+        assignedMessenger = mockMessengers.find(m => m.id === mensajeroNameTrimmed);
+      }
+
+      // Si aún no se encontró, log de advertencia
+      if (!assignedMessenger) {
+        console.warn(`⚠️  PEDIDO ${pedido.id_pedido}: mensajero_asignado="${mensajeroName}" NO encontrado`);
+        console.warn(`   Nombres en mockMessengers:`, mockMessengers.filter(m => m.role === 'mensajero').map(m => m.name).slice(0, 10).join(', '), '...');
+      }
+    }
 
     return {
       id: pedido.id_pedido,
