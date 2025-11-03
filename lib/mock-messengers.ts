@@ -930,7 +930,7 @@ export const mockMessengers: User[] = [
     createdAt: '2025-10-25T08:00:00Z',
   },
   { 
-    id: 'msg-035',
+    id: 'msg-037',
     email: 'salvador@magicstars.com',
     name: 'Salvador',
     role: 'mensajero',
@@ -951,7 +951,7 @@ export const mockMessengers: User[] = [
   }
   ,
   { 
-    id: 'msg-035',
+    id: 'msg-038',
     email: 'henry@magicstars.com',
     name: 'Henry',
     role: 'mensajero',
