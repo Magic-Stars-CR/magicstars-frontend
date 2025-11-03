@@ -169,17 +169,46 @@ export default function AdminRoutesPage() {
         .limit(100);
 
       if (error) {
-        console.error('Error al cargar pedidos sin asignar:', error);
+        console.error('❌ Error al cargar pedidos sin asignar:', error);
         return;
       }
 
-      console.log('📦 Pedidos sin asignar obtenidos:', data?.length || 0);
+      console.log('📦 Pedidos sin asignar obtenidos de Supabase:', data?.length || 0);
+
+      // Log detallado de los primeros 5 pedidos sin asignar
+      if (data && data.length > 0) {
+        console.log('📋 Primeros 5 pedidos sin asignar (RAW de Supabase):');
+        data.slice(0, 5).forEach((pedido: any, index: number) => {
+          console.log(`  ${index + 1}. ${pedido.id_pedido}:`, {
+            mensajero_asignado: pedido.mensajero_asignado,
+            mensajero_concretado: pedido.mensajero_concretado,
+            estado_pedido: pedido.estado_pedido,
+            fecha_creacion: pedido.fecha_creacion,
+            cliente: pedido.cliente_nombre
+          });
+        });
+      }
 
       // Convertir a formato Order
       const ordersConverted = (data || []).map(convertPedidoToOrder);
+
+      // Log después de conversión
+      console.log('📊 Pedidos sin asignar después de conversión:', ordersConverted.length);
+      if (ordersConverted.length > 0) {
+        console.log('📋 Primeros 5 pedidos convertidos:');
+        ordersConverted.slice(0, 5).forEach((order: Order, index: number) => {
+          console.log(`  ${index + 1}. ${order.id}:`, {
+            assignedMessenger: order.assignedMessenger?.name || null,
+            hasMessenger: !!order.assignedMessenger,
+            status: order.status,
+            customerName: order.customerName
+          });
+        });
+      }
+
       setUnassignedAllDates(ordersConverted);
     } catch (error) {
-      console.error('Error loading unassigned orders:', error);
+      console.error('❌ Error loading unassigned orders:', error);
     } finally {
       setLoadingUnassigned(false);
     }
