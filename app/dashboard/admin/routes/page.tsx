@@ -5,7 +5,7 @@ import { mockMessengers } from '@/lib/mock-messengers';
 import { Order, User } from '@/lib/types';
 import { API_URLS, apiRequest } from '@/lib/config';
 import { useToast } from '@/hooks/use-toast';
-import { getPedidosByFecha, getCostaRicaDateISO, supabasePedidos, getMensajerosUnicos } from '@/lib/supabase-pedidos';
+import { getPedidosByFecha, getCostaRicaDateISO, supabasePedidos } from '@/lib/supabase-pedidos';
 import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,7 +41,6 @@ export default function AdminRoutesPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [unassignedAllDates, setUnassignedAllDates] = useState<Order[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [realMessengerNames, setRealMessengerNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingUnassigned, setLoadingUnassigned] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,16 +63,6 @@ export default function AdminRoutesPage() {
   // Estados para asignar pedido individual - mapa de pedido ID a mensajero ID
   const [messengerSelections, setMessengerSelections] = useState<Record<string, string>>({});
 
-  // Cargar mensajeros reales al inicio
-  useEffect(() => {
-    const loadRealMessengers = async () => {
-      const names = await getMensajerosUnicos();
-      setRealMessengerNames(names);
-      console.log('✅ Mensajeros reales cargados desde Supabase:', names);
-    };
-    loadRealMessengers();
-  }, []);
-
   // Auto-refresh cuando el componente se monta
   useEffect(() => {
     loadData();
@@ -92,53 +81,41 @@ export default function AdminRoutesPage() {
 
     let assignedMessenger = undefined;
 
-    if (mensajeroName) {
-      const mensajeroNameTrimmed = mensajeroName.trim().toUpperCase();
+    // Si hay un nombre de mensajero en Supabase, SIEMPRE tratarlo como asignado
+    if (mensajeroName && mensajeroName.trim()) {
+      const mensajeroNameTrimmed = mensajeroName.trim();
+      const mensajeroNameUpper = mensajeroNameTrimmed.toUpperCase();
 
-      // PRIMERO: Verificar si el nombre existe en los mensajeros reales de Supabase
-      const existeEnSupabase = realMessengerNames.includes(mensajeroNameTrimmed);
+      // PRIMERO: Intentar encontrar el mensajero en mockMessengers (por nombre o ID)
+      assignedMessenger = mockMessengers.find(m =>
+        m.name.toUpperCase() === mensajeroNameUpper || m.id === mensajeroNameTrimmed
+      );
 
-      if (existeEnSupabase) {
-        // Si existe en Supabase, buscar en mockMessengers para obtener el objeto User
-        assignedMessenger = mockMessengers.find(m =>
-          m.name.toUpperCase() === mensajeroNameTrimmed
-        );
+      // Si NO está en mockMessengers, crear un objeto User temporal
+      // Esto garantiza que CUALQUIER mensajero en Supabase se muestre como asignado
+      if (!assignedMessenger) {
+        console.log(`📦 PEDIDO ${pedido.id_pedido}: Creando usuario temporal para mensajero "${mensajeroNameTrimmed}"`);
 
-        // Si no está en mockMessengers, crear un objeto User temporal
-        if (!assignedMessenger) {
-          console.warn(`⚠️  PEDIDO ${pedido.id_pedido}: mensajero "${mensajeroName}" existe en Supabase pero NO en mockMessengers`);
-          console.warn(`   Creando objeto temporal para el mensajero`);
-
-          // Crear un User temporal para este mensajero
-          assignedMessenger = {
-            id: `temp-${mensajeroNameTrimmed}`,
-            name: mensajeroName.trim(), // Usar el nombre original (con capitalización correcta)
-            email: `${mensajeroNameTrimmed.toLowerCase()}@magicstars.com`,
-            role: 'mensajero' as const,
-            phone: '',
+        assignedMessenger = {
+          id: `temp-${mensajeroNameUpper}`,
+          name: mensajeroNameTrimmed, // Usar el nombre original (con capitalización correcta)
+          email: `${mensajeroNameUpper.toLowerCase()}@magicstars.com`,
+          role: 'mensajero' as const,
+          phone: '',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          company: {
+            id: 'company-1',
+            name: 'Magic Stars',
+            taxId: '123456789',
+            address: 'San José, Costa Rica',
+            phone: '+506 0000-0000',
+            email: 'info@magicstars.com',
             isActive: true,
-            createdAt: new Date().toISOString(),
-            company: {
-              id: 'company-1',
-              name: 'Magic Stars',
-              taxId: '123456789',
-              address: 'San José, Costa Rica',
-              phone: '+506 0000-0000',
-              email: 'info@magicstars.com',
-              isActive: true,
-              createdAt: '2024-01-01T08:00:00Z',
-              updatedAt: '2024-01-01T08:00:00Z',
-            }
-          };
-        }
-      } else {
-        // Si NO existe en Supabase, intentar buscar por ID (por si el endpoint guardó el ID)
-        assignedMessenger = mockMessengers.find(m => m.id === mensajeroName.trim());
-
-        if (!assignedMessenger) {
-          console.warn(`⚠️  PEDIDO ${pedido.id_pedido}: mensajero_asignado="${mensajeroName}" NO encontrado en Supabase`);
-          console.warn(`   Mensajeros reales en Supabase:`, realMessengerNames.slice(0, 10).join(', '), '...');
-        }
+            createdAt: '2024-01-01T08:00:00Z',
+            updatedAt: '2024-01-01T08:00:00Z',
+          }
+        };
       }
     }
 
