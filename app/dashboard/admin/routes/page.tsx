@@ -53,6 +53,9 @@ export default function AdminRoutesPage() {
   // Estados para generar rutas
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [generateRouteDate, setGenerateRouteDate] = useState(new Date().toISOString().split('T')[0]);
+  const [generatingRoutes, setGeneratingRoutes] = useState(false);
+  const [showResultDialog, setShowResultDialog] = useState(false);
+  const [resultMessage, setResultMessage] = useState({ title: '', description: '', isError: false });
 
   // Estados para reasignación masiva de mensajero
   const [showReassignDialog, setShowReassignDialog] = useState(false);
@@ -281,18 +284,12 @@ export default function AdminRoutesPage() {
 
   const confirmGenerateRoutes = async () => {
     try {
-      setLoading(true);
+      setGeneratingRoutes(true);
       setShowGenerateDialog(false);
 
       console.log('🚀 ==================== GENERAR RUTAS ====================');
       console.log('🚀 Fecha:', generateRouteDate);
       console.log('🚀 Endpoint:', API_URLS.GENERAR_RUTAS);
-
-      // Mostrar toast de "procesando"
-      toast({
-        title: "Procesando...",
-        description: "Generando rutas automáticamente. Por favor espere...",
-      });
 
       const response = await apiRequest(API_URLS.GENERAR_RUTAS, {
         method: 'POST',
@@ -327,10 +324,13 @@ export default function AdminRoutesPage() {
         console.log('✅ Rutas generadas exitosamente');
         console.log('✅ Mensaje:', successMessage);
 
-        toast({
-          title: "✅ ¡Rutas generadas exitosamente!",
+        // Mostrar dialog de resultado exitoso
+        setResultMessage({
+          title: '✅ ¡Rutas generadas exitosamente!',
           description: successMessage || `Las rutas para ${generateRouteDate} se han generado correctamente.`,
+          isError: false
         });
+        setShowResultDialog(true);
 
         // Recargar datos
         console.log('🔄 Recargando datos...');
@@ -348,19 +348,27 @@ export default function AdminRoutesPage() {
 
         console.error('❌ Error del servidor:', errorMessage);
 
-        throw new Error(errorMessage);
+        // Mostrar dialog de error
+        setResultMessage({
+          title: '❌ Error al generar rutas',
+          description: errorMessage,
+          isError: true
+        });
+        setShowResultDialog(true);
       }
     } catch (error) {
       console.error('❌ Error al generar rutas:', error);
       console.error('❌ ==================== FIN GENERAR RUTAS (ERROR) ====================');
 
-      toast({
-        title: "❌ Error al generar rutas",
+      // Mostrar dialog de error
+      setResultMessage({
+        title: '❌ Error al generar rutas',
         description: error instanceof Error ? error.message : 'Error desconocido al procesar la solicitud',
-        variant: "destructive",
+        isError: true
       });
+      setShowResultDialog(true);
     } finally {
-      setLoading(false);
+      setGeneratingRoutes(false);
     }
   };
 
@@ -618,9 +626,18 @@ export default function AdminRoutesPage() {
             <RefreshCw className={`w-4 h-4 mr-2 ${(loading || loadingUnassigned) ? 'animate-spin' : ''}`} />
             Actualizar
           </Button>
-          <Button onClick={handleGenerateRoutes} disabled={loading}>
-            <Route className="w-4 h-4 mr-2" />
-            Generar Rutas
+          <Button onClick={handleGenerateRoutes} disabled={loading || generatingRoutes}>
+            {generatingRoutes ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Generando...
+              </>
+            ) : (
+              <>
+                <Route className="w-4 h-4 mr-2" />
+                Generar Rutas
+              </>
+            )}
           </Button>
           <Button onClick={() => setShowReassignDialog(true)} disabled={loading} variant="outline">
             <RefreshCw className="w-4 h-4 mr-2" />
@@ -1178,6 +1195,23 @@ export default function AdminRoutesPage() {
                   Reasignar Pedidos
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Resultado de Generación de Rutas */}
+      <Dialog open={showResultDialog} onOpenChange={setShowResultDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{resultMessage.title}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm">{resultMessage.description}</p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowResultDialog(false)}>
+              Aceptar
             </Button>
           </DialogFooter>
         </DialogContent>
