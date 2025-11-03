@@ -112,32 +112,40 @@ export default function AdminRoutesPage() {
 
       // Consultar pedidos desde Supabase por fecha
       const pedidosSupabase = await getPedidosByFecha(selectedDate);
-      console.log('📦 Pedidos obtenidos de Supabase:', pedidosSupabase.length);
+      console.log('📦 Pedidos obtenidos de Supabase para fecha ' + selectedDate + ':', pedidosSupabase.length);
 
-      // Log de muestra de estados originales
+      // Log de muestra de estados originales con información detallada de mensajero
       if (pedidosSupabase.length > 0) {
-        console.log('📋 Muestra de estados originales:',
-          pedidosSupabase.slice(0, 5).map(p => ({
-            id: p.id_pedido,
-            estado: p.estado_pedido,
-            mensajero: p.mensajero_asignado
-          }))
-        );
+        console.log('📋 Primeros 10 pedidos (RAW de Supabase) para ' + selectedDate + ':');
+        pedidosSupabase.slice(0, 10).forEach((p: any, index: number) => {
+          console.log(`  ${index + 1}. ${p.id_pedido}:`, {
+            mensajero_asignado: p.mensajero_asignado,
+            mensajero_concretado: p.mensajero_concretado,
+            estado_pedido: p.estado_pedido,
+            fecha_creacion: p.fecha_creacion,
+            cliente: p.cliente_nombre
+          });
+        });
       }
 
       // Convertir a formato Order
       const ordersConverted = pedidosSupabase.map(convertPedidoToOrder);
       setOrders(ordersConverted);
 
-      // Log después de conversión
-      console.log('📊 Pedidos convertidos:', ordersConverted.length);
-      console.log('📋 Muestra convertida:',
-        ordersConverted.slice(0, 5).map(o => ({
-          id: o.id,
-          status: o.status,
-          hasMessenger: !!o.assignedMessenger
-        }))
-      );
+      // Log después de conversión con detalles completos
+      console.log('📊 Pedidos convertidos para fecha ' + selectedDate + ':', ordersConverted.length);
+      if (ordersConverted.length > 0) {
+        console.log('📋 Primeros 10 pedidos convertidos:');
+        ordersConverted.slice(0, 10).forEach((o: Order, index: number) => {
+          console.log(`  ${index + 1}. ${o.id}:`, {
+            assignedMessenger: o.assignedMessenger?.name || null,
+            hasMessenger: !!o.assignedMessenger,
+            status: o.status,
+            customerName: o.customerName,
+            createdAt: o.createdAt
+          });
+        });
+      }
 
       // Usar mockMessengers como fuente de usuarios mensajeros
       setUsers(mockMessengers);
@@ -216,11 +224,13 @@ export default function AdminRoutesPage() {
 
   // Función para refrescar toda la vista
   const handleRefreshAll = async () => {
+    console.log('🔄 ==================== INICIO REFRESH ====================');
     console.log('🔄 Refrescando vista completa de rutas...');
     await Promise.all([
       loadData(),
       loadUnassignedAllDates()
     ]);
+    console.log('✅ ==================== FIN REFRESH ====================');
     toast({
       title: "Vista actualizada",
       description: "Los datos se han recargado correctamente",
@@ -273,7 +283,17 @@ export default function AdminRoutesPage() {
     try {
       setLoading(true);
 
-      console.log('🚀 Asignando pedido:', { id_pedido: orderId, mensajero_asignado: messengerId });
+      // Encontrar el mensajero seleccionado para obtener su nombre
+      const selectedMessenger = messengers.find((m: User) => m.id === messengerId);
+      const messengerName = selectedMessenger?.name;
+
+      console.log('🚀 ==================== ASIGNACIÓN INDIVIDUAL ====================');
+      console.log('🚀 Asignando pedido:', {
+        id_pedido: orderId,
+        mensajero_id: messengerId,
+        mensajero_nombre: messengerName
+      });
+      console.log('⚠️  IMPORTANTE: El endpoint recibe ID pero Supabase almacena NOMBRE');
 
       const response = await apiRequest(API_URLS.ASIGNAR_PEDIDO_INDIVIDUAL, {
         method: 'POST',
@@ -287,11 +307,14 @@ export default function AdminRoutesPage() {
       console.log('📡 Respuesta del servidor:', result);
 
       if (response.ok && result === 'generado exitosamente') {
+        console.log('✅ Asignación exitosa según servidor');
         toast({
           title: "¡Pedido asignado exitosamente!",
           description: `El pedido ${orderId} ha sido asignado correctamente.`,
         });
+        console.log('🔄 Recargando datos desde Supabase...');
         await loadData();
+        console.log('✅ ==================== FIN ASIGNACIÓN ====================');
       } else {
         throw new Error(result.message || 'Error al asignar pedido');
       }
@@ -384,7 +407,7 @@ export default function AdminRoutesPage() {
   };
 
   const getUnassignedOrders = () => {
-    return orders.filter(order => {
+    const filtered = orders.filter((order: Order) => {
       const hasNoMessenger = !order.assignedMessenger;
       const status = order.status.toLowerCase();
       // Excluir solo estados finales (entregado, devolucion) o eliminados
@@ -393,15 +416,55 @@ export default function AdminRoutesPage() {
 
       return hasNoMessenger && isNotExcluded;
     });
+
+    // Log detallado de los pedidos sin asignar del día actual
+    console.log('🔍 getUnassignedOrders() - Filtrando pedidos sin asignar del día actual');
+    console.log(`  - Total orders en estado: ${orders.length}`);
+    console.log(`  - Pedidos sin asignar filtrados: ${filtered.length}`);
+
+    if (filtered.length > 0) {
+      console.log('📋 Primeros 5 pedidos sin asignar (día actual):');
+      filtered.slice(0, 5).forEach((order: Order, index: number) => {
+        console.log(`  ${index + 1}. ${order.id}:`, {
+          assignedMessenger: order.assignedMessenger?.name || null,
+          hasMessenger: !!order.assignedMessenger,
+          status: order.status,
+          customerName: order.customerName,
+          createdAt: order.createdAt
+        });
+      });
+    }
+
+    return filtered;
   };
 
   const getAssignedOrders = () => {
-    return orders.filter(order => {
+    const filtered = orders.filter((order: Order) => {
       const hasMessenger = !!order.assignedMessenger;
       // Mostrar todos los pedidos asignados, sin importar el estado
       // Esto permite ver pedidos en cualquier etapa del proceso
       return hasMessenger;
     });
+
+    // Log detallado de los pedidos asignados del día actual
+    console.log('🔍 getAssignedOrders() - Filtrando pedidos asignados del día actual');
+    console.log(`  - Total orders en estado: ${orders.length}`);
+    console.log(`  - Pedidos asignados filtrados: ${filtered.length}`);
+
+    if (filtered.length > 0) {
+      console.log('📋 Primeros 5 pedidos asignados (día actual):');
+      filtered.slice(0, 5).forEach((order: Order, index: number) => {
+        console.log(`  ${index + 1}. ${order.id}:`, {
+          assignedMessenger: order.assignedMessenger?.name || null,
+          hasMessenger: !!order.assignedMessenger,
+          status: order.status,
+          customerName: order.customerName,
+          createdAt: order.createdAt
+        });
+      });
+    }
+
+    return filtered;
   };
 
   const filteredOrders = orders.filter(order => {
