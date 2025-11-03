@@ -904,7 +904,7 @@ export default function AdminRoutesPage() {
 
                   <div className="flex items-center gap-2">
                     <UserCheck className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm">{getMessengerName(order.assignedMessenger?.id || '')}</span>
+                    <span className="text-sm">{order.assignedMessenger?.name || 'Sin asignar'}</span>
                   </div>
 
                   <div>
