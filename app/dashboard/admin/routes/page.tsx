@@ -63,13 +63,16 @@ export default function AdminRoutesPage() {
   // Estados para asignar pedido individual - mapa de pedido ID a mensajero ID
   const [messengerSelections, setMessengerSelections] = useState<Record<string, string>>({});
 
+  // Auto-refresh cuando el componente se monta
+  useEffect(() => {
+    loadData();
+    loadUnassignedAllDates();
+  }, []);
+
+  // Recargar cuando cambia la fecha
   useEffect(() => {
     loadData();
   }, [selectedDate]);
-
-  useEffect(() => {
-    loadUnassignedAllDates();
-  }, []);
 
   // Función para convertir PedidoTest de Supabase a Order del frontend
   const convertPedidoToOrder = (pedido: any): Order => {
@@ -180,6 +183,19 @@ export default function AdminRoutesPage() {
     } finally {
       setLoadingUnassigned(false);
     }
+  };
+
+  // Función para refrescar toda la vista
+  const handleRefreshAll = async () => {
+    console.log('🔄 Refrescando vista completa de rutas...');
+    await Promise.all([
+      loadData(),
+      loadUnassignedAllDates()
+    ]);
+    toast({
+      title: "Vista actualizada",
+      description: "Los datos se han recargado correctamente",
+    });
   };
 
   // 1. Función para generar rutas automáticamente
@@ -415,6 +431,15 @@ export default function AdminRoutesPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            onClick={handleRefreshAll}
+            disabled={loading || loadingUnassigned}
+            variant="outline"
+            size="sm"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${(loading || loadingUnassigned) ? 'animate-spin' : ''}`} />
+            Actualizar
+          </Button>
           <Button onClick={handleGenerateRoutes} disabled={loading}>
             <Route className="w-4 h-4 mr-2" />
             Generar Rutas
