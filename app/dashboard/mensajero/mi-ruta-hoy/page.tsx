@@ -9,6 +9,7 @@ import { API_URLS, apiRequest } from '@/lib/config';
 import { supabasePedidos } from '@/lib/supabase-pedidos';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -312,6 +313,77 @@ export default function MiRutaHoy() {
     console.log('📅 ISO Date final:', isoDate);
     
     return isoDate;
+  };
+
+  // Función para obtener fecha/hora en formato timestamptz para Costa Rica
+  const getCostaRicaTimestamp = (targetDate?: Date): string => {
+    const costaRicaNow = getCostaRicaDate();
+    
+    let fechaObjetivo: Date;
+    
+    if (targetDate) {
+      // Si hay fecha seleccionada: usar esa fecha con la HORA ACTUAL de Costa Rica
+      // Tomamos la fecha seleccionada (año, mes, día) y le aplicamos la hora actual de CR
+      const year = targetDate.getFullYear();
+      const month = targetDate.getMonth();
+      const day = targetDate.getDate();
+
+      // Obtener componentes de la hora actual de Costa Rica
+      const hours = costaRicaNow.getHours();
+      const minutes = costaRicaNow.getMinutes();
+      const seconds = costaRicaNow.getSeconds();
+      const milliseconds = costaRicaNow.getMilliseconds();
+
+      // Crear timestamp ISO string directamente en formato UTC-6
+      // Formato: YYYY-MM-DDTHH:mm:ss.sss-06:00
+      const fechaStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const horaStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
+      const isoString = `${fechaStr}T${horaStr}-06:00`;
+      
+      // Crear Date desde el string ISO (esto garantiza que se interprete correctamente)
+      fechaObjetivo = new Date(isoString);
+      
+      // Validación: asegurarnos de que la fecha se creó correctamente
+      if (isNaN(fechaObjetivo.getTime())) {
+        console.warn('⚠️ Error creando fecha desde ISO string, usando método alternativo');
+        // Método alternativo: crear en local y ajustar manualmente
+        fechaObjetivo = new Date(year, month, day, hours, minutes, seconds, milliseconds);
+        // Ajustar a UTC-6
+        const utcTime = fechaObjetivo.getTime() + (fechaObjetivo.getTimezoneOffset() * 60000);
+        const costaRicaTime = utcTime - (6 * 60 * 60 * 1000);
+        fechaObjetivo = new Date(costaRicaTime);
+      }
+      
+      console.log('📅 Fecha seleccionada DIFERENTE - usando hora ACTUAL de CR:', {
+        fechaSeleccionada: fechaStr,
+        horaCR: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
+        isoStringConstruido: isoString,
+        resultadoISO: fechaObjetivo.toISOString(),
+        tieneHora: !(fechaObjetivo.getUTCHours() === 0 && fechaObjetivo.getUTCMinutes() === 0 && fechaObjetivo.getUTCSeconds() === 0)
+      });
+    } else {
+      // No hay fecha seleccionada: usar hora actual de Costa Rica
+      fechaObjetivo = costaRicaNow;
+      console.log('📅 Sin fecha seleccionada - usando hora actual:', fechaObjetivo.toISOString());
+    }
+    
+    // Verificación final: asegurarnos de que tiene hora
+    const horaUTC = fechaObjetivo.getUTCHours();
+    const minutoUTC = fechaObjetivo.getUTCMinutes();
+    const segundoUTC = fechaObjetivo.getUTCSeconds();
+    
+    if (horaUTC === 0 && minutoUTC === 0 && segundoUTC === 0) {
+      console.warn('⚠️ ADVERTENCIA: La fecha creada tiene hora 00:00:00. Esto no debería pasar.');
+    }
+    
+    console.log('🕐 Verificación final del timestamp:', {
+      iso: fechaObjetivo.toISOString(),
+      horaUTC: `${String(horaUTC).padStart(2, '0')}:${String(minutoUTC).padStart(2, '0')}:${String(segundoUTC).padStart(2, '0')}`,
+      tieneHora: !(horaUTC === 0 && minutoUTC === 0 && segundoUTC === 0)
+    });
+    
+    // Retornar en formato ISO con zona horaria (timestamptz)
+    return fechaObjetivo.toISOString();
   };
 
   const loadRouteData = async () => {
@@ -889,14 +961,12 @@ export default function MiRutaHoy() {
         'other': newExpense.customType || 'Otro'
       };
 
-      // Determinar la fecha objetivo para el gasto
-      let targetDate;
-      if (selectedDate) {
-        targetDate = selectedDate;
-      } else {
-        targetDate = getCostaRicaDate();
-      }
-      const targetDateString = targetDate.toISOString().split('T')[0];
+      // Determinar la fecha y hora objetivo para el gasto en formato timestamptz
+      // Esto maneja:
+      // - Fecha actual: usa la hora actual de Costa Rica
+      // - Fecha pasada: usa mediodía (12:00:00) de esa fecha
+      // - Fecha futura: usa inicio del día (00:00:00) de esa fecha
+      const fechaHoraCostaRica = getCostaRicaTimestamp(selectedDate);
 
       // Preparar datos para envío
       const requestData = {
@@ -904,7 +974,7 @@ export default function MiRutaHoy() {
         comprobante_base64: base64Image,
         monto: parseFloat(newExpense.amount),
         tipo_gasto: tipoGastoMap[newExpense.type] || newExpense.type,
-        fecha: targetDateString, // Agregar fecha seleccionada
+        fecha: fechaHoraCostaRica, // Formato timestamptz completo (YYYY-MM-DDTHH:mm:ss.sssZ)
         descripcion: newExpense.customType || tipoGastoMap[newExpense.type] || newExpense.type
       };
       
@@ -913,9 +983,10 @@ export default function MiRutaHoy() {
         comprobante_base64: base64Image, // BASE64 COMPLETO
         monto: requestData.monto,
         tipo_gasto: requestData.tipo_gasto,
-        fecha: requestData.fecha,
+        fecha: requestData.fecha, // timestamptz completo (YYYY-MM-DDTHH:mm:ss.sssZ)
         descripcion: requestData.descripcion
       });
+      console.log('🕐 Fecha/hora enviada (timestamptz):', fechaHoraCostaRica);
       
       // Log adicional con información de longitud
       console.log('📏 Información del Base64 enviado:', {
@@ -924,6 +995,12 @@ export default function MiRutaHoy() {
         tamañoArchivo: newExpense.receipt?.size || 0
       });
       
+      // Aviso inmediato
+      toast({
+        title: 'Gasto enviado',
+        description: 'Procesando comprobante… se reflejará en unos segundos.',
+      });
+
       // Enviar al endpoint usando configuración centralizada
       const response = await apiRequest(API_URLS.ADD_GASTO_MENSAJERO, {
         method: 'POST',
@@ -950,7 +1027,7 @@ export default function MiRutaHoy() {
           monto: parseFloat(newExpense.amount),
           tipo_gasto: tipoGastoMap[newExpense.type] || newExpense.type,
           comprobante_link: '',
-          fecha: `${targetDateString}T12:00:00`
+          fecha: fechaHoraCostaRica // Usar la fecha/hora completa
         };
 
         setGastosReales(prev => {
@@ -991,15 +1068,29 @@ export default function MiRutaHoy() {
 
         // Mostrar indicador de actualización
         setIsAddingExpense(true);
-        
-        // Pequeño delay y reconciliación con servidor
-        console.log('⏳ Esperando 1.2s para reconciliar con el servidor...');
-        await new Promise(resolve => setTimeout(resolve, 1200));
-        
-        // Recargar gastos reales desde Supabase
-        console.log('🔄 Recargando gastos desde Supabase...');
-        await loadGastosReales();
-        
+
+        // Polling: intentos para esperar a que n8n/Supabase persistan el gasto
+        const maxAttempts = 6; // ~9s en total
+        const intervalMs = 1500;
+        let attempt = 0;
+        let synced = false;
+        console.log('⏳ Iniciando polling para confirmar sincronización del gasto...');
+        while (attempt < maxAttempts && !synced) {
+          attempt++;
+          console.log(`🔁 Intento ${attempt}/${maxAttempts} de recargar gastos...`);
+          await loadGastosReales();
+          const { lista } = getCurrentMessengerExpenses();
+          synced = !!(lista && lista.some(g => {
+            const montoGasto = typeof g.monto === 'string' ? parseFloat(g.monto) : Number(g.monto);
+            const montoNuevo = parseFloat(newExpense.amount);
+            return Math.abs(montoGasto - montoNuevo) < 0.0001;
+          }));
+          if (!synced) {
+            await new Promise(r => setTimeout(r, intervalMs));
+          }
+        }
+        console.log('✅ Sincronización confirmada:', synced);
+
         // Forzar re-renderizado de la UI
         console.log('🔄 Forzando actualización de la UI...');
         setRouteData(prev => ({ ...prev }));
@@ -1009,6 +1100,10 @@ export default function MiRutaHoy() {
         
         // Mostrar mensaje de éxito
         console.log('✅ Gasto agregado exitosamente');
+        toast({
+          title: 'Gasto registrado',
+          description: 'El gasto fue agregado y sincronizado correctamente.',
+        });
 
       setNewExpense({
         type: 'fuel',
@@ -2552,7 +2647,7 @@ export default function MiRutaHoy() {
                     <div className="text-sm text-orange-600 mt-1">
                       <span className="font-medium">{user?.name}</span> • {getSelectedDateInfo().dayName} {getSelectedDateInfo().day} de {getSelectedDateInfo().month}
                       {getSelectedDateInfo().isDifferentDate && (
-                        <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                        <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full whitespace-normal break-words">
                           Fecha seleccionada
                         </span>
                       )}

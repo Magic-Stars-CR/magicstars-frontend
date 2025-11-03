@@ -970,6 +970,7 @@ export const mockMessengers: User[] = [
     isActive: true,
     createdAt: '2025-10-25T08:00:00Z',
   }
+  
 ];
 
 // Funciones de autenticación simuladas
