@@ -284,30 +284,79 @@ export default function AdminRoutesPage() {
       setLoading(true);
       setShowGenerateDialog(false);
 
-      console.log('🚀 Generando rutas para fecha:', generateRouteDate);
+      console.log('🚀 ==================== GENERAR RUTAS ====================');
+      console.log('🚀 Fecha:', generateRouteDate);
+      console.log('🚀 Endpoint:', API_URLS.GENERAR_RUTAS);
+
+      // Mostrar toast de "procesando"
+      toast({
+        title: "Procesando...",
+        description: "Generando rutas automáticamente. Por favor espere...",
+      });
 
       const response = await apiRequest(API_URLS.GENERAR_RUTAS, {
         method: 'POST',
         body: JSON.stringify({ fecha: generateRouteDate })
       });
 
-      const result = await response.json();
-      console.log('📡 Respuesta del servidor:', result);
+      console.log('📡 Status de respuesta:', response.status, response.statusText);
 
-      if (response.ok && result === 'generado exitosamente') {
-        toast({
-          title: "¡Rutas generadas exitosamente!",
-          description: `Las rutas para ${generateRouteDate} se han generado correctamente.`,
-        });
-        await loadData();
+      // Intentar parsear la respuesta como JSON
+      let result;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json();
       } else {
-        throw new Error(result.message || 'Error al generar rutas');
+        result = await response.text();
+      }
+
+      console.log('📡 Respuesta del servidor:', result);
+      console.log('📡 Tipo de respuesta:', typeof result);
+
+      if (response.ok) {
+        // Respuesta exitosa
+        let successMessage = '';
+
+        // Intentar extraer información útil de la respuesta
+        if (typeof result === 'string') {
+          successMessage = result;
+        } else if (result && typeof result === 'object') {
+          successMessage = result.message || result.status || JSON.stringify(result);
+        }
+
+        console.log('✅ Rutas generadas exitosamente');
+        console.log('✅ Mensaje:', successMessage);
+
+        toast({
+          title: "✅ ¡Rutas generadas exitosamente!",
+          description: successMessage || `Las rutas para ${generateRouteDate} se han generado correctamente.`,
+        });
+
+        // Recargar datos
+        console.log('🔄 Recargando datos...');
+        await loadData();
+        console.log('✅ ==================== FIN GENERAR RUTAS ====================');
+      } else {
+        // Error del servidor
+        let errorMessage = 'Error al generar rutas';
+
+        if (typeof result === 'string') {
+          errorMessage = result;
+        } else if (result && typeof result === 'object') {
+          errorMessage = result.message || result.error || JSON.stringify(result);
+        }
+
+        console.error('❌ Error del servidor:', errorMessage);
+
+        throw new Error(errorMessage);
       }
     } catch (error) {
       console.error('❌ Error al generar rutas:', error);
+      console.error('❌ ==================== FIN GENERAR RUTAS (ERROR) ====================');
+
       toast({
-        title: "Error al generar rutas",
-        description: error instanceof Error ? error.message : 'Error desconocido',
+        title: "❌ Error al generar rutas",
+        description: error instanceof Error ? error.message : 'Error desconocido al procesar la solicitud',
         variant: "destructive",
       });
     } finally {
