@@ -348,10 +348,10 @@ export default function AdminRoutesPage() {
 
         console.error('❌ Error del servidor:', errorMessage);
 
-        // Mostrar dialog de error
+        // Mostrar dialog de error con nota adicional
         setResultMessage({
           title: '❌ Error al generar rutas',
-          description: errorMessage,
+          description: `${errorMessage}\n\nNota: Revisa que la cantidad y capacidad de mensajeros activos sea suficiente para cubrir todos los pedidos del día.`,
           isError: true
         });
         setShowResultDialog(true);
