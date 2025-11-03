@@ -929,12 +929,12 @@ export const mockMessengers: User[] = [
     isActive: true,
     createdAt: '2025-10-25T08:00:00Z',
   },
-  {
-    id: 'msg-035',
-    email: 'norman@magicstars.com',
-    name: 'Norman',
+  { 
+    id: 'msg-037',
+    email: 'salvador@magicstars.com',
+    name: 'Salvador',
     role: 'mensajero',
-    phone: '+506 8888-0025',
+    phone: '+506 8888-9999',
     company: {
       id: 'company-1',
       name: 'Magic Stars',
@@ -948,7 +948,29 @@ export const mockMessengers: User[] = [
     },
     isActive: true,
     createdAt: '2025-10-25T08:00:00Z',
-  },
+  }
+  ,
+  { 
+    id: 'msg-038',
+    email: 'henry@magicstars.com',
+    name: 'Henry',
+    role: 'mensajero',
+    phone: '+506 8888-8888',
+    company: {
+      id: 'company-1',
+      name: 'Magic Stars',
+      taxId: '123456789',
+      address: 'San José, Costa Rica',
+      phone: '+506 0000-0000',
+      email: 'info@magicstars.com',
+      isActive: true,
+      createdAt: '2024-01-01T08:00:00Z',
+      updatedAt: '2024-01-01T08:00:00Z',
+    },
+    isActive: true,
+    createdAt: '2025-10-25T08:00:00Z',
+  }
+  
 ];
 
 // Funciones de autenticación simuladas
