@@ -76,17 +76,19 @@ export default function AdminRoutesPage() {
 
   // Función para convertir PedidoTest de Supabase a Order del frontend
   const convertPedidoToOrder = (pedido: any): Order => {
-    // Encontrar mensajero por nombre (case-insensitive y trimmed)
-    const mensajeroName = pedido.mensajero_asignado || pedido.mensajero_concretado;
+    // IMPORTANTE: Solo mirar mensajero_asignado para determinar si está asignado
+    // Si mensajero_asignado es null -> pedido SIN asignar
+    // Si mensajero_asignado tiene valor -> pedido ASIGNADO
+    const mensajeroAsignado = pedido.mensajero_asignado;
 
     let assignedMessenger = undefined;
 
-    // Si hay un nombre de mensajero en Supabase, SIEMPRE tratarlo como asignado
-    if (mensajeroName && mensajeroName.trim()) {
-      const mensajeroNameTrimmed = mensajeroName.trim();
+    // Si hay un valor en mensajero_asignado, SIEMPRE tratarlo como asignado
+    if (mensajeroAsignado && mensajeroAsignado.trim()) {
+      const mensajeroNameTrimmed = mensajeroAsignado.trim();
       const mensajeroNameUpper = mensajeroNameTrimmed.toUpperCase();
 
-      // PRIMERO: Intentar encontrar el mensajero en mockMessengers (por nombre o ID)
+      // Intentar encontrar el mensajero en mockMessengers (por nombre o ID)
       assignedMessenger = mockMessengers.find(m =>
         m.name.toUpperCase() === mensajeroNameUpper || m.id === mensajeroNameTrimmed
       );
@@ -94,11 +96,9 @@ export default function AdminRoutesPage() {
       // Si NO está en mockMessengers, crear un objeto User temporal
       // Esto garantiza que CUALQUIER mensajero en Supabase se muestre como asignado
       if (!assignedMessenger) {
-        console.log(`📦 PEDIDO ${pedido.id_pedido}: Creando usuario temporal para mensajero "${mensajeroNameTrimmed}"`);
-
         assignedMessenger = {
           id: `temp-${mensajeroNameUpper}`,
-          name: mensajeroNameTrimmed, // Usar el nombre original (con capitalización correcta)
+          name: mensajeroNameTrimmed,
           email: `${mensajeroNameUpper.toLowerCase()}@magicstars.com`,
           role: 'mensajero' as const,
           phone: '',
