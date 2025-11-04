@@ -2157,6 +2157,7 @@ export const createPedidoPreconfirmacion = async (
   input: Partial<PedidoTest> & {
     tienda: string;
     usuario?: string;
+    confirmado?: boolean;
   }
 ): Promise<{ success: boolean; pedido?: PedidoTest; error?: string }> => {
   try {
