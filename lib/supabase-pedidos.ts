@@ -269,7 +269,7 @@ export const getPedidosByFecha = async (fecha: string): Promise<PedidoTest[]> =>
         .select('*')
         .eq('fecha_creacion', fecha)
         .range(from, from + limit - 1)
-        .order('id_pedido', { ascending: true });
+        .order('fecha_creacion', { ascending: false })
 
       if (error) {
         console.error('❌ Error al obtener pedidos por fecha:', error);
@@ -316,12 +316,12 @@ export const getPedidosDelDiaByTienda = async (tienda: string, fecha?: string): 
       console.log(`📄 Obteniendo página ${Math.floor(from / limit) + 1} (registros ${from} a ${from + limit - 1})...`);
       
       const { data, error } = await supabasePedidos
-        .from('pedidos')
+        .from('pedidos_preconfirmacion')
         .select('*')
         .eq('tienda', tienda)
         .eq('fecha_creacion', targetDate)
         .range(from, from + limit - 1)
-        .order('id_pedido', { ascending: true });
+        .order('fecha_creacion', { ascending: false })
 
       if (error) {
         console.error('❌ Error al obtener pedidos por tienda:', error);
@@ -399,7 +399,7 @@ export const getPedidosDelDiaByMensajero = async (mensajeroName: string, fecha?:
         .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
         .eq('fecha_creacion', targetDate)
         .range(from, from + limit - 1)
-        .order('id_pedido', { ascending: true });
+        .order('fecha_creacion', { ascending: false })
 
       if (error) {
         console.error('❌ Error al obtener pedidos del día por mensajero:', error);
@@ -662,7 +662,7 @@ export const getPedidosByDateRange = async (tienda: string, fechaInicio: Date, f
         .gte('fecha_creacion', fechaInicioISO)
         .lte('fecha_creacion', fechaFinISO)
         .range(from, from + limit - 1)
-        .order('id_pedido', { ascending: true });
+        .order('fecha_creacion', { ascending: false })
 
       if (error) {
         console.error('❌ Error al obtener pedidos por rango:', error);
@@ -812,6 +812,9 @@ export const getPedidosDelDiaByMensajeroEspecifico = async (mensajeroName: strin
     
     console.log(`🔍 Obteniendo pedidos para mensajero: ${mensajeroName}, fecha: ${fecha}`);
     
+    // Normalizar el nombre del mensajero para la búsqueda (trim y mayúsculas)
+    const mensajeroNormalizado = mensajeroName.trim().toUpperCase();
+    
     // Obtener todos los pedidos usando paginación con fecha simple (sin hora)
     let allPedidos: PedidoTest[] = [];
     let from = 0;
@@ -819,28 +822,57 @@ export const getPedidosDelDiaByMensajeroEspecifico = async (mensajeroName: strin
     let hasMore = true;
 
     while (hasMore) {
+      // CORRECCIÓN: Usar comillas alrededor del valor en la consulta .or() con .ilike
+      // La sintaxis correcta para PostgREST es: campo.ilike."valor"
       const { data, error } = await supabasePedidos
         .from('pedidos')
         .select('*')
-        .or(`mensajero_asignado.ilike.${mensajeroName},mensajero_concretado.ilike.${mensajeroName}`)
+        .or(`mensajero_asignado.ilike."${mensajeroNormalizado}",mensajero_concretado.ilike."${mensajeroNormalizado}"`)
         .eq('fecha_creacion', fecha) // Usar eq en lugar de gte/lt
         .range(from, from + limit - 1)
-        .order('id_pedido', { ascending: true });
+        .order('fecha_creacion', { ascending: false })
 
       if (error) {
         console.error('❌ Error al obtener pedidos del día:', error);
-        return allPedidos;
-      }
-
-      if (data && data.length > 0) {
-        allPedidos = [...allPedidos, ...data];
-        from += limit;
-        hasMore = data.length === limit;
+        console.error('❌ Detalles del error:', JSON.stringify(error, null, 2));
+        // Si falla con comillas, intentar sin comillas (algunas versiones de PostgREST no las requieren)
+        if (error.message?.includes('syntax') || error.code === 'PGRST116') {
+          console.log('🔄 Intentando sin comillas...');
+          const { data: dataRetry, error: errorRetry } = await supabasePedidos
+            .from('pedidos')
+            .select('*')
+            .or(`mensajero_asignado.ilike.${mensajeroNormalizado},mensajero_concretado.ilike.${mensajeroNormalizado}`)
+            .eq('fecha_creacion', fecha)
+            .range(from, from + limit - 1)
+            .order('fecha_creacion', { ascending: false });
+          
+          if (errorRetry) {
+            console.error('❌ Error también sin comillas:', errorRetry);
+            return allPedidos;
+          }
+          
+          if (dataRetry && dataRetry.length > 0) {
+            allPedidos = [...allPedidos, ...dataRetry];
+            from += limit;
+            hasMore = dataRetry.length === limit;
+          } else {
+            hasMore = false;
+          }
+        } else {
+          return allPedidos;
+        }
       } else {
-        hasMore = false;
+        if (data && data.length > 0) {
+          allPedidos = [...allPedidos, ...data];
+          from += limit;
+          hasMore = data.length === limit;
+        } else {
+          hasMore = false;
+        }
       }
     }
 
+    console.log(`✅ Pedidos encontrados para ${mensajeroNormalizado} en ${fecha}: ${allPedidos.length}`);
     return allPedidos;
   } catch (error) {
     console.error('❌ Error en getPedidosDelDiaByMensajeroEspecifico:', error);
@@ -902,9 +934,37 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
     
     console.log(`🔍 Obteniendo liquidaciones para fecha: ${fecha}`);
     
-    // Obtener mensajeros únicos
-    const mensajeros = await getMensajerosUnicos();
-    console.log(`📋 Mensajeros totales en el sistema: ${mensajeros.length}`);
+    // MEJORA: Obtener mensajeros únicos de la fecha específica primero
+    // Esto asegura que todos los mensajeros con pedidos en esta fecha aparezcan
+    const { data: pedidosFecha, error: errorPedidosFecha } = await supabasePedidos
+      .from('pedidos')
+      .select('mensajero_asignado, mensajero_concretado')
+      .eq('fecha_creacion', fecha);
+    
+    const mensajerosDeFecha = new Set<string>();
+    if (pedidosFecha && !errorPedidosFecha) {
+      pedidosFecha.forEach(p => {
+        if (p.mensajero_asignado && p.mensajero_asignado.trim()) {
+          mensajerosDeFecha.add(p.mensajero_asignado.trim().toUpperCase());
+        }
+        if (p.mensajero_concretado && p.mensajero_concretado.trim()) {
+          mensajerosDeFecha.add(p.mensajero_concretado.trim().toUpperCase());
+        }
+      });
+    } else if (errorPedidosFecha) {
+      console.warn('⚠️ Error al obtener mensajeros de la fecha, continuando con mensajeros globales:', errorPedidosFecha);
+    }
+    
+    // También obtener mensajeros únicos globales para cubrir todos los casos
+    const mensajerosGlobales = await getMensajerosUnicos();
+    
+    // Combinar ambas listas para asegurar que no se pierda ningún mensajero
+    const todosLosMensajeros = Array.from(new Set([...mensajerosGlobales, ...Array.from(mensajerosDeFecha)]));
+    
+    console.log(`📋 Mensajeros únicos globales: ${mensajerosGlobales.length}`);
+    console.log(`📋 Mensajeros únicos de la fecha ${fecha}: ${mensajerosDeFecha.size}`);
+    console.log(`📋 Total mensajeros a procesar: ${todosLosMensajeros.length}`);
+    console.log(`📋 Mensajeros de la fecha:`, Array.from(mensajerosDeFecha));
     
     // Obtener gastos para todos los mensajeros
     const gastosData = await getGastosMensajeros(fecha);
@@ -913,7 +973,7 @@ export const getLiquidacionesReales = async (fecha: string): Promise<{
     const liquidaciones = [];
     
     // Procesar mensajeros y filtrar solo los que tienen pedidos
-    for (const mensajero of mensajeros) {
+    for (const mensajero of todosLosMensajeros) {
       // Obtener pedidos del día para este mensajero
       const pedidosRaw = await getPedidosDelDiaByMensajeroEspecifico(mensajero, fecha);
       
@@ -1133,6 +1193,110 @@ export const debugMensajeroQueries = async (mensajeroName: string) => {
     
   } catch (error) {
     console.error('❌ Error en debugMensajeroQueries:', error);
+  }
+};
+
+// Función para debuggear pedidos de Henry específicamente
+export const debugHenryPedidos = async (fechaEspecifica?: string) => {
+  try {
+    console.log('🔍 DEBUGGING: Buscando pedidos de HENRY específicamente...');
+    
+    // Fecha objetivo: 3 de noviembre (asumiendo año actual o 2024)
+    const fechaObjetivo = fechaEspecifica || '2024-11-03';
+    console.log(`📅 Fecha objetivo: ${fechaObjetivo}`);
+    
+    // 1. Verificar si Henry existe en la lista de mensajeros únicos
+    const mensajeros = await getMensajerosUnicos();
+    console.log(`📋 Mensajeros únicos encontrados:`, mensajeros);
+    const henryEncontrado = mensajeros.find(m => m.includes('HENRY') || m.includes('HENRY'));
+    console.log(`✅ Henry en lista de mensajeros:`, henryEncontrado || 'NO ENCONTRADO');
+    
+    // 2. Buscar pedidos de Henry sin filtro de fecha primero
+    const { data: pedidosHenryTodos, error: errorTodos } = await supabasePedidos
+      .from('pedidos')
+      .select('id_pedido, fecha_creacion, mensajero_asignado, mensajero_concretado, estado_pedido, valor_total')
+      .or(`mensajero_asignado.ilike.HENRY,mensajero_concretado.ilike.HENRY`)
+      .limit(20)
+      .order('fecha_creacion', { ascending: false });
+    
+    console.log(`📦 Total de pedidos de HENRY (sin filtro de fecha):`, pedidosHenryTodos?.length || 0);
+    if (pedidosHenryTodos && pedidosHenryTodos.length > 0) {
+      console.log(`📋 Muestra de pedidos:`, pedidosHenryTodos.map(p => ({
+        id: p.id_pedido,
+        fecha: p.fecha_creacion,
+        asignado: p.mensajero_asignado,
+        concretado: p.mensajero_concretado,
+        estado: p.estado_pedido,
+        valor: p.valor_total
+      })));
+      
+      // Extraer fechas únicas
+      const fechasUnicas = Array.from(new Set(pedidosHenryTodos.map(p => p.fecha_creacion?.split('T')[0] || p.fecha_creacion?.split(' ')[0])));
+      console.log(`📅 Fechas únicas con pedidos de HENRY:`, fechasUnicas);
+    }
+    console.log(`❌ Error en búsqueda general:`, errorTodos);
+    
+    // 3. Buscar pedidos de Henry en la fecha específica (3 de noviembre)
+    const variacionesFecha = [
+      fechaObjetivo,
+      `${fechaObjetivo}T00:00:00`,
+      `${fechaObjetivo}T00:00:00.000Z`,
+      `2024-11-03`,
+      `2025-11-03`,
+      `03-11-2024`,
+      `11-03-2024`
+    ];
+    
+    for (const fechaVariacion of variacionesFecha) {
+      console.log(`\n🔍 Probando fecha: ${fechaVariacion}`);
+      
+      // Probar con eq
+      const { data: pedidosEq, error: errorEq } = await supabasePedidos
+        .from('pedidos')
+        .select('id_pedido, fecha_creacion, mensajero_asignado, mensajero_concretado, estado_pedido, valor_total')
+        .or(`mensajero_asignado.ilike.HENRY,mensajero_concretado.ilike.HENRY`)
+        .eq('fecha_creacion', fechaVariacion)
+        .limit(10);
+      
+      console.log(`  📦 Resultados con .eq():`, pedidosEq?.length || 0);
+      if (pedidosEq && pedidosEq.length > 0) {
+        console.log(`  ✅ PEDIDOS ENCONTRADOS:`, pedidosEq);
+      }
+      
+      // Probar con gte/lt
+      const fechaInicio = `${fechaVariacion.split('T')[0]}T00:00:00`;
+      const fechaFin = `${fechaVariacion.split('T')[0]}T23:59:59`;
+      const { data: pedidosRango, error: errorRango } = await supabasePedidos
+        .from('pedidos')
+        .select('id_pedido, fecha_creacion, mensajero_asignado, mensajero_concretado, estado_pedido, valor_total')
+        .or(`mensajero_asignado.ilike.HENRY,mensajero_concretado.ilike.HENRY`)
+        .gte('fecha_creacion', fechaInicio)
+        .lt('fecha_creacion', fechaFin)
+        .limit(10);
+      
+      console.log(`  📦 Resultados con .gte/.lt():`, pedidosRango?.length || 0);
+      if (pedidosRango && pedidosRango.length > 0) {
+        console.log(`  ✅ PEDIDOS ENCONTRADOS:`, pedidosRango);
+      }
+    }
+    
+    // 4. Verificar con getPedidosDelDiaByMensajeroEspecifico
+    console.log(`\n🔍 Probando con getPedidosDelDiaByMensajeroEspecifico("HENRY", "${fechaObjetivo}")...`);
+    const pedidosFuncion = await getPedidosDelDiaByMensajeroEspecifico('HENRY', fechaObjetivo);
+    console.log(`✅ Pedidos encontrados por función:`, pedidosFuncion.length);
+    if (pedidosFuncion.length > 0) {
+      console.log(`📋 Detalles:`, pedidosFuncion.map(p => ({
+        id: p.id_pedido,
+        fecha: p.fecha_creacion,
+        asignado: p.mensajero_asignado,
+        concretado: p.mensajero_concretado,
+        estado: p.estado_pedido,
+        valor: p.valor_total
+      })));
+    }
+    
+  } catch (error) {
+    console.error('❌ Error en debugHenryPedidos:', error);
   }
 };
 
@@ -1384,7 +1548,7 @@ export const getPedidosDelDiaByTiendaEspecifica = async (tiendaName: string, fec
         .ilike('tienda', tiendaName)
         .eq('fecha_creacion', fecha)
         .range(from, from + limit - 1)
-        .order('id_pedido', { ascending: true });
+        .order('fecha_creacion', { ascending: false })
 
       if (error) {
         console.error('❌ Error al obtener pedidos del día:', error);
@@ -1611,7 +1775,8 @@ export const crearPedidoTienda = async (pedidoData: Omit<PedidoTest, 'id_pedido'
       mensajero_concretado: null,
       fecha_entrega: null,
       notas: pedidoData.notas || '',
-      nota_asesor: pedidoData.nota_asesor || ''
+      nota_asesor: pedidoData.nota_asesor || '',
+      confirmado: false // Estado inicial de confirmación
     };
 
     const { data, error } = await supabasePedidos
@@ -1814,5 +1979,235 @@ export const getLiquidacionTienda = async (tiendaName: string, fecha?: string): 
   } catch (error) {
     console.error('❌ Error en getLiquidacionTienda:', error);
     throw error;
+  }
+};
+
+// ========================================
+// FUNCIONES ESPECÍFICAS PARA ASESOR - USAN pedidos_preconfirmacion
+// ========================================
+
+// Función para obtener el conteo total de pedidos en preconfirmacion
+export const getTotalPedidosPreconfirmacionCount = async (): Promise<number> => {
+  try {
+    console.log('🔢 Obteniendo conteo total de pedidos_preconfirmacion...');
+    
+    const { count, error } = await supabasePedidos
+      .from('pedidos_preconfirmacion')
+      .select('*', { count: 'exact', head: true });
+
+    if (error) {
+      console.error('❌ Error al obtener conteo de pedidos_preconfirmacion:', error);
+      return 0;
+    }
+
+    console.log(`📊 Total de pedidos_preconfirmacion en la base de datos: ${count || 0}`);
+    return count || 0;
+  } catch (error) {
+    console.error('❌ Error en getTotalPedidosPreconfirmacionCount:', error);
+    return 0;
+  }
+};
+
+// Función para obtener el conteo de pedidos por tienda y fecha en preconfirmacion
+export const getPedidosCountByTiendaPreconfirmacion = async (tienda: string, fecha?: string): Promise<number> => {
+  try {
+    console.log('🔢 Obteniendo conteo de pedidos_preconfirmacion para tienda:', tienda);
+    
+    const targetDate = fecha || getCostaRicaDateISO();
+    
+    let query = supabasePedidos
+      .from('pedidos_preconfirmacion')
+      .select('*', { count: 'exact', head: true })
+      .eq('tienda', tienda);
+    
+    if (fecha) {
+      query = query.eq('fecha_creacion', targetDate);
+    }
+    
+    const { count, error } = await query;
+
+    if (error) {
+      console.error('❌ Error al obtener conteo de pedidos_preconfirmacion:', error);
+      return 0;
+    }
+
+    console.log(`📊 Pedidos_preconfirmacion encontrados para ${tienda}: ${count || 0}`);
+    return count || 0;
+  } catch (error) {
+    console.error('❌ Error en getPedidosCountByTiendaPreconfirmacion:', error);
+    return 0;
+  }
+};
+
+export const getPedidosDelDiaByTiendaPreconfirmacion = async (tienda: string, fecha?: string): Promise<PedidoTest[]> => {
+  try {
+    console.log('🔍 [PRECONFIRMACION] Buscando pedidos del día para tienda:', tienda);
+    
+    const targetDate = fecha || getCostaRicaDateISO();
+    console.log('📅 Fecha objetivo:', targetDate);
+    
+    let allPedidos: PedidoTest[] = [];
+    let from = 0;
+    const limit = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+      console.log(`📄 Obteniendo página ${Math.floor(from / limit) + 1} (registros ${from} a ${from + limit - 1})...`);
+      
+      const { data, error } = await supabasePedidos
+        .from('pedidos_preconfirmacion')
+        .select('*')
+        .eq('tienda', tienda)
+        .eq('fecha_creacion', targetDate)
+        .order('fecha_creacion', { ascending: false })
+        .range(from, from + limit - 1);
+
+      if (error) {
+        console.error('❌ Error al obtener pedidos por tienda:', error);
+        return allPedidos;
+      }
+
+      if (data && data.length > 0) {
+        allPedidos = [...allPedidos, ...data];
+        from += limit;
+        hasMore = data.length === limit;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    console.log(`✅ Pedidos encontrados para ${tienda}:`, allPedidos.length);
+    return allPedidos;
+  } catch (error) {
+    console.error('❌ Error en getPedidosDelDiaByTiendaPreconfirmacion:', error);
+    return [];
+  }
+};
+
+// Función para obtener todos los pedidos de una tienda en preconfirmacion
+export const getAllPedidosByTiendaPreconfirmacion = async (tienda: string): Promise<PedidoTest[]> => {
+  try {
+    console.log('🔍 [PRECONFIRMACION] Buscando todos los pedidos para tienda:', tienda);
+    
+    let allPedidos: PedidoTest[] = [];
+    let from = 0;
+    const limit = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+      console.log(`📄 Obteniendo página ${Math.floor(from / limit) + 1} (registros ${from} a ${from + limit - 1})...`);
+      
+      const { data, error } = await supabasePedidos
+        .from('pedidos_preconfirmacion')
+        .select('*')
+        .eq('tienda', tienda)
+        .range(from, from + limit - 1)
+        .order('fecha_creacion', { ascending: false });
+
+      if (error) {
+        console.error('❌ Error al obtener pedidos por tienda:', error);
+        return allPedidos;
+      }
+
+      if (data && data.length > 0) {
+        allPedidos = [...allPedidos, ...data];
+        from += limit;
+        hasMore = data.length === limit;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    console.log(`✅ Pedidos encontrados para ${tienda}:`, allPedidos.length);
+    return allPedidos;
+  } catch (error) {
+    console.error('❌ Error en getAllPedidosByTiendaPreconfirmacion:', error);
+    return [];
+  }
+};
+
+// Actualizar un pedido en la tabla de preconfirmación
+export const updatePedidoPreconfirmacion = async (
+  id: string,
+  updates: Partial<PedidoTest>
+): Promise<boolean> => {
+  try {
+    console.log(`🔄 [PRECONFIRMACION] Actualizando pedido ${id} con datos:`, updates);
+
+    const { error } = await supabasePedidos
+      .from('pedidos_preconfirmacion')
+      .update(updates)
+      .eq('id_pedido', id);
+
+    if (error) {
+      console.error('❌ Error al actualizar pedido_preconfirmacion:', error);
+      return false;
+    }
+
+    console.log(`✅ [PRECONFIRMACION] Pedido ${id} actualizado correctamente`);
+    return true;
+  } catch (error) {
+    console.error('❌ Error en updatePedidoPreconfirmacion:', error);
+    return false;
+  }
+};
+
+// Crear un pedido en la tabla de preconfirmación
+export const createPedidoPreconfirmacion = async (
+  input: Partial<PedidoTest> & {
+    tienda: string;
+    usuario?: string;
+  }
+): Promise<{ success: boolean; pedido?: PedidoTest; error?: string }> => {
+  try {
+    const id_pedido = input.id_pedido || `AS${Date.now()}${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+    // La tabla de preconfirmación usa fecha simple YYYY-MM-DD
+    const fecha_creacion = (input.fecha_creacion && input.fecha_creacion.length <= 10)
+      ? input.fecha_creacion
+      : getCostaRicaDateISO();
+
+    // Solo incluir campos que existen en la tabla pedidos_preconfirmacion
+    // Excluir campos que no están en esta tabla: estado_pedido, fecha_entrega, comprobante_sinpe, efectivo_2_pagos, sinpe_2_pagos
+    const nuevo: Partial<PedidoTest> = {
+      id_pedido,
+      fecha_creacion,
+      cliente_nombre: input.cliente_nombre || '',
+      cliente_telefono: input.cliente_telefono || '',
+      direccion: input.direccion || '',
+      provincia: input.provincia || '',
+      canton: input.canton || '',
+      distrito: input.distrito || '',
+      valor_total: Number(input.valor_total || 0),
+      productos: input.productos || '',
+      link_ubicacion: input.link_ubicacion || null,
+      nota_asesor: input.nota_asesor || null,
+      tienda: input.tienda,
+      numero_sinpe: input.numero_sinpe || null,
+      mensajero_asignado: input.mensajero_asignado || null,
+      mensajero_concretado: input.mensajero_concretado || null,
+      confirmado: typeof input.confirmado === 'boolean' ? input.confirmado : false,
+      tipo_envio: input.tipo_envio || null,
+      // NO incluir estos campos que no existen en pedidos_preconfirmacion:
+      // estado_pedido, fecha_entrega, metodo_pago, notas, comprobante_sinpe, efectivo_2_pagos, sinpe_2_pagos
+    };
+
+    // Filtrar explícitamente campos no permitidos antes del insert
+    const { estado_pedido, fecha_entrega, metodo_pago, notas, comprobante_sinpe, efectivo_2_pagos, sinpe_2_pagos, ...camposPermitidos } = nuevo as any;
+
+    const { data, error } = await supabasePedidos
+      .from('pedidos_preconfirmacion')
+      .insert([camposPermitidos])
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('❌ Error al crear pedido_preconfirmacion:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, pedido: data as unknown as PedidoTest };
+  } catch (err: any) {
+    console.error('❌ Error en createPedidoPreconfirmacion:', err);
+    return { success: false, error: err?.message || 'Error desconocido' };
   }
 };

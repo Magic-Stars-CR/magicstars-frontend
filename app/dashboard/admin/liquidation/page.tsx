@@ -1340,6 +1340,37 @@ export default function AdminLiquidationPage() {
     }));
   };
 
+  // Función para calcular la tasa de entrega total de mensajeros
+  const calculateTotalDeliveryRateMensajeros = () => {
+    if (calculations.length === 0) return 0;
+    
+    let totalOrders = 0;
+    let totalDelivered = 0;
+    
+    calculations.forEach(calculation => {
+      const calculated = calculateLiquidation(calculation);
+      totalOrders += calculated.orders.length;
+      totalDelivered += calculated.orders.filter(o => o.estado_pedido === 'ENTREGADO').length;
+    });
+    
+    return totalOrders > 0 ? Math.round((totalDelivered / totalOrders) * 100) : 0;
+  };
+
+  // Función para calcular la tasa de entrega total de tiendas
+  const calculateTotalDeliveryRateTiendas = () => {
+    if (tiendaCalculations.length === 0) return 0;
+    
+    let totalOrders = 0;
+    let totalDelivered = 0;
+    
+    tiendaCalculations.forEach(tienda => {
+      totalOrders += tienda.totalOrders;
+      totalDelivered += tienda.deliveredOrders;
+    });
+    
+    return totalOrders > 0 ? Math.round((totalDelivered / totalOrders) * 100) : 0;
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-64 space-y-4">
@@ -1919,19 +1950,27 @@ export default function AdminLiquidationPage() {
               <Calculator className="w-5 h-5" />
               Liquidaciones por Ruta - {selectedDate}
             </CardTitle>
-            <Button 
-              onClick={handleViewAllExpenses} 
-              disabled={loadingAllExpenses}
-              size="sm"
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              {loadingAllExpenses ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Receipt className="w-4 h-4 mr-2" />
-              )}
-              Reporte de Gastos
-            </Button>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded-lg border border-green-200">
+                <CheckCircle className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-medium text-green-700">
+                  Tasa de Entrega Total: <span className="font-semibold">{calculateTotalDeliveryRateMensajeros()}%</span>
+                </span>
+              </div>
+              <Button 
+                onClick={handleViewAllExpenses} 
+                disabled={loadingAllExpenses}
+                size="sm"
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {loadingAllExpenses ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Receipt className="w-4 h-4 mr-2" />
+                )}
+                Reporte de Gastos
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -2111,7 +2150,7 @@ export default function AdminLiquidationPage() {
           
           {/* Stats Cards para Tiendas */}
           <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4 ${loadingRangoFechas ? 'opacity-50 pointer-events-none' : ''}`}>
-            {/* Primera fila: Tiendas Activas, Total Pedidos, Entregados, Pendientes, Devoluciones, Reagendados */}
+            {/* Primera fila: Tiendas con Pedidos, Pedidos sin Asignar, Pedidos Totales del Día, Estados */}
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-blue-50 to-blue-100">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
@@ -2120,7 +2159,7 @@ export default function AdminLiquidationPage() {
                       <Building2 className="w-5 h-5 text-white" />
                   </div>
                     <div>
-                      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Tiendas Activas</p>
+                      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Tiendas con Pedidos</p>
                       <p className="text-lg font-bold text-blue-900 mt-1">{tiendaCalculations.length}</p>
                   </div>
                   </div>
@@ -2129,44 +2168,7 @@ export default function AdminLiquidationPage() {
                 </CardContent>
               </Card>
 
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-orange-50 to-orange-100">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <Package className="w-5 h-5 text-white" />
-                  </div>
-                    <div>
-                      <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Total Pedidos</p>
-                      <p className="text-lg font-bold text-orange-900 mt-1">
-                        {tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)}
-                      </p>
-                  </div>
-                  </div>
-                  <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-green-50 to-green-100">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <CheckCircle className="w-5 h-5 text-white" />
-                  </div>
-                      <div>
-                      <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Entregados</p>
-                      <p className="text-lg font-bold text-green-900 mt-1">
-                    {tiendaCalculations.reduce((sum, t) => sum + t.deliveredOrders, 0)}
-                      </p>
-                  </div>
-                  </div>
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
-
+            {/* Pedidos sin asignar */}
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-yellow-50 to-yellow-100">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
@@ -2175,59 +2177,77 @@ export default function AdminLiquidationPage() {
                       <Clock className="w-5 h-5 text-white" />
                   </div>
                     <div>
-                      <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide">Pendientes</p>
+                      <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide">Pedidos sin Asignar</p>
                       <p className="text-lg font-bold text-yellow-900 mt-1">
-                    {tiendaCalculations.reduce((sum, t) => sum + t.pendingOrders, 0)}
-                        {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'PENDIENTE' && !o.mensajero_asignado).length, 0) > 0 && (
-                          <span className="text-xs text-orange-600 ml-2">
-                            ({tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'PENDIENTE' && !o.mensajero_asignado).length, 0)} sin asignar)
-                                      </span>
-                        )}
+                        {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => (o.estado_pedido === 'PENDIENTE' || o.estado_pedido === 'EN_RUTA' || !o.estado_pedido) && (!o.mensajero_asignado || o.mensajero_asignado.trim() === '')).length, 0)}
                       </p>
                   </div>
                   </div>
                   <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
                 </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
 
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-red-50 to-red-100">
+            {/* Pedidos totales del día (asignados) */}
+            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-orange-50 to-orange-100">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-red-500 rounded-xl flex items-center justify-center shadow-lg">
+                    <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Package className="w-5 h-5 text-white" />
                   </div>
-                    <div>
-                      <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Devoluciones</p>
-                      <p className="text-lg font-bold text-red-900 mt-1">
-                    {tiendaCalculations.reduce((sum, t) => sum + t.returnedOrders, 0)}
-                      </p>
+                      <div>
+                      <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Pedidos Totales del Día (Asignados)</p>
+                      <p className="text-lg font-bold text-orange-900 mt-1">{tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)}</p>
                   </div>
                   </div>
-                  <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
+                  <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
                 </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
 
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-blue-50 to-blue-100">
+            {/* Estados (resumen) */}
+            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-purple-50 to-purple-100">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <Clock className="w-5 h-5 text-white" />
+                    <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center shadow-lg">
+                      <CheckCircle className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Estados</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <span className="text-xs text-green-700">
+                            {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'ENTREGADO').length, 0)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                          <span className="text-xs text-yellow-700">
+                            {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'PENDIENTE').length, 0)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                          <span className="text-xs text-red-700">
+                            {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'DEVOLUCION').length, 0)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                          <span className="text-xs text-blue-700">
+                            {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'REAGENDADO').length, 0)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Reagendados</p>
-                      <p className="text-lg font-bold text-blue-900 mt-1">
-                    {tiendaCalculations.reduce((sum, t) => sum + t.rescheduledOrders, 0)}
-                      </p>
-                  </div>
-                  </div>
-                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                  </div>
-                </CardContent>
-              </Card>
+                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Segunda fila: Total Recibido, Total Efectivo, SINPE, Tarjeta, Otros */}
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-purple-50 to-purple-100">
@@ -2345,14 +2365,22 @@ export default function AdminLiquidationPage() {
           {/* Tabla de Liquidaciones por Tienda */}
           <Card className={loadingRangoFechas ? 'opacity-50 pointer-events-none' : ''}>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                <Building2 className="w-5 h-5" />
-                Liquidaciones por Tienda - {
-                  usarRangoFechas && tiendaFechaInicio && tiendaFechaFin 
-                    ? `${tiendaFechaInicio} a ${tiendaFechaFin}`
-                    : selectedDate
-                }
-                    </CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <Building2 className="w-5 h-5" />
+                        Liquidaciones por Tienda - {
+                          usarRangoFechas && tiendaFechaInicio && tiendaFechaFin 
+                            ? `${tiendaFechaInicio} a ${tiendaFechaFin}`
+                            : selectedDate
+                        }
+                      </CardTitle>
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded-lg border border-green-200">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <span className="text-sm font-medium text-green-700">
+                          Tasa de Entrega Total: <span className="font-semibold">{calculateTotalDeliveryRateTiendas()}%</span>
+                        </span>
+                      </div>
+                    </div>
                   </CardHeader>
                   <CardContent>
                           <Table>
