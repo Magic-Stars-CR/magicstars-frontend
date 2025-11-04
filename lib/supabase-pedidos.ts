@@ -2169,7 +2169,7 @@ export const createPedidoPreconfirmacion = async (
 
     // Solo incluir campos que existen en la tabla pedidos_preconfirmacion
     // Excluir campos que no están en esta tabla: estado_pedido, fecha_entrega, comprobante_sinpe, efectivo_2_pagos, sinpe_2_pagos
-    const nuevo: Partial<PedidoTest> & { confirmado?: boolean } = {
+    const nuevo: Partial<PedidoTest> & { confirmado?: boolean; tipo_envio?: string | null } = {
       id_pedido,
       fecha_creacion,
       cliente_nombre: input.cliente_nombre || '',
