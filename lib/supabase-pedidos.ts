@@ -2158,6 +2158,7 @@ export const createPedidoPreconfirmacion = async (
     tienda: string;
     usuario?: string;
     confirmado?: boolean;
+    tipo_envio?: string | null;
   }
 ): Promise<{ success: boolean; pedido?: PedidoTest; error?: string }> => {
   try {
