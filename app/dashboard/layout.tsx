@@ -17,24 +17,12 @@ export default function DashboardLayout({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    console.log('🔍 Dashboard Layout - Estado actual:', { 
-      user: user ? `${user.name} (${user.role})` : 'null', 
-      loading,
-      shouldRedirect: !loading && !user,
-      timestamp: new Date().toISOString()
-    });
     if (!loading && !user) {
-      console.log('🔄 No hay usuario, redirigiendo a login');
       router.push('/auth/login');
     }
   }, [user, loading, router]);
 
   if (loading) {
-    console.log('⏳ Dashboard Layout - Mostrando loading...', { 
-      loading, 
-      user: user ? 'presente' : 'ausente',
-      timestamp: new Date().toISOString()
-    });
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin" />
@@ -43,11 +31,8 @@ export default function DashboardLayout({
   }
 
   if (!user) {
-    console.log('❌ Dashboard Layout - No hay usuario, no renderizando contenido');
     return null;
   }
-
-  console.log('✅ Dashboard Layout - Renderizando dashboard para usuario:', user.name, 'rol:', user.role, 'timestamp:', new Date().toISOString());
 
   return (
     <div className="flex h-screen bg-gray-50/30 overflow-hidden">

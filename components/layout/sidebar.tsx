@@ -23,6 +23,7 @@ import {
   Network,
   DollarSign,
   Route,
+  ScanLine,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -41,7 +42,7 @@ const menuItems = {
   ],
   asesor: [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/asesor' },
-    { icon: Package, label: 'Pedidos', href: '/dashboard/asesor/orders' },
+    { icon: Package, label: 'Pedidos Sin Confirmar', href: '/dashboard/asesor/pedidos-sin-confirmar' },
     { icon: Warehouse, label: 'Inventario', href: '/dashboard/asesor/inventory' },
                     { icon: Network, label: 'Logística Externa', href: '/dashboard/asesor/red-logistic' },
     { icon: BarChart3, label: 'Estadísticas', href: '/dashboard/asesor/stats' },
@@ -51,7 +52,7 @@ const menuItems = {
     { icon: LayoutDashboard, label: 'Mis Pedidos', href: '/dashboard/mensajero' },
     { icon: Truck, label: 'Historial de Rutas', href: '/dashboard/mensajero/route-history' },
     { icon: User, label: 'Mi Perfil', href: '/dashboard/mensajero/profile' },
-  ],
+  ] as any[],
   tienda: [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/tienda' },
     { icon: Package, label: 'Pedidos', href: '/dashboard/tienda/orders' },
@@ -99,22 +100,22 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
   let userMenuItems = menuItems[user.role] || [];
   
   // Si es el líder de mensajeros, agregar la opción de ver todas las rutas
-  console.log('🔍 Verificando usuario en sidebar:', {
-    name: user.name,
-    role: user.role,
-    isMessengerLeader: user.isMessengerLeader,
-    email: user.email
-  });
-  
   if (user.role === 'mensajero' && user.isMessengerLeader) {
-    console.log('✅ Usuario es líder de mensajeros, agregando opción de rutas');
     userMenuItems = [
       ...userMenuItems.slice(0, 1), // Mantener "Mi Ruta de Hoy"
       { icon: Truck, label: 'Rutas de Mensajeros', href: '/dashboard/mensajero/rutas-mensajeros' },
       ...userMenuItems.slice(1), // Resto del menú
     ];
-  } else {
-    console.log('❌ Usuario no es líder de mensajeros');
+  }
+
+  // Agregar botón de escaneo para mensajeros
+  if (user.role === 'mensajero') {
+    const messengerName = user.name || '';
+    const escaneoUrl = `https://inventario-magic-stars.vercel.app/?mensajero=${encodeURIComponent(messengerName)}`;
+    userMenuItems = [
+      ...userMenuItems,
+      { icon: ScanLine, label: 'Escaneo', href: escaneoUrl, isExternal: true },
+    ];
   }
 
   const SidebarContent = () => (
@@ -147,7 +148,39 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
         {userMenuItems.map((item, index) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
+          const isExternal = (item as any).isExternal || false;
           
+          const content = (
+            <>
+              <Icon className="w-4 h-4 flex-shrink-0" />
+              <span className="font-medium text-xs truncate">{item.label}</span>
+              {isActive && (
+                <div className="ml-auto w-1.5 h-1.5 bg-white rounded-full flex-shrink-0" />
+              )}
+            </>
+          );
+
+          if (isExternal) {
+            return (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setIsOpen(false)}
+                className={cn(
+                  "flex items-center gap-2 px-2 py-2 rounded-lg transition-all duration-200 min-h-[36px]",
+                  "hover:bg-accent hover:text-accent-foreground active:bg-accent/80"
+                )}
+                role="menuitem"
+                tabIndex={0}
+                aria-label={item.label}
+              >
+                {content}
+              </a>
+            );
+          }
+
           return (
             <Link
               key={item.href}
@@ -164,11 +197,7 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
               aria-current={isActive ? "page" : undefined}
               aria-label={`${item.label}${isActive ? ' (página actual)' : ''}`}
             >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              <span className="font-medium text-xs truncate">{item.label}</span>
-              {isActive && (
-                <div className="ml-auto w-1.5 h-1.5 bg-white rounded-full flex-shrink-0" />
-              )}
+              {content}
             </Link>
           );
         })}
