@@ -24,6 +24,7 @@ export const API_ENDPOINTS = {
   // Gestión de Pedidos
   ORDERS: {
     UPDATE_PEDIDO: '/webhook/actualizar-pedido',
+    ADD_EDIT_CONFIRM_PEDIDO_ASESOR: '/webhook/add-edit-confirm-pedido-asesor',
   },
   
   // Liquidaciones
@@ -61,6 +62,7 @@ export const API_URLS = {
   
   // Pedidos
   UPDATE_PEDIDO: buildApiUrl(API_ENDPOINTS.ORDERS.UPDATE_PEDIDO),
+  ADD_EDIT_CONFIRM_PEDIDO_ASESOR: buildApiUrl(API_ENDPOINTS.ORDERS.ADD_EDIT_CONFIRM_PEDIDO_ASESOR),
   
   // Liquidaciones
   ADD_LIQUIDACION: buildApiUrl(API_ENDPOINTS.LIQUIDATIONS.ADD_LIQUIDACION),

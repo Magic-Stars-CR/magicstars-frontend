@@ -107,6 +107,7 @@ export interface Order {
   deliveryMethod?: DeliveryMethod;
   createdAt: string;
   updatedAt: string;
+  fecha_creacion?: string;
   scheduledDate?: string;
   deliveryDate?: string;
   
@@ -130,6 +131,9 @@ export interface Order {
   company?: Company;
   routeSchedule?: string; // JORNADA DE RUTA del CSV
   routeOrder?: number; // Número de orden en la ruta del día (1-30)
+  
+  // Estado de confirmación
+  confirmado?: boolean | null;
 }
 
 export interface Stats {
@@ -650,6 +654,8 @@ export interface PedidoTest {
   sinpe_2_pagos: string | null;
   mensajero_asignado: string | null;
   mensajero_concretado: string | null;
+  confirmado: boolean | null;
+  tipo_envio?: string | null; // CONTRAENTREGA o RED LOGISTIC
 }
 
 // Interfaz para liquidación por tienda

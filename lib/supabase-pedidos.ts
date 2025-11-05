@@ -2188,13 +2188,12 @@ export const createPedidoPreconfirmacion = async (
       mensajero_asignado: input.mensajero_asignado || null,
       mensajero_concretado: input.mensajero_concretado || null,
       confirmado: typeof input.confirmado === 'boolean' ? input.confirmado : false,
-      tipo_envio: input.tipo_envio || null,
       // NO incluir estos campos que no existen en pedidos_preconfirmacion:
-      // estado_pedido, fecha_entrega, metodo_pago, notas, comprobante_sinpe, efectivo_2_pagos, sinpe_2_pagos
+      // estado_pedido, fecha_entrega, metodo_pago, notas, tipo_envio, comprobante_sinpe, efectivo_2_pagos, sinpe_2_pagos
     };
 
     // Filtrar explícitamente campos no permitidos antes del insert
-    const { estado_pedido, fecha_entrega, metodo_pago, notas, comprobante_sinpe, efectivo_2_pagos, sinpe_2_pagos, ...camposPermitidos } = nuevo as any;
+    const { estado_pedido, fecha_entrega, metodo_pago, notas, tipo_envio, comprobante_sinpe, efectivo_2_pagos, sinpe_2_pagos, ...camposPermitidos } = nuevo as any;
 
     const { data, error } = await supabasePedidos
       .from('pedidos_preconfirmacion')
