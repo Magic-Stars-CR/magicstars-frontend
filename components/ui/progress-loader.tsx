@@ -161,12 +161,10 @@ export const useProgressLoader = () => {
   const [overallProgress, setOverallProgress] = React.useState<number | undefined>();
 
   const startLoader = (title: string, initialSteps: LoaderStep[]) => {
-    console.log('🚀 Iniciando loader con pasos:', initialSteps);
     setSteps(initialSteps);
     setCurrentStep(undefined);
     setOverallProgress(undefined);
     setIsVisible(true);
-    console.log('✅ Loader iniciado, isVisible:', true);
   };
 
   const updateStep = (stepId: string, updates: Partial<LoaderStep>) => {
@@ -176,7 +174,6 @@ export const useProgressLoader = () => {
   };
 
   const setStepStatus = (stepId: string, status: LoaderStep['status'], description?: string) => {
-    console.log(`🔄 Actualizando paso ${stepId} a estado ${status}`);
     updateStep(stepId, { status, description });
     if (status === 'loading') {
       setCurrentStep(stepId);
@@ -186,12 +183,10 @@ export const useProgressLoader = () => {
   };
 
   const setProgress = (progress: number) => {
-    console.log(`📊 Estableciendo progreso: ${progress}%`);
     setOverallProgress(progress);
   };
 
   const closeLoader = () => {
-    console.log('🔚 Cerrando loader');
     setIsVisible(false);
     setCurrentStep(undefined);
     setOverallProgress(undefined);

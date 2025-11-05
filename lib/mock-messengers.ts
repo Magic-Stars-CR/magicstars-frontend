@@ -426,7 +426,7 @@ export const mockMessengers: User[] = [
     createdAt: '2024-01-15T08:00:00Z',
   },
   {
-    id: 'msg-020',
+    id: 'msg-020-victor',
     email: 'victor@magicstars.com',
     name: 'Víctor',
     role: 'mensajero',
@@ -446,7 +446,7 @@ export const mockMessengers: User[] = [
     createdAt: '2024-01-15T08:00:00Z',
   },
   {
-    id: 'msg-021',
+    id: 'msg-021-anibal',
     email: 'anibal@magicstars.com',
     name: 'Anibal',
     role: 'mensajero',
@@ -810,7 +810,7 @@ export const mockMessengers: User[] = [
   },
   // Nuevos usuarios añadidos
   {
-    id: 'msg-020',
+    id: 'msg-020-jeank',
     email: 'jeank@magicstars.com',
     name: 'JeanK',
     role: 'mensajero',
@@ -830,7 +830,7 @@ export const mockMessengers: User[] = [
     createdAt: '2024-12-19T08:00:00Z',
   },
   {
-    id: 'msg-021',
+    id: 'msg-021-cristopher',
     email: 'cristopher@magicstars.com',
     name: 'Cristopher',
     role: 'mensajero',
@@ -998,21 +998,14 @@ export const mockLogin = async (emailOrName: string, password: string): Promise<
   // Simular delay de red
   await new Promise(resolve => setTimeout(resolve, 1000));
   
-  console.log('=== INICIO DE AUTENTICACIÓN ===');
-  console.log('Email o nombre recibido:', emailOrName);
-  console.log('Contraseña recibida:', password ? 'Sí' : 'No');
-  
   // Combinar usuarios de mock-messengers y mock-api
   const allUsers = [...mockMessengers, ...mockUsers];
-  console.log('Total de usuarios disponibles:', allUsers.length);
   
   // Filtrar usuarios demo (ocultos por defecto)
   const visibleUsers = allUsers.filter(u => 
     !u.email.toLowerCase().includes('demo') && 
     !u.name.toLowerCase().includes('demo')
   );
-  
-  console.log('Usuarios visibles (sin demo):', visibleUsers.length);
   
   // Buscar usuario por email, nombre o nombre de tienda (insensible a mayúsculas)
   const user = visibleUsers.find(u => 
@@ -1021,31 +1014,13 @@ export const mockLogin = async (emailOrName: string, password: string): Promise<
     (u.tiendaName && u.tiendaName.toLowerCase() === emailOrName.toLowerCase())
   );
   
-  console.log('Usuario encontrado:', user ? 'Sí' : 'No');
-  if (user) {
-    console.log('Detalles del usuario encontrado:');
-    console.log('- ID:', user.id);
-    console.log('- Nombre:', user.name);
-    console.log('- Email:', user.email);
-    console.log('- Rol:', user.role);
-    console.log('- Tienda:', user.tiendaName || 'N/A');
-    console.log('- Activo:', user.isActive);
-  }
-  
-  // Los usuarios demo están ocultos definitivamente
-  
   // Aceptar cualquier contraseña no vacía para simplificar el testing
   if (user && password && password.trim() !== '') {
-    console.log('✅ Login exitoso para:', user.name, 'con rol:', user.role);
     // Simular token de autenticación
     localStorage.setItem('magicstars_token', 'mock_token_' + user.id);
-    console.log('Token guardado:', 'mock_token_' + user.id);
-    console.log('=== FIN DE AUTENTICACIÓN EXITOSA ===');
     return user;
   }
   
-  console.log('❌ Login fallido - usuario no encontrado o contraseña vacía');
-  console.log('=== FIN DE AUTENTICACIÓN FALLIDA ===');
   return null;
 };
 
@@ -1061,26 +1036,12 @@ export const mockGetUserByToken = async (token: string): Promise<User | null> =>
   // Simular delay de red
   await new Promise(resolve => setTimeout(resolve, 500));
   
-  console.log('=== VERIFICACIÓN DE TOKEN ===');
-  console.log('Token recibido:', token);
-  
   // Extraer ID del token simulado
   const userId = token.replace('mock_token_', '');
-  console.log('ID extraído del token:', userId);
   
   // Combinar usuarios de mock-messengers y mock-api
   const allUsers = [...mockMessengers, ...mockUsers];
   const user = allUsers.find(u => u.id === userId);
-  console.log('Usuario encontrado por token:', user ? 'Sí' : 'No');
   
-  if (user) {
-    console.log('Detalles del usuario restaurado:');
-    console.log('- ID:', user.id);
-    console.log('- Nombre:', user.name);
-    console.log('- Email:', user.email);
-    console.log('- Rol:', user.role);
-  }
-  
-  console.log('=== FIN DE VERIFICACIÓN DE TOKEN ===');
   return user || null;
 };

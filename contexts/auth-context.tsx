@@ -19,46 +19,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const isHydrated = useHydration();
 
-  // Debug: Monitorear cambios en el estado del usuario
   useEffect(() => {
-    console.log('🔄 Estado del usuario cambió:', user ? `${user.name} (${user.role})` : 'null', 'timestamp:', new Date().toISOString());
-  }, [user]);
-
-  useEffect(() => {
-    console.log('🔄 AuthContext useEffect - isHydrated:', isHydrated, 'timestamp:', new Date().toISOString());
     // Solo ejecutar después de la hidratación
     if (!isHydrated) {
-      console.log('⏳ Esperando hidratación...');
       return;
     }
     
     // Verificar si hay una sesión guardada
     const checkStoredSession = async () => {
-      console.log('🔍 Verificando sesión guardada...');
       const storedToken = localStorage.getItem('magicstars_token');
       const storedUser = localStorage.getItem('magicstars_user');
-      
-      console.log('Token guardado:', storedToken ? 'Sí' : 'No');
-      console.log('Usuario guardado:', storedUser ? 'Sí' : 'No');
       
       if (storedToken && storedUser) {
         const userData = JSON.parse(storedUser);
         const isValidToken = await mockGetUserByToken(storedToken);
         
-        console.log('Token válido:', isValidToken ? 'Sí' : 'No');
-        
         if (isValidToken) {
-          console.log('✅ Restaurando usuario:', userData);
           setUser(userData);
         } else {
-          console.log('❌ Token inválido, limpiando storage');
           // Token inválido, limpiar storage
           localStorage.removeItem('magicstars_token');
           localStorage.removeItem('magicstars_user');
         }
       }
       
-      console.log('🏁 Finalizando verificación de sesión');
       setLoading(false);
     };
 
@@ -67,10 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (emailOrName: string, password: string) => {
     try {
-      console.log('🔐 Intentando login con:', emailOrName, 'timestamp:', new Date().toISOString());
       setLoading(true);
       const user = await mockLogin(emailOrName, password);
-      console.log('✅ Login exitoso, usuario:', user);
       
       if (user) {
         // Solo guardar en localStorage si estamos en el cliente
@@ -80,16 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         
         setUser(user);
-        console.log('👤 Usuario establecido en contexto:', user);
-        console.log('🔄 Estado del usuario después de setUser:', user);
         
         // Esperar un poco para que el estado se actualice
         setTimeout(() => {
           setLoading(false);
-          console.log('🏁 Loading establecido a false después del login', 'timestamp:', new Date().toISOString());
         }, 50);
         
-        return user; // Devolver el usuario para la redirección
+        return user;
       } else {
         setLoading(false);
         throw new Error('Credenciales inválidas');
@@ -121,14 +100,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     loading: finalLoading
   };
-
-  console.log('🔍 AuthContext Provider - Valor actual:', {
-    user: user ? `${user.name} (${user.role})` : 'null',
-    loading,
-    isHydrated,
-    finalLoading,
-    timestamp: new Date().toISOString()
-  });
 
   return (
     <AuthContext.Provider value={contextValue}>

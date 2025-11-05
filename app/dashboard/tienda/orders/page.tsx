@@ -126,7 +126,8 @@ export default function TiendaOrdersPage() {
     efectivo_2_pagos: null,
     sinpe_2_pagos: null,
     mensajero_asignado: null,
-    mensajero_concretado: null
+    mensajero_concretado: null,
+    confirmado: false
   });
 
   // Estados para confirmación/eliminación
@@ -192,7 +193,8 @@ export default function TiendaOrdersPage() {
       efectivo_2_pagos: null,
       sinpe_2_pagos: null,
       mensajero_asignado: null,
-      mensajero_concretado: null
+      mensajero_concretado: null,
+      confirmado: false
     });
     setIsCreateModalOpen(true);
   };
@@ -238,7 +240,8 @@ export default function TiendaOrdersPage() {
         efectivo_2_pagos: null,
         sinpe_2_pagos: null,
         mensajero_asignado: null,
-        mensajero_concretado: null
+        mensajero_concretado: null,
+        confirmado: false
       });
     }
   };
