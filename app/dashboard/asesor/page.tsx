@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,7 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
 import { mockApi } from '@/lib/mock-api';
-import { getPedidosDelDiaByTienda, getPedidosCountByTienda, getTotalPedidosCount, getPedidosByDateRange, getPedidosByMonth, getAllPedidosByTienda } from '@/lib/supabase-pedidos';
+
 import { Order, Stats } from '@/lib/types';
 import { useAuth } from '@/contexts/auth-context';
 import { mockMessengers } from '@/lib/mock-messengers';
@@ -53,9 +53,19 @@ import {
   Square,
   MoreHorizontal,
   Copy,
-  Clipboard
+  Clipboard,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { StatsCard } from '@/components/dashboard/stats-card';
+import { ProductosSelector } from '@/components/dashboard/productos-selector';
+import { ProductoInventario, obtenerTodosProductosALLSTARS } from '@/lib/supabase-inventario';
+import { getProvincias, getCantones, getDistritos, getTipoEnvio } from '@/lib/zonas';
+import { createPedidoPreconfirmacion, updatePedidoPreconfirmacion, getPedidosDelDiaByTiendaPreconfirmacion, getAllPedidosByTiendaPreconfirmacion, getPedidosCountByTiendaPreconfirmacion, getTotalPedidosPreconfirmacionCount } from '@/lib/supabase-pedidos';
+import { API_URLS } from '@/lib/config';
+import { useToast } from '@/hooks/use-toast';
+import { DialogDescription } from '@/components/ui/dialog';
+import { PedidoForm, type PedidoFormData } from '@/components/dashboard/pedido-form';
 
 // Interfaces para datos de gráficos
 interface PaymentMethodData {
@@ -72,6 +82,7 @@ interface StatusData {
 
 export default function AsesorDashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -93,6 +104,7 @@ export default function AsesorDashboard() {
   const [isDateRangePickerOpen, setIsDateRangePickerOpen] = useState(false);
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
   const [selectedMessenger, setSelectedMessenger] = useState<string>('all');
+  const [selectedConfirmation, setSelectedConfirmation] = useState<string>('all'); // 'all', 'confirmed', 'unconfirmed'
   
   // Conteos de registros
   const [totalRecords, setTotalRecords] = useState<number>(0);
@@ -106,6 +118,52 @@ export default function AsesorDashboard() {
   const [bulkEditField, setBulkEditField] = useState<string>('');
   const [bulkEditValue, setBulkEditValue] = useState<string>('');
   const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  
+  // Estados para paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  
+  // Edición individual de pedido
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [viewMode, setViewMode] = useState<'view' | 'confirm'>('view'); // 'view' o 'confirm'
+  const [orderToEdit, setOrderToEdit] = useState<Order | null>(null);
+  const [orderToView, setOrderToView] = useState<Order | null>(null);
+  const [editData, setEditData] = useState<{ confirmado: 'true' | 'false'; nota_asesor: string; numero_sinpe: string } | null>(null);
+  // Crear pedido
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [productosSeleccionados, setProductosSeleccionados] = useState<{ nombre: string; stock: number; cantidad: number }[]>([]);
+  const [productosSeleccionadosEdit, setProductosSeleccionadosEdit] = useState<{ nombre: string; stock: number; cantidad: number }[]>([]);
+  const [productosDisponibles, setProductosDisponibles] = useState<ProductoInventario[]>([]);
+  const [newOrder, setNewOrder] = useState({
+    cliente_nombre: '',
+    cliente_telefono: '',
+    direccion: '',
+    provincia: '',
+    canton: '',
+    distrito: '',
+    valor_total: '',
+    productos: '',
+    link_ubicacion: '',
+    nota_asesor: '',
+    confirmado: 'false',
+    tipo_envio: '',
+  } as any);
+  const [editOrder, setEditOrder] = useState({
+    cliente_nombre: '',
+    cliente_telefono: '',
+    direccion: '',
+    provincia: '',
+    canton: '',
+    distrito: '',
+    valor_total: '',
+    productos: '',
+    link_ubicacion: '',
+    nota_asesor: '',
+    confirmado: 'false',
+    tipo_envio: '',
+  } as any);
 
   // Obtener mensajeros del mock-messengers
   const availableMessengers = mockMessengers.filter(user => user.role === 'mensajero');
@@ -120,16 +178,6 @@ export default function AsesorDashboard() {
     { id: '6', name: 'Roberto Vega', store: 'ALL STARS', email: 'roberto@allstars.com' },
   ];
 
-  useEffect(() => {
-    if (user) {
-      loadData();
-    }
-  }, [user, dateFilter, selectedDate, selectedDateRange, selectedMonth]);
-
-  useEffect(() => {
-    filterOrders();
-  }, [orders, searchTerm, selectedStore, selectedMessenger]);
-
   // Función para determinar la tienda del asesor basada en su email
   const getAsesorTienda = (email: string): string => {
     if (email.includes('allstars')) return 'ALL STARS';
@@ -140,8 +188,7 @@ export default function AsesorDashboard() {
   // Función helper para obtener la fecha actual en zona horaria de Costa Rica
   const getCostaRicaDate = () => {
     const now = new Date();
-    // Costa Rica está en GMT-6 (UTC-6)
-    const costaRicaOffset = -6 * 60; // -6 horas en minutos
+    const costaRicaOffset = -6 * 60;
     const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
     const costaRicaTime = new Date(utc + (costaRicaOffset * 60000));
     return costaRicaTime;
@@ -156,6 +203,62 @@ export default function AsesorDashboard() {
     const isoDate = `${year}-${month}-${day}`;
     return isoDate;
   };
+
+  // Cargar productos disponibles
+  useEffect(() => {
+    const loadProductos = async () => {
+      try {
+        const productos = await obtenerTodosProductosALLSTARS();
+        setProductosDisponibles(productos);
+      } catch (error) {
+        console.error('Error al cargar productos:', error);
+      }
+    };
+    loadProductos();
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      loadData();
+    }
+  }, [user, dateFilter, selectedDate, selectedDateRange, selectedMonth]);
+
+  useEffect(() => {
+    let filtered = orders;
+
+    // Filtrar por término de búsqueda
+    if (searchTerm) {
+      filtered = filtered.filter(order => 
+        order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.customerPhone?.includes(searchTerm) ||
+        order.customerAddress?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Filtrar por tienda (solo la tienda del asesor)
+    if (selectedStore !== 'all' && asesorTienda) {
+      filtered = filtered.filter(order => order.tienda === selectedStore);
+    }
+
+    // Filtrar por mensajero
+    if (selectedMessenger !== 'all') {
+      filtered = filtered.filter(order => 
+        order.assignedMessenger?.name?.toLowerCase().includes(selectedMessenger.toLowerCase())
+      );
+    }
+
+    // Filtrar por estado de confirmación
+    if (selectedConfirmation === 'confirmed') {
+      filtered = filtered.filter(order => (order as any).confirmado === true);
+    } else if (selectedConfirmation === 'unconfirmed') {
+      filtered = filtered.filter(order => !(order as any).confirmado || (order as any).confirmado === false);
+    }
+
+    setFilteredOrders(filtered);
+    setFilteredRecords(filtered.length);
+    setCurrentPage(1); // Reset paginación cuando cambian los filtros
+  }, [orders, searchTerm, selectedStore, selectedMessenger, selectedConfirmation, asesorTienda]);
 
   const loadData = async () => {
     console.log('🔍 Cargando datos para asesor:', user);
@@ -220,38 +323,48 @@ export default function AsesorDashboard() {
         }
       }
 
-      // Obtener conteos de registros
-      console.log('🔢 Obteniendo conteos de registros...');
+      // Obtener conteos de registros de pedidos_preconfirmacion
+      console.log('🔢 Obteniendo conteos de registros de pedidos_preconfirmacion...');
       const [totalCount, filteredCount] = await Promise.all([
-        getTotalPedidosCount(),
-        getPedidosCountByTienda(asesorTienda, targetDateISO || undefined)
+        getTotalPedidosPreconfirmacionCount(),
+        getPedidosCountByTiendaPreconfirmacion(asesorTienda, targetDateISO || undefined)
       ]);
       
       setTotalRecords(totalCount);
       setFilteredRecords(filteredCount);
       
-      console.log(`📊 Total de registros en BD: ${totalCount}`);
+      console.log(`📊 Total de registros en BD (preconfirmacion): ${totalCount}`);
       console.log(`📊 Registros filtrados (${asesorTienda}, ${targetDateISO}): ${filteredCount}`);
 
-      // Obtener pedidos de Supabase filtrados por tienda y fecha
-      console.log('🔍 Buscando pedidos para tienda:', asesorTienda, 'fecha:', targetDateISO);
-      let ordersRes;
+      // Obtener pedidos de pedidos_preconfirmacion filtrados por tienda y fecha
+      console.log('🔍 [PRECONFIRMACION] Buscando pedidos para tienda:', asesorTienda, 'fecha:', targetDateISO);
+      let ordersRes: any[] = [];
       
       if (targetDateISO) {
         // Filtro por fecha específica
-        ordersRes = await getPedidosDelDiaByTienda(asesorTienda, targetDateISO);
+        ordersRes = await getPedidosDelDiaByTiendaPreconfirmacion(asesorTienda, targetDateISO);
       } else if (selectedDateRange.from && selectedDateRange.to) {
-        // Filtro por rango de fechas
-        ordersRes = await getPedidosByDateRange(asesorTienda, selectedDateRange.from, selectedDateRange.to);
+        // Filtro por rango de fechas - obtener todos y filtrar manualmente
+        const allOrders = await getAllPedidosByTiendaPreconfirmacion(asesorTienda);
+        const fromDate = selectedDateRange.from.toISOString().split('T')[0];
+        const toDate = selectedDateRange.to.toISOString().split('T')[0];
+        ordersRes = allOrders.filter((pedido: any) => {
+          const fechaPedido = pedido.fecha_creacion?.split('T')[0] || pedido.fecha_creacion;
+          return fechaPedido >= fromDate && fechaPedido <= toDate;
+        });
       } else if (selectedMonth) {
-        // Filtro por mes
-        ordersRes = await getPedidosByMonth(asesorTienda, selectedMonth);
+        // Filtro por mes - obtener todos y filtrar manualmente
+        const allOrders = await getAllPedidosByTiendaPreconfirmacion(asesorTienda);
+        ordersRes = allOrders.filter((pedido: any) => {
+          const fechaPedido = pedido.fecha_creacion?.split('T')[0] || pedido.fecha_creacion;
+          return fechaPedido?.startsWith(selectedMonth);
+        });
       } else {
         // Mostrar todos los pedidos
-        ordersRes = await getAllPedidosByTienda(asesorTienda);
+        ordersRes = await getAllPedidosByTiendaPreconfirmacion(asesorTienda);
       }
       
-      console.log('✅ Pedidos obtenidos de Supabase:', ordersRes.length);
+      console.log('✅ [PRECONFIRMACION] Pedidos obtenidos:', ordersRes.length);
       console.log('📋 Primeros pedidos:', ordersRes.slice(0, 3));
       
       // Obtener estadísticas mock
@@ -260,87 +373,69 @@ export default function AsesorDashboard() {
       console.log('✅ Datos obtenidos:', { orders: ordersRes.length, stats: statsRes });
       
       // Asignar mensajeros y asesor a los pedidos
-      const ordersWithStoreAndMessenger = ordersRes.map((pedido, index) => ({
-        id: pedido.id_pedido,
-        customerName: pedido.cliente_nombre,
-        customerPhone: pedido.cliente_telefono,
-        customerAddress: pedido.direccion,
-        customerProvince: pedido.provincia,
-        customerCanton: pedido.canton,
-        customerDistrict: pedido.distrito,
-        totalAmount: pedido.valor_total,
-        productos: pedido.productos,
-        status: pedido.estado_pedido as any || 'pendiente',
-        paymentMethod: pedido.metodo_pago as any || 'efectivo',
-        origin: 'shopify' as any,
-        deliveryMethod: 'mensajeria_propia' as any,
-        createdAt: pedido.fecha_creacion,
-        updatedAt: pedido.fecha_creacion,
-        scheduledDate: pedido.fecha_entrega || undefined,
-        deliveryDate: pedido.fecha_entrega || undefined,
-        customerLocationLink: pedido.link_ubicacion || undefined,
-        notes: pedido.notas || undefined,
-        asesorNotes: pedido.nota_asesor || undefined,
-        numero_sinpe: pedido.numero_sinpe || undefined,
-        tienda: asesorTienda,
-        assignedMessenger: availableMessengers[index % availableMessengers.length],
-        asesor: asesores.find(a => a.store === asesorTienda) || asesores[0],
-        items: [], // Array vacío para compatibilidad con Order interface
-      }));
+      const ordersWithStoreAndMessenger = ordersRes.map((pedido: any, index: number) => {
+        const order = {
+          id: pedido.id_pedido,
+          customerName: pedido.cliente_nombre,
+          customerPhone: pedido.cliente_telefono,
+          customerAddress: pedido.direccion,
+          customerProvince: pedido.provincia || '',
+          customerCanton: pedido.canton || '',
+          customerDistrict: pedido.distrito || '',
+          totalAmount: pedido.valor_total,
+          productos: pedido.productos || '',
+          status: 'pendiente' as any, // Los pedidos preconfirmación no tienen estado_pedido
+          paymentMethod: 'efectivo' as any, // Los pedidos preconfirmación no tienen metodo_pago
+          origin: 'preconfirmacion' as any,
+          deliveryMethod: pedido.tipo_envio === 'RED LOGISTIC' ? 'red_logistic' : 'mensajeria_propia' as any,
+          createdAt: pedido.fecha_creacion,
+          updatedAt: pedido.fecha_creacion,
+          scheduledDate: undefined,
+          deliveryDate: undefined,
+          customerLocationLink: pedido.link_ubicacion || undefined,
+          notes: undefined,
+          asesorNotes: pedido.nota_asesor || undefined,
+          numero_sinpe: pedido.numero_sinpe || undefined,
+          confirmado: pedido.confirmado || false,
+          fecha_creacion: pedido.fecha_creacion,
+          link_ubicacion: pedido.link_ubicacion || undefined,
+          tipo_envio: pedido.tipo_envio || undefined,
+          tienda: asesorTienda,
+          assignedMessenger: availableMessengers[index % availableMessengers.length],
+          asesor: asesores.find(a => a.store === asesorTienda) || asesores[0],
+          items: [], // Array vacío para compatibilidad con Order interface
+          // Mantener también los campos originales para acceso directo
+          provincia: pedido.provincia || '',
+          canton: pedido.canton || '',
+          distrito: pedido.distrito || '',
+        } as any;
+        
+        // Log para debugging
+        if (!pedido.provincia || !pedido.productos) {
+          console.log('⚠️ [DATA LOAD] Pedido sin provincia o productos:', {
+            id: pedido.id_pedido,
+            provincia: pedido.provincia,
+            productos: pedido.productos,
+            pedidoCompleto: pedido
+          });
+        }
+        
+        return order;
+      });
 
-      // Ordenar por ubicación (provincia, cantón, distrito) y estado
-      const sortedOrders = ordersWithStoreAndMessenger.sort((a, b) => {
-        // Función helper para normalizar texto
-        const normalizeText = (text: string) => {
-          return text
-            .toLowerCase()
-            .trim()
-            .replace(/[áàäâ]/g, 'a')
-            .replace(/[éèëê]/g, 'e')
-            .replace(/[íìïî]/g, 'i')
-            .replace(/[óòöô]/g, 'o')
-            .replace(/[úùüû]/g, 'u')
-            .replace(/ñ/g, 'n');
-        };
+      // Ordenar por fecha de creación (más reciente primero)
+      const sortedOrders = ordersWithStoreAndMessenger.sort((a: any, b: any) => {
+        // Ordenar por fecha de creación (más reciente primero)
+        const fechaA = new Date(a.fecha_creacion || a.createdAt || 0).getTime();
+        const fechaB = new Date(b.fecha_creacion || b.createdAt || 0).getTime();
         
-        // Primero por provincia
-        const provinciaA = normalizeText(a.customerProvince || 'zzz sin provincia');
-        const provinciaB = normalizeText(b.customerProvince || 'zzz sin provincia');
-        const provinciaCompare = provinciaA.localeCompare(provinciaB, 'es-CR');
-        
-        if (provinciaCompare !== 0) {
-          return provinciaCompare;
+        // Si las fechas son diferentes, ordenar por fecha descendente (más reciente primero)
+        if (fechaA !== fechaB) {
+          return fechaB - fechaA; // Descendente
         }
         
-        // Luego por cantón
-        const cantonA = normalizeText(a.customerCanton || 'zzz sin canton');
-        const cantonB = normalizeText(b.customerCanton || 'zzz sin canton');
-        const cantonCompare = cantonA.localeCompare(cantonB, 'es-CR');
-        
-        if (cantonCompare !== 0) {
-          return cantonCompare;
-        }
-        
-        // Después por distrito
-        const distritoA = normalizeText(a.customerDistrict || 'zzz sin distrito');
-        const distritoB = normalizeText(b.customerDistrict || 'zzz sin distrito');
-        const distritoCompare = distritoA.localeCompare(distritoB, 'es-CR');
-        
-        if (distritoCompare !== 0) {
-          return distritoCompare;
-        }
-        
-        // Finalmente por estado (pendientes primero)
-        const statusOrder = { 'pendiente': 0, 'en_ruta': 1, 'entregado': 2, 'reagendado': 3, 'devolucion': 4 };
-        const statusA = statusOrder[a.status as keyof typeof statusOrder] || 5;
-        const statusB = statusOrder[b.status as keyof typeof statusOrder] || 5;
-        
-        if (statusA !== statusB) {
-          return statusA - statusB;
-        }
-        
-        // Por último por ID
-        return a.id.localeCompare(b.id, 'es-CR');
+        // Si las fechas son iguales, mantener el orden original o por ID
+        return (b.id || '').localeCompare(a.id || '');
       });
 
       setOrders(sortedOrders);
@@ -354,33 +449,21 @@ export default function AsesorDashboard() {
     }
   };
 
-  const filterOrders = () => {
-    let filtered = orders;
-
-    // Filtrar por término de búsqueda
-    if (searchTerm) {
-      filtered = filtered.filter(order => 
-        order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.customerPhone?.includes(searchTerm) ||
-        order.customerAddress?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    // Filtrar por tienda (solo la tienda del asesor)
-    if (selectedStore !== 'all' && asesorTienda) {
-      filtered = filtered.filter(order => order.tienda === selectedStore);
-    }
-
-    // Filtrar por mensajero
-    if (selectedMessenger !== 'all') {
-      filtered = filtered.filter(order => 
-        order.assignedMessenger?.name?.toLowerCase().includes(selectedMessenger.toLowerCase())
-      );
-    }
-
-    setFilteredOrders(filtered);
-    setFilteredRecords(filtered.length);
+  
+  // Calcular paginación
+  const paginatedOrders = useMemo(() => {
+    const itemsPerPage = 50;
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredOrders.slice(startIndex, endIndex);
+  }, [filteredOrders, currentPage]);
+  
+  const totalPages = Math.ceil(filteredOrders.length / 50);
+  
+  // Función para cambiar de página
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const formatCurrency = (amount: number) => {
@@ -621,6 +704,412 @@ export default function AsesorDashboard() {
     return editingOrders.size > 0;
   };
 
+  // Función helper para verificar si un campo existe y no es null/undefined
+  const has = (obj: any, key: string): boolean => {
+    return obj && obj.hasOwnProperty(key) && obj[key] !== null && obj[key] !== undefined;
+  };
+
+  // Función para enviar datos al webhook
+  const enviarAlWebhook = async (pedidoData: any, isEdit: boolean = false) => {
+    try {
+      const src = pedidoData;
+      const webhookData = {
+        id_pedido: has(src, 'id_pedido') ? src.id_pedido : null,
+        fecha_creacion: has(src, 'fecha_creacion') ? src.fecha_creacion : null,
+        cliente_nombre: has(src, 'cliente_nombre') ? src.cliente_nombre : null,
+        cliente_telefono: has(src, 'cliente_telefono') ? src.cliente_telefono : null,
+        direccion: has(src, 'direccion') ? src.direccion : null,
+        provincia: has(src, 'provincia') ? src.provincia : null,
+        canton: has(src, 'canton') ? src.canton : null,
+        distrito: has(src, 'distrito') ? src.distrito : null,
+        valor_total: has(src, 'valor_total') ? src.valor_total : null,
+        productos: has(src, 'productos') ? src.productos : null,
+        link_ubicacion: has(src, 'link_ubicacion') ? src.link_ubicacion : null,
+        nota_asesor: has(src, 'nota_asesor') ? src.nota_asesor : null,
+        confirmado: has(src, 'confirmado') ? src.confirmado : false,
+        usuario: has(src, 'usuario') ? src.usuario : (user?.name || user?.email || null),
+      };
+
+      console.log('📤 Enviando al webhook:', webhookData);
+
+      const response = await fetch(API_URLS.ADD_EDIT_CONFIRM_PEDIDO_ASESOR, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookData),
+      });
+
+      if (!response.ok) {
+        console.error('❌ Error al enviar al webhook:', response.statusText);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('❌ Error al enviar al webhook:', error);
+      return false;
+    }
+  };
+
+  // Función para abrir modal de confirmar
+  const handleConfirmOrder = (order: Order) => {
+    setOrderToView(order);
+    setViewMode('confirm');
+    setShowViewModal(true);
+  };
+
+  // Función para confirmar pedido
+  const confirmarPedido = async () => {
+    if (!orderToView) return;
+    
+    setIsConfirming(true);
+    try {
+      const updates = {
+        confirmado: true,
+      };
+      
+      const ok = await updatePedidoPreconfirmacion(orderToView.id, updates);
+      
+      if (ok) {
+        // Enviar al webhook
+        const pedidoActualizado = orders.find(o => o.id === orderToView.id);
+        if (pedidoActualizado) {
+          await enviarAlWebhook({
+            id_pedido: pedidoActualizado.id,
+            fecha_creacion: (pedidoActualizado as any).fecha_creacion || pedidoActualizado.createdAt,
+            cliente_nombre: pedidoActualizado.customerName,
+            cliente_telefono: pedidoActualizado.customerPhone,
+            direccion: pedidoActualizado.customerAddress,
+            provincia: pedidoActualizado.customerProvince,
+            canton: pedidoActualizado.customerCanton,
+            distrito: pedidoActualizado.customerDistrict,
+            valor_total: pedidoActualizado.totalAmount,
+            productos: (pedidoActualizado as any).productos,
+            link_ubicacion: (pedidoActualizado as any).link_ubicacion,
+            nota_asesor: (pedidoActualizado as any).nota_asesor || pedidoActualizado.asesorNotes,
+            confirmado: true,
+            usuario: user?.name || user?.email || null,
+          }, true);
+        }
+        
+        toast({
+          title: '✅ Pedido confirmado exitosamente',
+          description: `El pedido ${orderToView.id} ha sido confirmado`,
+          variant: 'default',
+        });
+        
+        setShowViewModal(false);
+        setOrderToView(null);
+        await loadData();
+      } else {
+        toast({
+          title: '❌ Error al confirmar pedido',
+          description: 'Ocurrió un error al confirmar el pedido',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error al confirmar pedido:', error);
+      toast({
+        title: '❌ Error al confirmar pedido',
+        description: 'Ocurrió un error al confirmar el pedido',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  // Función para parsear productos con stock del inventario
+  const parsearProductosConStock = (productosStr: string): { nombre: string; stock: number; cantidad: number }[] => {
+    const productosParsed: { nombre: string; stock: number; cantidad: number }[] = [];
+    if (productosStr && productosDisponibles.length > 0) {
+      const productosArray = productosStr.split(',').map((p: string) => p.trim());
+      productosArray.forEach((prod: string) => {
+        const match = prod.match(/(.+?)\s*x(\d+)/);
+        if (match) {
+          const nombreProducto = match[1].trim();
+          // Buscar el producto en productosDisponibles para obtener el stock real
+          const productoDisponible = productosDisponibles.find(p => 
+            p.producto.toLowerCase().trim() === nombreProducto.toLowerCase().trim()
+          );
+          productosParsed.push({
+            nombre: nombreProducto,
+            cantidad: parseInt(match[2]),
+            stock: productoDisponible?.cantidad || 0, // Obtener stock real del inventario (cantidad)
+          });
+        }
+      });
+    }
+    return productosParsed;
+  };
+
+  // Función para abrir modal de editar
+  const openEditModalFor = (order: Order) => {
+    console.log('🔍 [EDIT MODAL] Datos del pedido completo:', order);
+    console.log('🔍 [EDIT MODAL] customerProvince:', order.customerProvince);
+    console.log('🔍 [EDIT MODAL] customerCanton:', order.customerCanton);
+    console.log('🔍 [EDIT MODAL] customerDistrict:', order.customerDistrict);
+    console.log('🔍 [EDIT MODAL] productos:', (order as any).productos);
+    
+    setOrderToEdit(order);
+    
+    // Obtener datos directamente del objeto order y también de los campos originales
+    const orderData = order as any;
+    
+    // Obtener provincia, canton y distrito de múltiples fuentes posibles
+    const provincia = order.customerProvince || orderData.provincia || '';
+    const canton = order.customerCanton || orderData.canton || '';
+    const distrito = order.customerDistrict || orderData.distrito || '';
+    const productos = orderData.productos || '';
+    
+    console.log('🔍 [EDIT MODAL] Valores extraídos:', { provincia, canton, distrito, productos });
+    
+    // Convertir Order a PedidoFormData - asegurarse de obtener todos los campos
+    const formData: PedidoFormData = {
+      cliente_nombre: order.customerName || '',
+      cliente_telefono: order.customerPhone || '',
+      direccion: order.customerAddress || '',
+      provincia: provincia,
+      canton: canton,
+      distrito: distrito,
+      valor_total: String(order.totalAmount || ''),
+      productos: productos,
+      link_ubicacion: orderData.link_ubicacion || order.customerLocationLink || '',
+      nota_asesor: orderData.nota_asesor || order.asesorNotes || '',
+      confirmado: orderData.confirmado === true ? 'true' : 'false',
+      tipo_envio: orderData.tipo_envio || '',
+    };
+    
+    console.log('🔍 [EDIT MODAL] FormData final preparado:', formData);
+    console.log('🔍 [EDIT MODAL] FormData.provincia:', formData.provincia);
+    console.log('🔍 [EDIT MODAL] FormData.canton:', formData.canton);
+    console.log('🔍 [EDIT MODAL] FormData.distrito:', formData.distrito);
+    console.log('🔍 [EDIT MODAL] FormData.productos:', formData.productos);
+    
+    setEditOrder(formData);
+    
+    // Parsear productos seleccionados desde el string con stock del inventario
+    console.log('🔍 [EDIT MODAL] String de productos para parsear:', productos);
+    
+    if (productos && productos.trim()) {
+      const productosParsed = parsearProductosConStock(productos);
+      console.log('🔍 [EDIT MODAL] Productos parseados:', productosParsed);
+      setProductosSeleccionadosEdit(productosParsed);
+    } else {
+      console.log('⚠️ [EDIT MODAL] No hay productos en el pedido o está vacío');
+      setProductosSeleccionadosEdit([]);
+    }
+    
+    setShowEditModal(true);
+  };
+
+  // Actualizar productos seleccionados cuando cambie productosDisponibles y haya un pedido en edición
+  useEffect(() => {
+    if (orderToEdit && productosDisponibles.length > 0 && showEditModal) {
+      const productosStr = (orderToEdit as any).productos || '';
+      console.log('🔄 [USE EFFECT] Actualizando productos desde orderToEdit:', productosStr);
+      const productosParsed = parsearProductosConStock(productosStr);
+      setProductosSeleccionadosEdit(productosParsed);
+      
+      // Asegurarse de que el editOrder tenga el texto de productos
+      if (productosStr && productosStr.trim()) {
+        setEditOrder((prev: PedidoFormData) => ({
+          ...prev,
+          productos: productosStr,
+        }));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productosDisponibles.length, orderToEdit?.id, showEditModal]);
+  
+  // Asegurarse de que los datos se actualicen cuando se abre el modal
+  useEffect(() => {
+    if (showEditModal && orderToEdit) {
+      console.log('🔄 [USE EFFECT] Modal abierto, sincronizando datos de orderToEdit');
+      const orderData = orderToEdit as any;
+      
+      // Actualizar editOrder con los datos más recientes del pedido
+      setEditOrder((prev: PedidoFormData) => ({
+        ...prev,
+        provincia: orderToEdit.customerProvince || orderData.provincia || prev.provincia || '',
+        canton: orderToEdit.customerCanton || orderData.canton || prev.canton || '',
+        distrito: orderToEdit.customerDistrict || orderData.distrito || prev.distrito || '',
+        productos: orderData.productos || prev.productos || '',
+      }));
+      
+      console.log('🔄 [USE EFFECT] editOrder actualizado:', {
+        provincia: orderToEdit.customerProvince || orderData.provincia || '',
+        canton: orderToEdit.customerCanton || orderData.canton || '',
+        distrito: orderToEdit.customerDistrict || orderData.distrito || '',
+        productos: orderData.productos || '',
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showEditModal, orderToEdit?.id]);
+
+  // Función para abrir modal de ver
+  const openViewModalFor = (order: Order) => {
+    setOrderToView(order);
+    setViewMode('view');
+    setShowViewModal(true);
+  };
+
+  // Función para guardar edición
+  const saveEditModal = async () => {
+    if (!orderToEdit || !isEditFormValid) return;
+    
+    setIsSaving(true);
+    try {
+      const fechaCreacion = (orderToEdit as any).fecha_creacion || orderToEdit.createdAt;
+      
+      const updates: any = {
+        cliente_nombre: editOrder.cliente_nombre,
+        cliente_telefono: editOrder.cliente_telefono,
+        direccion: editOrder.direccion,
+        provincia: editOrder.provincia,
+        canton: editOrder.canton,
+        distrito: editOrder.distrito,
+        valor_total: Number(editOrder.valor_total || 0),
+        productos: editOrder.productos,
+        link_ubicacion: editOrder.link_ubicacion || null,
+        nota_asesor: editOrder.nota_asesor || null,
+        confirmado: editOrder.confirmado === 'true',
+      };
+      
+      const ok = await updatePedidoPreconfirmacion(orderToEdit.id, updates);
+      
+      if (ok) {
+        // Enviar al webhook
+        await enviarAlWebhook({
+          id_pedido: orderToEdit.id,
+          fecha_creacion: fechaCreacion,
+          cliente_nombre: editOrder.cliente_nombre,
+          cliente_telefono: editOrder.cliente_telefono,
+          direccion: editOrder.direccion,
+          provincia: editOrder.provincia,
+          canton: editOrder.canton,
+          distrito: editOrder.distrito,
+          valor_total: Number(editOrder.valor_total || 0),
+          productos: editOrder.productos,
+          link_ubicacion: editOrder.link_ubicacion,
+          nota_asesor: editOrder.nota_asesor,
+          confirmado: editOrder.confirmado === 'true',
+          usuario: user?.name || user?.email || null,
+        }, true);
+        
+        toast({
+          title: '✅ Pedido actualizado exitosamente',
+          description: `El pedido ${orderToEdit.id} ha sido actualizado`,
+          variant: 'default',
+        });
+        
+        setShowEditModal(false);
+        setOrderToEdit(null);
+        setEditOrder({
+          cliente_nombre: '', cliente_telefono: '', direccion: '', provincia: '', canton: '', distrito: '', valor_total: '', productos: '', link_ubicacion: '', nota_asesor: '', confirmado: 'false', tipo_envio: ''
+        } as any);
+        setProductosSeleccionadosEdit([]);
+        await loadData();
+      } else {
+        toast({
+          title: '❌ Error al actualizar pedido',
+          description: 'Ocurrió un error al actualizar el pedido',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error al actualizar pedido:', error);
+      toast({
+        title: '❌ Error al actualizar pedido',
+        description: 'Ocurrió un error al actualizar el pedido',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Validación del formulario de edición
+  const [isEditFormValid, setIsEditFormValid] = useState(false);
+  const [isCreateFormValid, setIsCreateFormValid] = useState(false);
+
+  // Función para crear pedido
+  const handleCreatePedido = async () => {
+    if (!isCreateFormValid) return;
+    
+    setCreating(true);
+    try {
+      const fechaCreacion = getCostaRicaDateISO();
+      const pedidoData = {
+        tienda: asesorTienda,
+        cliente_nombre: newOrder.cliente_nombre,
+        cliente_telefono: newOrder.cliente_telefono,
+        direccion: newOrder.direccion,
+        provincia: newOrder.provincia,
+        canton: newOrder.canton,
+        distrito: newOrder.distrito,
+        valor_total: Number(newOrder.valor_total || 0),
+        productos: newOrder.productos,
+        link_ubicacion: newOrder.link_ubicacion || null,
+        nota_asesor: newOrder.nota_asesor || null,
+        confirmado: newOrder.confirmado === 'true',
+        fecha_creacion: fechaCreacion,
+      } as any;
+      
+      const res = await createPedidoPreconfirmacion(pedidoData);
+      
+      if (res.success) {
+        const pedidoId = res.pedido?.id_pedido || 'N/A';
+        
+        // Enviar al webhook
+        await enviarAlWebhook({
+          ...pedidoData,
+          id_pedido: res.pedido?.id_pedido || null,
+          fecha_creacion: res.pedido?.fecha_creacion || fechaCreacion,
+          usuario: user?.name || user?.email || null,
+        }, false);
+        
+        toast({
+          title: '✅ Pedido creado exitosamente',
+          description: (
+            <div className="space-y-1 mt-1">
+              <p className="font-semibold">ID: {pedidoId}</p>
+              <p className="text-sm">Cliente: {newOrder.cliente_nombre}</p>
+              <p className="text-sm">Teléfono: {newOrder.cliente_telefono}</p>
+              <p className="text-sm">Dirección: {newOrder.direccion}, {newOrder.distrito}, {newOrder.canton}</p>
+              <p className="text-sm">Valor: ₡{Number(newOrder.valor_total).toLocaleString('es-CR')}</p>
+              <p className="text-sm">Estado: {newOrder.confirmado === 'true' ? '✅ Confirmado' : '⏳ Pendiente'}</p>
+            </div>
+          ),
+          variant: 'default',
+        });
+        
+        setShowCreateModal(false);
+        setProductosSeleccionados([]);
+        setNewOrder({
+          cliente_nombre: '', cliente_telefono: '', direccion: '', provincia: '', canton: '', distrito: '', valor_total: '', productos: '', link_ubicacion: '', nota_asesor: '', confirmado: 'false', tipo_envio: ''
+        } as any);
+        await loadData();
+      } else {
+        toast({
+          title: '❌ Error al crear pedido',
+          description: res.error || 'Ocurrió un error al crear el pedido',
+          variant: 'destructive',
+        });
+        console.error(res.error);
+      }
+    } catch (error) {
+      console.error('Error al crear pedido:', error);
+      toast({
+        title: '❌ Error al crear pedido',
+        description: 'Ocurrió un error al crear el pedido',
+        variant: 'destructive',
+      });
+    } finally {
+      setCreating(false);
+    }
+  };
+
   // Función para copiar al portapapeles
   const copyToClipboard = async (text: string, type: string) => {
     try {
@@ -670,90 +1159,141 @@ export default function AsesorDashboard() {
         </div>
       </div>
 
-      {/* Stats Cards - Bento Style */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Pedidos */}
-        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-all duration-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-blue-500 rounded-lg">
-                    <Package className="w-6 h-6 text-white" />
-                  </div>
-                  <span className="text-sm font-medium text-blue-700">Total Pedidos</span>
-                </div>
-                <p className="text-3xl font-bold text-blue-800">{filteredOrders.length}</p>
-                <p className="text-xs text-blue-600">Pedidos filtrados</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Stats Cards - Bento Style Mejoradas */}
+      {(() => {
+        const confirmedOrders = filteredOrders.filter(o => (o as any).confirmado === true);
+        const unconfirmedOrders = filteredOrders.filter(o => !(o as any).confirmado || (o as any).confirmado === false);
+        const totalValue = filteredOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+        const confirmedValue = confirmedOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+        const unconfirmedValue = unconfirmedOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+        const confirmationRate = filteredOrders.length > 0 
+          ? ((confirmedOrders.length / filteredOrders.length) * 100).toFixed(1)
+          : '0';
+        
+        // Pedidos de hoy
+        const todayISO = getCostaRicaDateISO();
+        const todayOrders = filteredOrders.filter(o => {
+          const orderDate = (o as any).fecha_creacion || o.createdAt;
+          const orderDateISO = orderDate?.split('T')[0] || new Date(orderDate).toISOString().split('T')[0];
+          return orderDateISO === todayISO;
+        });
 
-        {/* Entregados */}
-        <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-all duration-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-green-500 rounded-lg">
-                    <CheckCircle className="w-6 h-6 text-white" />
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Confirmados */}
+            <Card 
+              className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-all duration-200 cursor-pointer"
+              onClick={() => setSelectedConfirmation('confirmed')}
+            >
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-green-500 rounded-lg">
+                        <CheckCircle className="w-6 h-6 text-white" />
+                      </div>
+                      <span className="text-sm font-medium text-green-700">Confirmados</span>
+                    </div>
+                    <p className="text-3xl font-bold text-green-800">
+                      {confirmedOrders.length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-green-600" />
+                      <p className="text-xs text-green-600">
+                        {confirmationRate}% del total
+                      </p>
+                    </div>
+                    <p className="text-xs font-semibold text-green-700">
+                      Valor: {formatCurrency(confirmedValue)}
+                    </p>
                   </div>
-                  <span className="text-sm font-medium text-green-700">Entregados</span>
                 </div>
-                <p className="text-3xl font-bold text-green-800">
-                  {filteredOrders.filter(o => o.status === 'entregado').length}
-                </p>
-                <p className="text-xs text-green-600">Completados</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
 
-        {/* En Ruta */}
-        <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 hover:shadow-lg transition-all duration-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-orange-500 rounded-lg">
-                    <Truck className="w-6 h-6 text-white" />
+            {/* Sin Confirmar */}
+            <Card 
+              className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 hover:shadow-lg transition-all duration-200 cursor-pointer"
+              onClick={() => setSelectedConfirmation('unconfirmed')}
+            >
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-orange-500 rounded-lg">
+                        <Clock className="w-6 h-6 text-white" />
+                      </div>
+                      <span className="text-sm font-medium text-orange-700">Sin Confirmar</span>
+                    </div>
+                    <p className="text-3xl font-bold text-orange-800">
+                      {unconfirmedOrders.length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-orange-600" />
+                      <p className="text-xs text-orange-600">
+                        Pendientes de confirmación
+                      </p>
+                    </div>
+                    <p className="text-xs font-semibold text-orange-700">
+                      Valor: {formatCurrency(unconfirmedValue)}
+                    </p>
                   </div>
-                  <span className="text-sm font-medium text-orange-700">En Ruta</span>
                 </div>
-                <p className="text-3xl font-bold text-orange-800">
-                  {filteredOrders.filter(o => o.status === 'en_ruta').length}
-                </p>
-                <p className="text-xs text-orange-600">En proceso</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
 
-        {/* Reagendados */}
-        <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200 hover:shadow-lg transition-all duration-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-red-500 rounded-lg">
-                    <RotateCcw className="w-6 h-6 text-white" />
+            {/* Total Pedidos */}
+            <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 hover:shadow-lg transition-all duration-200">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-purple-500 rounded-lg">
+                        <Package className="w-6 h-6 text-white" />
+                      </div>
+                      <span className="text-sm font-medium text-purple-700">Total Pedidos</span>
+                    </div>
+                    <p className="text-3xl font-bold text-purple-800">
+                      {filteredOrders.length}
+                    </p>
+                    <p className="text-xs text-purple-600">Pedidos filtrados</p>
+                    <p className="text-xs font-semibold text-purple-700">
+                      Valor total: {formatCurrency(totalValue)}
+                    </p>
                   </div>
-                  <span className="text-sm font-medium text-red-700">Reagendados</span>
                 </div>
-                <p className="text-3xl font-bold text-red-800">
-                  {filteredOrders.filter(o => o.status === 'reagendado').length}
-                </p>
-                <p className="text-xs text-red-600">Pendientes</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+              </CardContent>
+            </Card>
+
+            {/* Pedidos de Hoy */}
+            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-all duration-200">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-blue-500 rounded-lg">
+                        <Calendar className="w-6 h-6 text-white" />
+                      </div>
+                      <span className="text-sm font-medium text-blue-700">Pedidos de Hoy</span>
+                    </div>
+                    <p className="text-3xl font-bold text-blue-800">
+                      {todayOrders.length}
+                    </p>
+                    <p className="text-xs text-blue-600">Creados hoy</p>
+                    <p className="text-xs font-semibold text-blue-700">
+                      Valor: {formatCurrency(todayOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0))}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
 
       {/* Filtros Mejorados */}
       <Card className="bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200">
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Filter className="w-5 h-5 text-purple-600" />
@@ -765,14 +1305,13 @@ export default function AsesorDashboard() {
             </div>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* Filtros de fecha mejorados */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                 <CardContent className="space-y-3">
+           {/* Primera fila: Filtros rápidos, Búsqueda y Limpiar */}
+           <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
               {/* Filtros rápidos */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">Filtros rápidos</Label>
-                <div className="grid grid-cols-2 gap-2">
+             <div className="md:col-span-5 space-y-1.5">
+               <Label className="text-xs font-medium text-gray-700">Filtros rápidos</Label>
+               <div className="grid grid-cols-4 gap-1.5">
                   <Button
                     variant={dateFilter === 'all' ? 'default' : 'outline'}
                     size="sm"
@@ -782,7 +1321,7 @@ export default function AsesorDashboard() {
                       setSelectedDateRange({from: undefined, to: undefined});
                       setSelectedMonth('');
                     }}
-                    className={`${dateFilter === 'all' ? 'bg-purple-600 hover:bg-purple-700 text-white' : ''}`}
+                   className={`h-8 text-xs ${dateFilter === 'all' ? 'bg-purple-600 hover:bg-purple-700 text-white' : ''}`}
                   >
                     Todos
                   </Button>
@@ -795,7 +1334,7 @@ export default function AsesorDashboard() {
                       setSelectedDateRange({from: undefined, to: undefined});
                       setSelectedMonth('');
                     }}
-                    className={`${dateFilter === 'today' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}`}
+                   className={`h-8 text-xs ${dateFilter === 'today' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}`}
                   >
                     Hoy
                   </Button>
@@ -808,7 +1347,7 @@ export default function AsesorDashboard() {
                       setSelectedDateRange({from: undefined, to: undefined});
                       setSelectedMonth('');
                     }}
-                    className={`${dateFilter === 'yesterday' ? 'bg-green-600 hover:bg-green-700 text-white' : ''}`}
+                   className={`h-8 text-xs ${dateFilter === 'yesterday' ? 'bg-green-600 hover:bg-green-700 text-white' : ''}`}
                   >
                     Ayer
                   </Button>
@@ -821,26 +1360,68 @@ export default function AsesorDashboard() {
                       setSelectedDateRange({from: undefined, to: undefined});
                       setSelectedMonth('');
                     }}
-                    className={`${dateFilter === 'thisWeek' ? 'bg-orange-600 hover:bg-orange-700 text-white' : ''}`}
+                   className={`h-8 text-xs ${dateFilter === 'thisWeek' ? 'bg-orange-600 hover:bg-orange-700 text-white' : ''}`}
                   >
                     Esta Semana
                   </Button>
                 </div>
               </div>
 
+             {/* Búsqueda */}
+             <div className="md:col-span-5 space-y-1.5">
+               <Label htmlFor="search" className="text-xs font-medium text-gray-700">Buscar pedidos</Label>
+               <div className="relative">
+                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                 <Input
+                   id="search"
+                   placeholder="ID, cliente, teléfono, dirección..."
+                   value={searchTerm}
+                   onChange={(e) => setSearchTerm(e.target.value)}
+                   className="pl-10 h-8 text-xs"
+                 />
+               </div>
+             </div>
+
+             {/* Limpiar filtros */}
+             <div className="md:col-span-2 space-y-1.5">
+               <Label className="text-xs font-medium text-gray-700 opacity-0">Limpiar</Label>
+               <Button
+                 variant="outline"
+                 size="sm"
+                 onClick={() => {
+                   setSearchTerm('');
+                   setSelectedStore('all');
+                   setSelectedMessenger('all');
+                   setSelectedConfirmation('all');
+                   setDateFilter('all');
+                   setSelectedDate(undefined);
+                   setSelectedDateRange({from: undefined, to: undefined});
+                   setSelectedMonth('');
+                 }}
+                 className="w-full h-8 text-xs"
+               >
+                 <X className="w-3 h-3 mr-1.5" />
+                 Limpiar
+               </Button>
+             </div>
+           </div>
+
+           {/* Segunda fila: Filtros de fecha específicos y confirmación */}
+           <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
               {/* Fecha específica */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">Fecha específica</Label>
+             <div className="space-y-1.5">
+               <Label className="text-xs font-medium text-gray-700">Fecha específica</Label>
                 <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
+                      size="sm"
                       className={cn(
-                        "w-full justify-start text-left font-normal",
+                        "w-full justify-start text-left font-normal h-8 text-xs",
                         !selectedDate && "text-muted-foreground"
                       )}
                     >
-                      <Calendar className="mr-2 h-4 w-4" />
+                      <Calendar className="mr-2 h-3 w-3" />
                       {selectedDate ? (
                         selectedDate.toLocaleDateString('es-CR', {
                           year: 'numeric',
@@ -870,18 +1451,19 @@ export default function AsesorDashboard() {
               </div>
 
               {/* Rango de fechas */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">Rango de fechas</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-gray-700">Rango de fechas</Label>
                 <Popover open={isDateRangePickerOpen} onOpenChange={setIsDateRangePickerOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
+                      size="sm"
                       className={cn(
-                        "w-full justify-start text-left font-normal",
+                        "w-full justify-start text-left font-normal h-8 text-xs",
                         !selectedDateRange.from && "text-muted-foreground"
                       )}
                     >
-                      <Calendar className="mr-2 h-4 w-4" />
+                      <Calendar className="mr-2 h-3 w-3" />
                       {selectedDateRange.from ? (
                         selectedDateRange.to ? (
                           `${selectedDateRange.from.toLocaleDateString('es-CR')} - ${selectedDateRange.to.toLocaleDateString('es-CR')}`
@@ -916,18 +1498,19 @@ export default function AsesorDashboard() {
               </div>
 
               {/* Filtro por mes */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">Filtrar por mes</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-gray-700">Filtrar por mes</Label>
                 <Popover open={isMonthPickerOpen} onOpenChange={setIsMonthPickerOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
+                      size="sm"
                       className={cn(
-                        "w-full justify-start text-left font-normal",
+                        "w-full justify-start text-left font-normal h-8 text-xs",
                         !selectedMonth && "text-muted-foreground"
                       )}
                     >
-                      <Calendar className="mr-2 h-4 w-4" />
+                      <Calendar className="mr-2 h-3 w-3" />
                       {selectedMonth ? (
                         new Date(selectedMonth + '-01').toLocaleDateString('es-CR', {
                           year: 'numeric',
@@ -968,75 +1551,50 @@ export default function AsesorDashboard() {
                 </Popover>
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">Filtrar por mensajero</Label>
-                <Select value={selectedMessenger} onValueChange={setSelectedMessenger}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar mensajero" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los mensajeros</SelectItem>
-                    {availableMessengers.map((mensajero) => (
-                      <SelectItem key={mensajero.id} value={mensajero.name}>
-                        {mensajero.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">Filtrar por tienda</Label>
-                <Select value={selectedStore} onValueChange={setSelectedStore}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar tienda" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los Pedidos</SelectItem>
-                    {asesorTienda && (
-                      <SelectItem value={asesorTienda}>{asesorTienda}</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Búsqueda y limpiar */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="search" className="text-sm font-medium text-gray-700">Buscar pedidos</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    id="search"
-                    placeholder="ID, cliente, teléfono, dirección..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
+                            {/* Filtro por confirmación */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-gray-700">Estado de confirmación</Label>
+                <div className="flex gap-2">
+                  <Button
+                    variant={selectedConfirmation === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedConfirmation('all')}
+                    className={`h-9 px-4 text-sm font-medium whitespace-nowrap transition-all ${
+                      selectedConfirmation === 'all' 
+                        ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-sm' 
+                        : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Todos
+                  </Button>
+                  <Button
+                    variant={selectedConfirmation === 'confirmed' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedConfirmation('confirmed')}
+                    className={`h-9 px-4 text-sm font-medium whitespace-nowrap transition-all flex items-center gap-2 ${
+                      selectedConfirmation === 'confirmed' 
+                        ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' 
+                        : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Confirmados
+                  </Button>
+                  <Button
+                    variant={selectedConfirmation === 'unconfirmed' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedConfirmation('unconfirmed')}
+                    className={`h-9 px-4 text-sm font-medium whitespace-nowrap transition-all flex items-center gap-2 ${
+                      selectedConfirmation === 'unconfirmed' 
+                        ? 'bg-orange-600 hover:bg-orange-700 text-white shadow-sm' 
+                        : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Clock className="w-4 h-4" />
+                    Sin Confirmar
+                  </Button>
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">&nbsp;</Label>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSearchTerm('');
-                    setSelectedStore('all');
-                    setSelectedMessenger('all');
-                    setDateFilter('all');
-                    setSelectedDate(undefined);
-                    setSelectedDateRange({from: undefined, to: undefined});
-                    setSelectedMonth('');
-                  }}
-                  className="w-full"
-                >
-                  <X className="w-4 h-4 mr-2" />
-                  Limpiar filtros
-                </Button>
-              </div>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -1059,81 +1617,78 @@ export default function AsesorDashboard() {
                 {filteredOrders.length} pedidos
               </Badge>
               
-              {/* Botones de edición masiva */}
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={toggleEditMode}
-                  variant={isEditMode ? "default" : "outline"}
-                  className={`${isEditMode ? 'bg-green-600 hover:bg-green-700 text-white' : 'border-purple-300 text-purple-700 hover:bg-purple-50'}`}
-                >
-                  {isEditMode ? (
-                    <>
-                      <X className="w-4 h-4 mr-2" />
-                      Cancelar Edición
-                    </>
-                  ) : (
-                    <>
-                      <Edit className="w-4 h-4 mr-2" />
-                      Editar Pedidos
-                    </>
-                  )}
-                </Button>
-                
-                {isEditMode && (
-                  <>
+              <Button
+                onClick={() => setShowCreateModal(true)}
+                className="bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Crear Pedido
+              </Button>
+              
+                                          {/* Botones de edición masiva */}
+              {isEditMode && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={toggleEditMode}
+                    variant="default"
+                    className="bg-gray-600 hover:bg-gray-700 text-white"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Cancelar Edición
+                  </Button>
+                  
+                  <Button
+                    onClick={selectAllOrders}
+                    variant="outline"
+                    size="sm"
+                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                  >
+                    {selectedOrders.size === filteredOrders.length ? (
+                      <>
+                        <Square className="w-4 h-4 mr-1" />
+                        Deseleccionar Todo
+                      </>
+                    ) : (
+                      <>
+                        <CheckSquare className="w-4 h-4 mr-1" />
+                        Seleccionar Todo
+                      </>
+                    )}
+                  </Button>
+                  
+                  {selectedOrders.size > 0 && (
                     <Button
-                      onClick={selectAllOrders}
+                      onClick={() => setShowBulkEditModal(true)}
                       variant="outline"
                       size="sm"
-                      className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                      className="border-orange-300 text-orange-700 hover:bg-orange-50"
                     >
-                      {selectedOrders.size === filteredOrders.length ? (
+                      <MoreHorizontal className="w-4 h-4 mr-1" />
+                      Editar Seleccionados ({selectedOrders.size})
+                    </Button>
+                  )}
+                  
+                  {hasUnsavedChanges() && (
+                    <Button
+                      onClick={saveAllChanges}
+                      disabled={isSaving}
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      {isSaving ? (
                         <>
-                          <Square className="w-4 h-4 mr-1" />
-                          Deseleccionar Todo
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Guardando...
                         </>
                       ) : (
                         <>
-                          <CheckSquare className="w-4 h-4 mr-1" />
-                          Seleccionar Todo
+                          <Save className="w-4 h-4 mr-2" />
+                          Guardar Cambios ({editingOrders.size})
                         </>
                       )}
                     </Button>
-                    
-                    {selectedOrders.size > 0 && (
-                      <Button
-                        onClick={() => setShowBulkEditModal(true)}
-                        variant="outline"
-                        size="sm"
-                        className="border-orange-300 text-orange-700 hover:bg-orange-50"
-                      >
-                        <MoreHorizontal className="w-4 h-4 mr-1" />
-                        Editar Seleccionados ({selectedOrders.size})
-                      </Button>
-                    )}
-                    
-                    {hasUnsavedChanges() && (
-                      <Button
-                        onClick={saveAllChanges}
-                        disabled={isSaving}
-                        className="bg-green-600 hover:bg-green-700 text-white"
-                      >
-                        {isSaving ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Guardando...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-4 h-4 mr-2" />
-                            Guardar Cambios ({editingOrders.size})
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           </CardTitle>
         </CardHeader>
@@ -1152,12 +1707,12 @@ export default function AsesorDashboard() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table className="min-w-[1600px]">
-                <TableHeader className="bg-gray-50">
-                  <TableRow>
+              <div className="overflow-x-auto">
+              <Table className="min-w-[1000px] border-0">
+                <TableHeader className="bg-gray-50/80 border-0">
+                  <TableRow className="border-l-0 border-r-0">
                     {isEditMode && (
-                      <TableHead className="font-bold text-gray-800 min-w-[50px] px-4 py-4">
+                      <TableHead className="!p-0 font-bold text-gray-800 min-w-[30px] px-4 py-3 text-sm border-l-0">
                         <input
                           type="checkbox"
                           checked={selectedOrders.size === filteredOrders.length && filteredOrders.length > 0}
@@ -1166,27 +1721,25 @@ export default function AsesorDashboard() {
                         />
                       </TableHead>
                     )}
-                    <TableHead className="font-bold text-gray-800 min-w-[120px] px-6 py-4">ID Pedido</TableHead>
-                    <TableHead className="font-bold text-gray-800 min-w-[200px] px-6 py-4">Cliente</TableHead>
-                    <TableHead className="font-bold text-gray-800 min-w-[300px] px-6 py-4">Dirección</TableHead>
-                    <TableHead className="font-bold text-gray-800 min-w-[250px] px-6 py-4">Productos</TableHead>
-                    <TableHead className="font-bold text-gray-800 min-w-[120px] px-6 py-4">Estado</TableHead>
-                    <TableHead className="font-bold text-gray-800 min-w-[150px] px-6 py-4">Mensajero</TableHead>
-                    <TableHead className="font-bold text-gray-800 min-w-[120px] px-6 py-4">Asesor</TableHead>
-                    <TableHead className="font-bold text-gray-800 min-w-[100px] px-6 py-4">Monto</TableHead>
-                    <TableHead className="font-bold text-gray-800 min-w-[120px] px-6 py-4">Fecha</TableHead>
-                    <TableHead className="font-bold text-gray-800 min-w-[160px] px-6 py-4">Acciones</TableHead>
+                    <TableHead className="!p-0 font-bold text-gray-800 min-w-[85px] px-3 py-3 text-sm border-l-0">ID Pedido</TableHead>
+                    <TableHead className="!p-0 font-bold text-gray-800 min-w-[300px] px-4 py-3 text-sm">Dirección</TableHead>
+                    <TableHead className="!p-0 font-bold text-gray-800 min-w-[140px] px-4 py-3 text-sm">Productos</TableHead>
+                    <TableHead className="!p-0 font-bold text-gray-800 min-w-[130px] px-4 py-3 text-sm border-r-0">Estado y Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredOrders.map((order) => (
+                  {paginatedOrders.map((order) => {
+                    const isConfirmed = (order as any).confirmado === true;
+                    return (
                     <TableRow 
                       key={order.id} 
-                      className={`hover:bg-gray-50 transition-all duration-200 ${getStatusRowColor(order.status)} ${isOrderBeingEdited(order.id) ? 'bg-yellow-50 border-l-8 border-yellow-500' : ''}`}
+                      className={`hover:bg-gray-50/50 transition-all duration-200 border-l-0 border-r-0 ${
+                        isOrderBeingEdited(order.id) ? 'bg-yellow-50' : ''
+                      }`}
                     >
                       {/* Checkbox para selección */}
                       {isEditMode && (
-                        <TableCell className="px-4 py-4">
+                        <TableCell className="!p-0 px-4 py-3 border-l-0">
                           <input
                             type="checkbox"
                             checked={selectedOrders.has(order.id)}
@@ -1196,289 +1749,543 @@ export default function AsesorDashboard() {
                         </TableCell>
                       )}
                       
-                      {/* ID Pedido */}
-                      <TableCell className="font-medium px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-4 h-4 rounded-full ${getStatusIndicatorColor(order.status)} shadow-md border-2 border-white`} />
-                          <div className="flex flex-col">
-                            <span className="font-mono text-sm font-bold text-gray-900">{order.id}</span>
-                            <span className="text-xs text-gray-500 font-medium">Pedido</span>
-                          </div>
-                        </div>
-                      </TableCell>
-
-                      {/* Cliente */}
-                      <TableCell className="px-6 py-4">
-                        <div className="space-y-1">
-                          <div className="font-medium text-gray-900">{order.customerName}</div>
-                          <div className="flex items-center gap-2 text-sm text-gray-500">
-                            <Phone className="w-3 h-3" />
-                            <span>{order.customerPhone || 'Sin teléfono'}</span>
+                      {/* ID Pedido con Cliente */}
+                      <TableCell className="!p-0 font-medium px-3 py-3 border-l-0">
+                        <div className="flex flex-col gap-1.5 min-w-0 pl-6">
+                          {/* Primera fila: ID */}
+                          <span className="font-mono text-xs font-bold text-gray-900 leading-tight">{order.id}</span>
+                          {/* Segunda fila: Nombre */}
+                          <span className="font-medium text-xs text-gray-900 truncate" title={order.customerName}>
+                            {order.customerName}
+                          </span>
+                          {/* Tercera fila: Número y botones */}
+                          <div className="flex items-center gap-1 text-xs text-gray-600">
+                            <Phone className="w-3 h-3 flex-shrink-0 text-gray-400" />
+                            <span className="truncate font-mono text-[10px]">{order.customerPhone || 'Sin teléfono'}</span>
                             {order.customerPhone && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => copyToClipboard(order.customerPhone!, 'Número de teléfono')}
-                                className="h-6 w-6 p-0 bg-green-50 border-green-200 hover:bg-green-100 text-green-700"
-                                title="Copiar número de teléfono"
-                              >
-                                <Clipboard className="w-3 h-3" />
-                              </Button>
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => copyToClipboard(order.customerPhone!, 'Número de teléfono')}
+                                  className="h-5 w-5 p-0 bg-green-50/80 border-green-200 hover:bg-green-100 text-green-600 flex-shrink-0 hover:scale-110 transition-transform"
+                                  title="Copiar número de teléfono"
+                                  aria-label="Copiar número de teléfono"
+                                >
+                                  <Clipboard className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openEditModalFor(order)}
+                                  className="h-5 w-5 p-0 bg-blue-50/80 border-blue-200 hover:bg-blue-100 text-blue-600 flex-shrink-0 hover:scale-110 transition-transform"
+                                  title="Editar pedido"
+                                  aria-label="Editar pedido"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                </Button>
+                              </>
                             )}
                           </div>
                         </div>
                       </TableCell>
 
                       {/* Dirección */}
-                      <TableCell className="px-6 py-4">
-                        <div className="space-y-1">
-                          <div className="text-sm text-gray-700 leading-relaxed" title={order.customerAddress}>
+                      <TableCell className="!p-0 px-4 py-3">
+                        <div className="space-y-2">
+                          {/* Dirección completa */}
+                          <div className="text-sm text-gray-800 leading-tight max-w-[280px] font-medium" title={order.customerAddress}>
                             {order.customerAddress || 'Sin dirección'}
                           </div>
-                          <div className="flex items-center gap-1 text-xs text-gray-500">
-                            <MapPin className="w-3 h-3" />
-                            {order.customerDistrict}, {order.customerCanton}
+                          {/* Provincia, Cantón, Distrito - en una sola fila */}
+                          <div className="flex items-center gap-2 text-xs text-gray-600 whitespace-nowrap flex-wrap">
+                            {order.customerProvince && (
+                              <span className="whitespace-nowrap">
+                                <span className="font-semibold text-gray-700">Provincia:</span> {order.customerProvince}
+                              </span>
+                            )}
+                            {order.customerProvince && (order.customerCanton || order.customerDistrict) && (
+                              <span className="text-gray-400">•</span>
+                            )}
+                            {order.customerCanton && (
+                              <span className="whitespace-nowrap">
+                                <span className="font-semibold text-gray-700">Cantón:</span> {order.customerCanton}
+                              </span>
+                            )}
+                            {order.customerCanton && order.customerDistrict && (
+                              <span className="text-gray-400">•</span>
+                            )}
+                            {order.customerDistrict && (
+                              <span className="whitespace-nowrap">
+                                <span className="font-semibold text-gray-700">Distrito:</span> {order.customerDistrict}
+                              </span>
+                            )}
+                          </div>
+                          {/* Botón Maps y Fecha */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {(order as any).link_ubicacion ? (() => {
+                              const link = (order as any).link_ubicacion;
+                              // Normalizar la URL para asegurar que tenga protocolo
+                              const normalizedLink = link.startsWith('http://') || link.startsWith('https://')
+                                ? link
+                                : `https://${link}`;
+                              return (
+                                <a
+                                  href={normalizedLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 whitespace-nowrap"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    window.open(normalizedLink, '_blank', 'noopener,noreferrer');
+                                  }}
+                                >
+                                  <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                                  <span className="truncate">Ver en Maps</span>
+                                </a>
+                              );
+                            })() : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openEditModalFor(order)}
+                                className="h-7 px-3 text-xs bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700 whitespace-nowrap"
+                                title="Añadir link de Google Maps"
+                                aria-label="Añadir link de Google Maps"
+                              >
+                                <Plus className="w-3.5 h-3.5 mr-1.5" />
+                                Maps
+                              </Button>
+                            )}
+                            {/* Fecha de creación en formato AAAA-MM-DD */}
+                            {(() => {
+                              const fechaCreacion = (order as any).fecha_creacion || order.createdAt;
+                              let fechaFormateada = '';
+                              if (fechaCreacion) {
+                                try {
+                                  // Si ya está en formato AAAA-MM-DD, usar directamente
+                                  if (typeof fechaCreacion === 'string' && /^\d{4}-\d{2}-\d{2}/.test(fechaCreacion)) {
+                                    fechaFormateada = fechaCreacion.split('T')[0];
+                                  } else {
+                                    // Si es una fecha completa, extraer solo la parte de fecha
+                                    const fecha = new Date(fechaCreacion);
+                                    const year = fecha.getFullYear();
+                                    const month = String(fecha.getMonth() + 1).padStart(2, '0');
+                                    const day = String(fecha.getDate()).padStart(2, '0');
+                                    fechaFormateada = `${year}-${month}-${day}`;
+                                  }
+                                } catch (e) {
+                                  fechaFormateada = 'Fecha inválida';
+                                }
+                              }
+                              return fechaFormateada ? (
+                                <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                                  <Calendar className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
+                                  <span className="font-mono">{fechaFormateada}</span>
+                                </div>
+                              ) : null;
+                            })()}
                           </div>
                         </div>
                       </TableCell>
 
                       {/* Productos */}
-                      <TableCell className="px-6 py-4">
-                        <div className="max-w-[300px] space-y-2">
-                          {/* Tienda */}
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                            <span className="text-xs font-bold text-purple-700 bg-purple-100 px-2 py-1 rounded-md border border-purple-200">
-                              {order.tienda || 'Sin tienda'}
-                            </span>
-                          </div>
+                      <TableCell className="!p-0 px-4 py-3">
+                        <div className="space-y-2">
                           {/* Productos */}
-                          <div className="text-sm text-gray-700 leading-relaxed" title={order.productos || 'No especificados'}>
+                          <div className="text-sm text-gray-800 leading-tight font-medium" title={order.productos || 'No especificados'}>
                             {order.productos || 'No especificados'}
                           </div>
                           {/* Monto */}
                           <div className="flex items-center gap-2 pt-1">
-                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                            <span className="text-sm font-bold text-green-700">
+                            <div className="w-2 h-2 rounded-full bg-green-500 shadow-sm"></div>
+                            <span className="text-sm font-bold text-green-700 whitespace-nowrap">
                               {formatCurrency(order.totalAmount)}
                             </span>
                           </div>
                           {/* Número SINPE */}
                           {order.numero_sinpe && (
                             <div className="flex items-center gap-2 pt-1">
-                              <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                              <span className="text-xs text-blue-700 font-mono bg-blue-50 px-2 py-1 rounded border border-blue-200">
+                              <div className="w-2 h-2 rounded-full bg-blue-500 shadow-sm"></div>
+                              <span className="text-xs text-blue-700 font-mono bg-blue-50 px-2.5 py-1.5 rounded-md border border-blue-200">
                                 SINPE: {order.numero_sinpe}
                               </span>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => copyToClipboard(order.numero_sinpe!, 'Número SINPE')}
-                                className="h-6 w-6 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
+                                className="h-6 w-6 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700 hover:scale-110 transition-transform"
                                 title="Copiar número SINPE"
+                                aria-label="Copiar número SINPE"
                               >
-                                <Clipboard className="w-3 h-3" />
+                                <Clipboard className="w-3.5 h-3.5" />
                               </Button>
                             </div>
                           )}
                         </div>
                       </TableCell>
 
-                      {/* Estado */}
-                      <TableCell className="px-6 py-4">
-                        {isOrderBeingEdited(order.id) ? (
-                          <div className="space-y-2">
-                            <Select
-                              value={getOrderValue(order, 'status') as string}
-                              onValueChange={(value) => updateOrderField(order.id, 'status', value)}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="pendiente">📝 Pendiente</SelectItem>
-                                <SelectItem value="en_ruta">🚚 En Ruta</SelectItem>
-                                <SelectItem value="entregado">✅ Entregado</SelectItem>
-                                <SelectItem value="reagendado">📅 Reagendado</SelectItem>
-                                <SelectItem value="devolucion">❌ Devolución</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <div className="flex gap-1">
-                              <Button
-                                size="sm"
-                                onClick={() => saveOrderChanges(order.id)}
-                                disabled={isSaving}
-                                className="h-6 px-2 text-xs bg-green-600 hover:bg-green-700 text-white"
-                              >
-                                <Save className="w-3 h-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => cancelEdit(order.id)}
-                                variant="outline"
-                                className="h-6 px-2 text-xs"
-                              >
-                                <X className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
+                      {/* Estado y Acciones */}
+                      <TableCell className="!p-0 px-4 py-3 border-r-0">
+                        <div className="flex flex-col gap-3 items-center">
+                          {/* Badge de confirmación sin punto (ya está en ID Pedido) */}
+                          <div className="flex items-center justify-center">
                             <Badge 
                               variant="outline" 
-                              className={`text-sm font-semibold px-3 py-2 rounded-lg shadow-sm flex items-center gap-2 w-fit ${
-                                order.status === 'entregado' ? 'bg-green-50 text-green-700 border-green-200' :
-                                order.status === 'en_ruta' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                order.status === 'devolucion' ? 'bg-red-50 text-red-700 border-red-200' :
-                                order.status === 'reagendado' ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                                'bg-gray-50 text-gray-700 border-gray-200'
+                              className={`text-xs font-semibold px-3 py-1.5 rounded-md shadow-sm whitespace-nowrap border-2 ${
+                                isConfirmed 
+                                  ? 'bg-green-100 text-green-800 border-green-400' 
+                                  : 'bg-orange-100 text-orange-800 border-orange-400'
                               }`}
                             >
-                              {order.status === 'entregado' ? '✅ Entregado' :
-                               order.status === 'en_ruta' ? '🚚 En Ruta' :
-                               order.status === 'devolucion' ? '❌ Devolución' :
-                               order.status === 'reagendado' ? '📅 Reagendado' :
-                               '📝 Pendiente'}
+                              {isConfirmed ? (
+                                <>
+                                  <CheckCircle className="w-3.5 h-3.5 mr-1 inline" />
+                                  Confirmado
+                                </>
+                              ) : (
+                                <>
+                                  <Clock className="w-3.5 h-3.5 mr-1 inline" />
+                                  Sin Confirmar
+                                </>
+                              )}
                             </Badge>
-                            {isEditMode && (
-                              <Button
-                                size="sm"
-                                onClick={() => updateOrderField(order.id, 'status', order.status)}
-                                variant="outline"
-                                className="h-6 px-2 text-xs w-full"
-                              >
-                                <Edit className="w-3 h-3 mr-1" />
-                                Editar
-                              </Button>
-                            )}
                           </div>
-                        )}
-                      </TableCell>
-
-                      {/* Mensajero */}
-                      <TableCell className="px-6 py-4">
-                        {isOrderBeingEdited(order.id) ? (
-                          <div className="space-y-2">
-                            <Select
-                              value={typeof getOrderValue(order, 'assignedMessenger') === 'object' && getOrderValue(order, 'assignedMessenger') !== null ? (getOrderValue(order, 'assignedMessenger') as any)?.name || '' : ''}
-                              onValueChange={(value) => {
-                                const messenger = availableMessengers.find(m => m.name === value);
-                                updateOrderField(order.id, 'assignedMessenger', messenger);
-                              }}
+                          {/* Botones de acción más grandes y visibles */}
+                          <div className="flex gap-2.5 items-center justify-center">
+                            <Button
+                              size="lg"
+                              variant="outline"
+                              onClick={() => openViewModalFor(order)}
+                              className="h-9 w-9 p-0 bg-purple-50 border-purple-200 hover:bg-purple-100 hover:border-purple-300 text-purple-700 shadow-sm transition-all hover:scale-110"
+                              title="Ver detalles completos del pedido"
+                              aria-label="Ver detalles del pedido"
                             >
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Seleccionar mensajero" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {availableMessengers.map((messenger) => (
-                                  <SelectItem key={messenger.id} value={messenger.name}>
-                                    {messenger.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <User className="w-3 h-3 text-blue-500" />
-                              <span className="text-sm font-medium text-gray-900">
-                                {order.assignedMessenger?.name || 'Sin asignar'}
-                              </span>
-                            </div>
-                            {order.assignedMessenger?.phone && (
-                              <div className="text-xs text-gray-500">
-                                {order.assignedMessenger.phone}
-                              </div>
-                            )}
-                            {isEditMode && (
+                              <FileText className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="lg"
+                              variant="outline"
+                              onClick={() => openEditModalFor(order)}
+                              className="h-9 w-9 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-300 text-blue-700 shadow-sm transition-all hover:scale-110"
+                              title="Editar pedido"
+                              aria-label="Editar pedido"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </Button>
+                            {!isConfirmed && (
                               <Button
-                                size="sm"
-                                onClick={() => updateOrderField(order.id, 'assignedMessenger', order.assignedMessenger)}
+                                size="lg"
                                 variant="outline"
-                                className="h-6 px-2 text-xs w-full"
+                                onClick={() => handleConfirmOrder(order)}
+                                className="h-9 w-9 p-0 bg-green-50 border-green-200 hover:bg-green-100 hover:border-green-300 text-green-700 shadow-sm transition-all hover:scale-110"
+                                title="Confirmar pedido"
+                                aria-label="Confirmar pedido"
                               >
-                                <Edit className="w-3 h-3 mr-1" />
-                                Editar
+                                <CheckCircle className="w-4 h-4" />
                               </Button>
                             )}
                           </div>
-                        )}
-                      </TableCell>
-
-                      {/* Asesor */}
-                      <TableCell className="px-6 py-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <User className="w-3 h-3 text-purple-500" />
-                            <span className="text-sm font-medium text-gray-900">
-                              {order.asesor?.name || 'Sin asignar'}
-                            </span>
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {order.asesor?.store || 'Sin tienda'}
-                          </div>
-                        </div>
-                      </TableCell>
-
-                      {/* Monto */}
-                      <TableCell className="px-6 py-4">
-                        <div className="text-right">
-                          <div className="font-bold text-gray-900">
-                            {formatCurrency(order.totalAmount)}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {order.paymentMethod.charAt(0).toUpperCase() + order.paymentMethod.slice(1)}
-                          </div>
-                        </div>
-                      </TableCell>
-
-                      {/* Fecha */}
-                      <TableCell className="px-6 py-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1 text-sm text-gray-700">
-                            <Calendar className="w-3 h-3" />
-                            {new Date(order.createdAt).toLocaleDateString('es-CR')}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {new Date(order.createdAt).toLocaleTimeString('es-CR', { 
-                              hour: '2-digit', 
-                              minute: '2-digit' 
-                            })}
-                          </div>
-                        </div>
-                      </TableCell>
-
-                      {/* Acciones */}
-                      <TableCell className="px-6 py-4">
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleViewDetails(order)}
-                            className="h-10 w-10 p-0 bg-purple-50 border-purple-200 hover:bg-purple-100 text-purple-700 hover:scale-105 transition-transform"
-                            title="Ver Detalles"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-10 w-10 p-0 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700 hover:scale-105 transition-transform"
-                            title="Editar Pedido"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
-            </div>
+              </div>
+          )}
+              {/* Controles de Paginación */}
+              {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t px-4 py-3">
+                <div className="text-sm text-gray-700">
+                  Mostrando <span className="font-medium">{(currentPage - 1) * 50 + 1}</span> a{' '}
+                  <span className="font-medium">{Math.min(currentPage * 50, filteredOrders.length)}</span> de{' '}
+                  <span className="font-medium">{filteredOrders.length}</span> pedidos
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Anterior
+                  </Button>
+                  <div className="flex gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={currentPage === pageNum ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => handlePageChange(pageNum)}
+                          className={currentPage === pageNum ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    Siguiente
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Modal Crear Pedido */}
+      <Dialog 
+        open={showCreateModal} 
+        onOpenChange={(open) => {
+          setShowCreateModal(open);
+          if (!open) {
+            setProductosSeleccionados([]);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[1400px] w-[98vw] max-h-[90vh] overflow-y-auto p-4">
+          <DialogHeader className="pb-1.5 border-b mb-2">
+            <DialogTitle className="flex items-center gap-1.5 text-sm">
+              <div className="p-1 bg-gradient-to-br from-purple-500 to-purple-600 rounded">
+                <Plus className="w-3 h-3 text-white" />
+              </div>
+              <span>Crear Pedido</span>
+            </DialogTitle>
+            <DialogDescription className="text-[10px] pt-0.5 text-gray-500">
+              Complete el formulario para crear un nuevo pedido
+            </DialogDescription>
+          </DialogHeader>
+
+          <PedidoForm
+            formData={newOrder}
+            onFormDataChange={setNewOrder}
+            productosSeleccionados={productosSeleccionados}
+            onProductosChange={setProductosSeleccionados}
+            productosDisponibles={productosDisponibles}
+            asesorTienda={asesorTienda}
+            mode="create"
+            onValidationChange={setIsCreateFormValid}
+          />
+
+          <div className="flex justify-end gap-2 pt-2 border-t mt-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowCreateModal(false);
+                setProductosSeleccionados([]);
+              }}
+              className="h-7 px-3 text-[11px]"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCreatePedido}
+              disabled={creating || !isCreateFormValid}
+              className={`px-4 shadow-lg h-7 text-[11px] ${
+                isCreateFormValid && !creating
+                  ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+              title={!isCreateFormValid ? 'Complete todos los campos obligatorios para crear el pedido' : ''}
+            >
+              {creating ? (<><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Creando...</>) : (<><Plus className="w-3 h-3 mr-1.5" />Crear</>)}
+            </Button>
+                </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Editar Pedido */}
+      <Dialog 
+        open={showEditModal} 
+        onOpenChange={(open) => {
+          setShowEditModal(open);
+          if (!open) {
+            setProductosSeleccionadosEdit([]);
+            setOrderToEdit(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[1400px] w-[98vw] max-h-[90vh] overflow-y-auto p-4">
+          <DialogHeader className="pb-1.5 border-b mb-2">
+            <DialogTitle className="flex items-center gap-1.5 text-sm">
+              <div className="p-1 bg-gradient-to-br from-blue-500 to-blue-600 rounded">
+                <Edit className="w-3 h-3 text-white" />
+                </div>
+              <span>Editar Pedido {orderToEdit?.id}</span>
+            </DialogTitle>
+            <DialogDescription className="text-[10px] pt-0.5 text-gray-500">
+              Modifique los campos necesarios del pedido
+            </DialogDescription>
+          </DialogHeader>
+
+          {orderToEdit && (
+            <>
+              {/* Debug info - remover en producción */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="mb-2 p-2 bg-gray-100 rounded text-xs text-gray-600">
+                  <p><strong>Debug:</strong> Provincia: "{editOrder.provincia}", Cantón: "{editOrder.canton}", Distrito: "{editOrder.distrito}"</p>
+                  <p>Productos: "{editOrder.productos}"</p>
+                </div>
+              )}
+              <PedidoForm
+                formData={editOrder}
+                onFormDataChange={setEditOrder}
+                productosSeleccionados={productosSeleccionadosEdit}
+                onProductosChange={setProductosSeleccionadosEdit}
+                productosDisponibles={productosDisponibles}
+                asesorTienda={asesorTienda}
+                mode="edit"
+                onValidationChange={setIsEditFormValid}
+              />
+            </>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2 border-t mt-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowEditModal(false);
+                setProductosSeleccionadosEdit([]);
+                setOrderToEdit(null);
+              }}
+              className="h-7 px-3 text-[11px]"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={saveEditModal}
+              disabled={isSaving || !isEditFormValid}
+              className={`px-4 shadow-lg h-7 text-[11px] ${
+                isEditFormValid && !isSaving
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              {isSaving ? (<><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Guardando...</>) : (<><Save className="w-3 h-3 mr-1.5" />Guardar</>)}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Ver Pedido / Confirmar Pedido */}
+      <Dialog 
+        open={showViewModal} 
+        onOpenChange={(open) => {
+          setShowViewModal(open);
+          if (!open) {
+            setOrderToView(null);
+            setViewMode('view');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[1400px] w-[98vw] max-h-[90vh] overflow-y-auto p-4">
+          <DialogHeader className="pb-1.5 border-b mb-2">
+            <DialogTitle className="flex items-center gap-1.5 text-sm">
+              <div className="p-1 bg-gradient-to-br from-purple-500 to-purple-600 rounded">
+                <FileText className="w-3 h-3 text-white" />
+              </div>
+              <span>{viewMode === 'confirm' ? 'Confirmar Pedido' : 'Ver Pedido'} {orderToView?.id}</span>
+            </DialogTitle>
+            <DialogDescription className="text-[10px] pt-0.5 text-gray-500">
+              {viewMode === 'confirm' ? 'Revise la información del pedido antes de confirmarlo' : 'Detalles del pedido'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {orderToView && (() => {
+            const viewOrderData: PedidoFormData = {
+              cliente_nombre: orderToView.customerName || '',
+              cliente_telefono: orderToView.customerPhone || '',
+              direccion: orderToView.customerAddress || '',
+              provincia: orderToView.customerProvince || '',
+              canton: orderToView.customerCanton || '',
+              distrito: orderToView.customerDistrict || '',
+              valor_total: String(orderToView.totalAmount || ''),
+              productos: (orderToView as any).productos || '',
+              link_ubicacion: (orderToView as any).link_ubicacion || '',
+              nota_asesor: (orderToView as any).nota_asesor || orderToView.asesorNotes || '',
+              confirmado: (orderToView as any).confirmado === true ? 'true' : 'false',
+              tipo_envio: (orderToView as any).tipo_envio || '',
+            };
+            
+            const productosParsed: { nombre: string; stock: number; cantidad: number }[] = [];
+            const productosStr = (orderToView as any).productos || '';
+            if (productosStr) {
+              const productosArray = productosStr.split(',').map((p: string) => p.trim());
+              productosArray.forEach((prod: string) => {
+                const match = prod.match(/(.+?)\s*x(\d+)/);
+                if (match) {
+                  productosParsed.push({
+                    nombre: match[1].trim(),
+                    cantidad: parseInt(match[2]),
+                    stock: 0,
+                  });
+                }
+              });
+            }
+
+            return (
+              <>
+                <PedidoForm
+                  formData={viewOrderData}
+                  onFormDataChange={() => {}}
+                  productosSeleccionados={productosParsed}
+                  onProductosChange={() => {}}
+                  productosDisponibles={productosDisponibles}
+                  asesorTienda={asesorTienda}
+                  mode="view"
+                />
+
+                <div className="flex justify-end gap-2 pt-2 border-t mt-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setShowViewModal(false);
+                      setOrderToView(null);
+                      setViewMode('view');
+                    }}
+                    className="h-7 px-3 text-[11px]"
+                  >
+                    Cerrar
+            </Button>
+                  {viewMode === 'confirm' && (
+                    <Button
+                      onClick={confirmarPedido}
+                      disabled={isConfirming}
+                      className="px-4 shadow-lg h-7 text-[11px] bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white"
+                    >
+                      {isConfirming ? (
+                        <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Confirmando...</>
+                      ) : (
+                        <><CheckCircle className="w-3 h-3 mr-1.5" />Confirmar este pedido</>
+                      )}
+                    </Button>
+                  )}
+          </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Edición Masiva */}
       <Dialog open={showBulkEditModal} onOpenChange={setShowBulkEditModal}>
@@ -1512,10 +2319,10 @@ export default function AsesorDashboard() {
             </div>
             
             {bulkEditField === 'status' && (
-              <div className="space-y-2">
+            <div className="space-y-2">
                 <Label htmlFor="bulkValue">Nuevo estado</Label>
                 <Select value={bulkEditValue} onValueChange={setBulkEditValue}>
-                  <SelectTrigger>
+                <SelectTrigger>
                     <SelectValue placeholder="Seleccionar estado" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1553,17 +2360,17 @@ export default function AsesorDashboard() {
                 <Select value={bulkEditValue} onValueChange={setBulkEditValue}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccionar método" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="efectivo">Efectivo</SelectItem>
-                    <SelectItem value="sinpe">SINPE</SelectItem>
-                    <SelectItem value="tarjeta">Tarjeta</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="efectivo">Efectivo</SelectItem>
+                  <SelectItem value="sinpe">SINPE</SelectItem>
+                  <SelectItem value="tarjeta">Tarjeta</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             )}
             
-            <div className="flex justify-end gap-2 pt-4">
+          <div className="flex justify-end gap-2 pt-4">
               <Button
                 variant="outline"
                 onClick={() => {
@@ -1580,7 +2387,7 @@ export default function AsesorDashboard() {
                 className="bg-orange-600 hover:bg-orange-700 text-white"
               >
                 Aplicar a {selectedOrders.size} pedidos
-              </Button>
+            </Button>
             </div>
           </div>
         </DialogContent>
