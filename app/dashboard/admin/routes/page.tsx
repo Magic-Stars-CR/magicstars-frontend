@@ -387,7 +387,7 @@ export default function AdminRoutesPage() {
         mensajero_id: messengerId,
         mensajero_nombre: messengerName
       });
-      console.log('⚠️  IMPORTANTE: El endpoint recibe ID pero Supabase almacena NOMBRE');
+      console.log('⚠️  IMPORTANTE: El endpoint recibe NOMBRE, no ID');
 
       const response = await apiRequest(API_URLS.ASIGNAR_PEDIDO_INDIVIDUAL, {
         method: 'POST',
@@ -430,17 +430,25 @@ export default function AdminRoutesPage() {
       setLoading(true);
       setShowReassignDialog(false);
 
+      // Encontrar los nombres de los mensajeros seleccionados
+      const oldMessengerName = messengers.find((m: User) => m.id === oldMessengerId)?.name;
+      const newMessengerName = messengers.find((m: User) => m.id === newMessengerId)?.name;
+
+      console.log('🚀 ==================== REASIGNACIÓN MASIVA ====================');
       console.log('🚀 Reasignando pedidos masivamente:', {
-        mensajero_antiguo: oldMessengerId,
-        mensajero_actual: newMessengerId,
+        mensajero_antiguo_id: oldMessengerId,
+        mensajero_antiguo_nombre: oldMessengerName,
+        mensajero_actual_id: newMessengerId,
+        mensajero_actual_nombre: newMessengerName,
         fecha_ruta: reassignRouteDate
       });
+      console.log('⚠️  IMPORTANTE: El endpoint recibe NOMBRES, no IDs');
 
       const response = await apiRequest(API_URLS.REASIGNAR_PEDIDOS_MENSAJERO, {
         method: 'POST',
         body: JSON.stringify({
-          mensajero_antiguo: oldMessengerId,
-          mensajero_actual: newMessengerId,
+          mensajero_antiguo: oldMessengerName,
+          mensajero_actual: newMessengerName,
           fecha_ruta: reassignRouteDate
         })
       });
@@ -449,9 +457,7 @@ export default function AdminRoutesPage() {
       console.log('📡 Respuesta del servidor:', result);
 
       if (response.ok && result === 'generado exitosamente') {
-        const oldMessengerName = messengers.find((m: User) => m.id === oldMessengerId)?.name || oldMessengerId;
-        const newMessengerName = messengers.find((m: User) => m.id === newMessengerId)?.name || newMessengerId;
-
+        console.log('✅ Reasignación exitosa según servidor');
         toast({
           title: "¡Pedidos reasignados exitosamente!",
           description: `Todos los pedidos de ${oldMessengerName} han sido reasignados a ${newMessengerName}.`,
@@ -461,12 +467,15 @@ export default function AdminRoutesPage() {
         setOldMessengerId('');
         setNewMessengerId('');
 
+        console.log('🔄 Recargando datos desde Supabase...');
         await loadData();
+        console.log('✅ ==================== FIN REASIGNACIÓN ====================');
       } else {
         throw new Error(result.message || 'Error al reasignar pedidos');
       }
     } catch (error) {
       console.error('❌ Error al reasignar pedidos:', error);
+      console.error('❌ ==================== FIN REASIGNACIÓN (ERROR) ====================');
       toast({
         title: "Error al reasignar pedidos",
         description: error instanceof Error ? error.message : 'Error desconocido',
