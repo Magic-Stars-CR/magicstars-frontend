@@ -17,9 +17,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Truck,
-  Search,
-  Filter,
-  Plus,
   Download,
   MapPin,
   Route,
@@ -28,7 +25,6 @@ import {
   Package,
   Navigation,
   Zap,
-  Edit,
   Calendar,
   RefreshCw,
   AlertTriangle
@@ -43,9 +39,7 @@ export default function AdminRoutesPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingUnassigned, setLoadingUnassigned] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const [messengerFilter, setMessengerFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Nuevo: Estado para fecha seleccionada (por defecto día actual)
   const [selectedDate, setSelectedDate] = useState(getCostaRicaDateISO());
@@ -580,21 +574,15 @@ export default function AdminRoutesPage() {
     return filtered;
   };
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = 
-      order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (order.customerPhone && order.customerPhone.includes(searchTerm));
-    
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-    const matchesMessenger = messengerFilter === 'all' || order.assignedMessenger?.id === messengerFilter;
-
-    return matchesSearch && matchesStatus && matchesMessenger;
-  });
-
   const messengers = users.filter(u => u.role === 'mensajero' && u.isActive);
   const unassignedOrders = getUnassignedOrders();
-  const assignedOrders = getAssignedOrders();
+  const assignedOrdersAll = getAssignedOrders();
+
+  // Aplicar filtro de mensajero solo a pedidos asignados
+  const assignedOrders = assignedOrdersAll.filter(order => {
+    const matchesMessenger = messengerFilter === 'all' || order.assignedMessenger?.id === messengerFilter;
+    return matchesMessenger;
+  });
 
   // Log para depuración
   useEffect(() => {
@@ -760,32 +748,13 @@ export default function AdminRoutesPage() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por ID, cliente o teléfono..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filtrar por estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los estados</SelectItem>
-                <SelectItem value="confirmado">Confirmado</SelectItem>
-                <SelectItem value="en_ruta">En Ruta</SelectItem>
-                <SelectItem value="reagendado">Reagendado</SelectItem>
-              </SelectContent>
-            </Select>
-
+          <div className="flex items-center gap-4">
+            <Label htmlFor="messenger-filter" className="font-semibold whitespace-nowrap">
+              Filtrar por mensajero:
+            </Label>
             <Select value={messengerFilter} onValueChange={setMessengerFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filtrar por mensajero" />
+              <SelectTrigger id="messenger-filter" className="w-auto min-w-[200px]">
+                <SelectValue placeholder="Todos los mensajeros" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los mensajeros</SelectItem>
@@ -796,11 +765,15 @@ export default function AdminRoutesPage() {
                 ))}
               </SelectContent>
             </Select>
-
-            <Button variant="outline" className="w-full">
-              <Filter className="w-4 h-4 mr-2" />
-              Más Filtros
-            </Button>
+            {messengerFilter !== 'all' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setMessengerFilter('all')}
+              >
+                Limpiar filtro
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
