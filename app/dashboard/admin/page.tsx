@@ -38,7 +38,6 @@ import {
   UserCheck,
   Clock,
   Building2,
-  Warehouse,
   RefreshCw,
   Phone,
   Mail,
@@ -95,18 +94,19 @@ export default function AdminDashboard() {
       setSyncing(true);
       setSyncMessage(null);
       
-      console.log('Iniciando sincronización de registros...');
+      console.log('Iniciando sincronización de pedidos y rutas...');
       
-      const response = await apiRequest(API_URLS.SYNC_TODAY_REGISTRIES, {
+      // Sincronizar pedidos y rutas
+      const syncPedidosResponse = await apiRequest(API_URLS.SYNC_PEDIDOS, {
         method: 'POST',
       });
 
-      if (!response.ok) {
-        throw new Error(`Error en la sincronización: ${response.status}`);
+      if (!syncPedidosResponse.ok) {
+        throw new Error(`Error en la sincronización de pedidos: ${syncPedidosResponse.status}`);
       }
 
-      const result = await response.json();
-      console.log('Sincronización exitosa:', result);
+      const syncPedidosResult = await syncPedidosResponse.json();
+      console.log('Sincronización de pedidos exitosa:', syncPedidosResult);
       
       setSyncMessage('Sincronización exitosa. Los datos se han actualizado.');
       setLastSyncTime(Date.now());
@@ -207,11 +207,13 @@ export default function AdminDashboard() {
       const totalOrders = pedidosData.length;
       const deliveredOrders = pedidosData.filter(p => p.mensajero_concretado).length;
       const pendingOrders = pedidosData.filter(p => !p.mensajero_asignado).length;
-      const returnedOrders = 0; // No hay campo para devoluciones en la tabla actual
-      const rescheduledOrders = 0; // No hay campo para reagendados en la tabla actual
+      const returnedOrders = pedidosData.filter(p => p.estado_pedido?.toLowerCase() === 'devolucion').length;
+      const rescheduledOrders = pedidosData.filter(p => p.estado_pedido?.toLowerCase() === 'reagendado').length;
       const totalCash = pedidosData.reduce((sum, p) => sum + p.valor_total, 0);
       const totalSinpe = 0; // No hay campo para Sinpe en la tabla actual
       const deliveryRate = totalOrders > 0 ? Math.round((deliveredOrders / totalOrders) * 100) : 0;
+      const returnRate = totalOrders > 0 ? Math.round((returnedOrders / totalOrders) * 100) : 0;
+      const rescheduleRate = totalOrders > 0 ? Math.round((rescheduledOrders / totalOrders) * 100) : 0;
 
       const realStats: Stats = {
         totalOrders,
@@ -222,6 +224,8 @@ export default function AdminDashboard() {
         totalCash,
         totalSinpe,
         deliveryRate,
+        returnRate,
+        rescheduleRate,
       };
 
       setStats(realStats);
@@ -284,57 +288,104 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Gestión de Pedidos - Prioridad Principal */}
-      <div className="grid md:grid-cols-2 gap-6 mb-8">
-        {/* Gestión de Pedidos - PRINCIPAL */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-6">
-            <Button asChild className="w-full h-24 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <Link href="/dashboard/admin/pedidos" className="flex flex-col items-center gap-2">
-                <Package className="w-8 h-8" />
-                <span className="text-lg font-bold">Gestión de Pedidos</span>
-                <span className="text-xs opacity-90">Editar, asignar y administrar pedidos</span>
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
+      {/* Estadísticas Principales - Prioridad */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+          <StatsCard
+            title="Total Pedidos"
+            value={stats.totalOrders}
+            icon={Package}
+            className="bg-blue-50 border-blue-200"
+          />
+          <StatsCard
+            title="Entregados"
+            value={stats.deliveredOrders}
+            icon={CheckCircle}
+            className="bg-green-50 border-green-200"
+          />
+          <StatsCard
+            title="Tasa de Entrega"
+            value={`${stats.deliveryRate}%`}
+            icon={TrendingUp}
+            className="bg-emerald-50 border-emerald-200"
+          />
+          <StatsCard
+            title="Devoluciones"
+            value={stats.returnedOrders}
+            icon={RotateCcw}
+            className="bg-red-50 border-red-200"
+          />
+          <StatsCard
+            title="Tasa de Devolución"
+            value={`${stats.returnRate || 0}%`}
+            icon={RotateCcw}
+            className="bg-orange-50 border-orange-200"
+          />
+          <StatsCard
+            title="Tasa de Reagendado"
+            value={`${stats.rescheduleRate || 0}%`}
+            icon={Clock}
+            className="bg-amber-50 border-amber-200"
+          />
+        </div>
+      )}
 
-        {/* Sincronizar Registros */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-cyan-50 to-blue-50 border-2 border-cyan-200 hover:border-cyan-400 hover:shadow-lg hover:shadow-cyan-100 transition-all duration-300 transform hover:-translate-y-1">
+      {/* Estadísticas Secundarias */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <StatsCard
+            title="Reagendados"
+            value={stats.rescheduledOrders}
+            icon={Clock}
+            className="bg-yellow-50 border-yellow-200"
+          />
+          <StatsCard
+            title="Pendientes"
+            value={stats.pendingOrders}
+            icon={Clock}
+            className="bg-yellow-50 border-yellow-200"
+          />
+          <Card className="bg-gradient-to-br from-cyan-50 to-blue-50 border-2 border-cyan-200 hover:border-cyan-400 transition-all">
           <CardContent className="flex items-center justify-center p-6">
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button 
                   disabled={syncing || !canSync()}
-                  className="w-full h-24 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                    className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                   variant="outline"
                 >
-                  <div className="flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-2">
                     {syncing ? (
-                      <Loader2 className="w-8 h-8 animate-spin" />
+                        <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
-                      <RefreshCw className="w-8 h-8" />
+                        <RefreshCw className="w-5 h-5" />
                     )}
-                    <span className="text-lg font-bold">
+                      <span className="font-semibold">
                       {syncing ? 'Sincronizando...' : 'Sincronizar Registros'}
                     </span>
-                    <span className="text-xs opacity-90">Actualizar datos del sistema</span>
+                      {!canSync() && lastSyncTime && (
+                        <span className="text-xs ml-1 opacity-75">
+                          ({getTimeUntilNextSync()})
+                        </span>
+                      )}
                   </div>
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Confirmar Sincronización</AlertDialogTitle>
-                  <AlertDialogDescription className="space-y-2">
-                    <p>¿Estás seguro de que quieres sincronizar los registros con Google Sheets?</p>
-                    <p className="font-medium text-amber-600">
-                      ⚠️ Importante: No realices múltiples sincronizaciones en menos de 5 minutos para evitar sobrecargar el sistema.
-                    </p>
-                    {!canSync() && (
-                      <p className="font-medium text-red-600">
-                        Debes esperar {getTimeUntilNextSync()} antes de poder sincronizar nuevamente.
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-2">
+                      <p>¿Estás seguro de que quieres sincronizar los registros y pedidos?</p>
+                      <p className="font-medium text-amber-600">
+                        ⚠️ Importante: No realices múltiples sincronizaciones en menos de 5 minutos para evitar sobrecargar el sistema.
                       </p>
-                    )}
+                      {!canSync() && (
+                        <p className="font-medium text-red-600">
+                          Debes esperar {getTimeUntilNextSync()} antes de poder sincronizar nuevamente.
+                        </p>
+                      )}
+                    </div>
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -351,181 +402,16 @@ export default function AdminDashboard() {
             </AlertDialog>
           </CardContent>
         </Card>
-      </div>
-
-      {/* Estadísticas Secundarias */}
-      <div className="grid md:grid-cols-3 gap-6 mb-8">
-        {/* Estadísticas por Empresa */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-100 transition-all duration-300 transform hover:-translate-y-1">
+          <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 hover:border-blue-400 transition-all">
           <CardContent className="flex items-center justify-center p-6">
-            <Button asChild className="w-full h-20 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <Link href="/dashboard/admin/stats/empresas" className="flex flex-col items-center gap-2">
-                <Building2 className="w-6 h-6" />
-                <span className="text-sm font-bold">Estadísticas por Empresa</span>
-                <span className="text-xs opacity-90">Análisis detallado por empresa</span>
+              <Button asChild className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white">
+                <Link href="/dashboard/admin/pedidos" className="flex items-center gap-2">
+                  <Package className="w-5 h-5" />
+                  <span className="font-semibold">Gestión de Pedidos</span>
               </Link>
             </Button>
           </CardContent>
         </Card>
-
-        {/* Estadísticas por Mensajero */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 hover:border-green-400 hover:shadow-lg hover:shadow-green-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-6">
-            <Button asChild className="w-full h-20 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <Link href="/dashboard/admin/stats/mensajeros" className="flex flex-col items-center gap-2">
-                <UserCheck className="w-6 h-6" />
-                <span className="text-sm font-bold">Estadísticas por Mensajero</span>
-                <span className="text-xs opacity-90">Rendimiento individual</span>
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Estadísticas Generales */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-orange-200 hover:border-orange-400 hover:shadow-lg hover:shadow-orange-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-6">
-            <Button asChild className="w-full h-20 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <Link href="/dashboard/admin/stats" className="flex flex-col items-center gap-2">
-                <BarChart3 className="w-6 h-6" />
-                <span className="text-sm font-bold">Estadísticas Generales</span>
-                <span className="text-xs opacity-90">Vista completa del negocio</span>
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Acciones Rápidas Secundarias */}
-      <div className="grid md:grid-cols-6 gap-4 mb-8">
-
-        {/* Gestionar Inventario */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-200 hover:border-emerald-400 hover:shadow-lg hover:shadow-emerald-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-4">
-            <Button asChild className="w-full h-16 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <Link href="/dashboard/admin/inventory" className="flex flex-col items-center gap-1">
-                <Warehouse className="w-5 h-5" />
-                <span className="text-xs">Gestionar Inventario</span>
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Asignar Rutas */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-green-50 to-teal-50 border-2 border-green-200 hover:border-green-400 hover:shadow-lg hover:shadow-green-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-4">
-            <Button asChild className="w-full h-16 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <Link href="/dashboard/admin/routes" className="flex flex-col items-center gap-1">
-                <Truck className="w-5 h-5" />
-                <span className="text-xs">Asignar Rutas</span>
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Gestionar Usuarios */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-4">
-            <Button asChild className="w-full h-16 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <Link href="/dashboard/admin/users" className="flex flex-col items-center gap-1">
-                <Users className="w-5 h-5" />
-                <span className="text-xs">Gestionar Usuarios</span>
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Gestionar Empresas */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-indigo-50 to-blue-50 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg hover:shadow-indigo-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-4">
-            <Button asChild className="w-full h-16 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <Link href="/dashboard/admin/companies" className="flex flex-col items-center gap-1">
-                <Building2 className="w-5 h-5" />
-                <span className="text-xs">Gestionar Empresas</span>
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Liquidación */}
-        <Card className="group relative overflow-hidden bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-200 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-100 transition-all duration-300 transform hover:-translate-y-1">
-          <CardContent className="flex items-center justify-center p-4">
-            <Button asChild className="w-full h-16 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <Link href="/dashboard/admin/liquidation" className="flex flex-col items-center gap-1">
-                <DollarSign className="w-5 h-5" />
-                <span className="text-xs">Liquidación</span>
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Stats */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatsCard
-            title="Total Pedidos"
-            value={stats.totalOrders}
-            icon={Package}
-            trend={{ value: 12, isPositive: true }}
-            className="bg-blue-50 border-blue-200"
-          />
-          <StatsCard
-            title="Entregados"
-            value={stats.deliveredOrders}
-            icon={CheckCircle}
-            trend={{ value: 8, isPositive: true }}
-            className="bg-green-50 border-green-200"
-          />
-          <StatsCard
-            title="Tasa de Entrega"
-            value={`${stats.deliveryRate}%`}
-            icon={TrendingUp}
-            trend={{ value: 3, isPositive: true }}
-            className="bg-purple-50 border-purple-200"
-          />
-          <StatsCard
-            title="Ingresos Totales"
-            value={formatCurrency(stats.totalCash + stats.totalSinpe)}
-            icon={DollarSign}
-            trend={{ value: 15, isPositive: true }}
-            className="bg-orange-50 border-orange-200"
-          />
-        </div>
-      )}
-
-      {/* Secondary Stats */}
-      {stats && (
-        <div className="grid md:grid-cols-5 gap-4">
-          <StatsCard
-            title="Pendientes"
-            value={stats.pendingOrders}
-            icon={Clock}
-            className="bg-yellow-50 border-yellow-200"
-          />
-          <StatsCard
-            title="En Ruta"
-            value={stats.totalOrders - stats.deliveredOrders - stats.pendingOrders}
-            icon={Truck}
-            className="bg-blue-50 border-blue-200"
-          />
-          <StatsCard
-            title="Devoluciones"
-            value={stats.returnedOrders}
-            icon={RotateCcw}
-            className="bg-red-50 border-red-200"
-          />
-          <StatsCard
-            title="Mensajeros"
-            value={messengers.length}
-            icon={UserCheck}
-            className="bg-indigo-50 border-indigo-200"
-          />
-          <StatsCard
-            title="Asesores"
-            value={advisors.length}
-            icon={Users}
-            className="bg-pink-50 border-pink-200"
-          />
         </div>
       )}
 

@@ -145,6 +145,8 @@ export interface Stats {
   totalCash: number;
   totalSinpe: number;
   deliveryRate: number;
+  returnRate?: number;
+  rescheduleRate?: number;
   companyId?: string;        // Nueva relación con empresa
 }
 
