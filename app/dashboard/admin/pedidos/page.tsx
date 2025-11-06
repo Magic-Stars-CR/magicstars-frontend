@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { PedidoTest } from '@/lib/types';
 import { usePedidos } from '@/hooks/use-pedidos';
@@ -19,6 +19,7 @@ import {
   Save,
   CheckCircle
 } from 'lucide-react';
+import { API_URLS, apiRequest } from '@/lib/config';
 
 // Componentes personalizados
 import { DateFilters } from '@/components/dashboard/date-filters';
@@ -69,6 +70,70 @@ export default function AdminPedidosPage() {
 
   // Estados para modal de discrepancias
   const [isDiscrepancyModalOpen, setIsDiscrepancyModalOpen] = useState(false);
+
+  // Estados para cooldown del botón Actualizar
+  const [updating, setUpdating] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState<number | null>(null);
+
+  // Actualizar el contador de tiempo cada segundo
+  useEffect(() => {
+    if (!canUpdate() && lastUpdateTime) {
+      const interval = setInterval(() => {
+        // Forzar re-render para actualizar el contador
+        setLastUpdateTime(prev => prev ? prev : null);
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [lastUpdateTime]);
+
+  const canUpdate = () => {
+    if (!lastUpdateTime) return true;
+    const fiveMinutes = 5 * 60 * 1000; // 5 minutos en milisegundos
+    return Date.now() - lastUpdateTime > fiveMinutes;
+  };
+
+  const getTimeUntilNextUpdate = () => {
+    if (!lastUpdateTime) return null;
+    const fiveMinutes = 5 * 60 * 1000;
+    const timeLeft = fiveMinutes - (Date.now() - lastUpdateTime);
+    if (timeLeft <= 0) return null;
+    
+    const minutes = Math.floor(timeLeft / 60000);
+    const seconds = Math.floor((timeLeft % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const handleUpdate = async () => {
+    try {
+      setUpdating(true);
+      
+      console.log('Iniciando sincronización de pedidos y rutas...');
+      
+      // Sincronizar pedidos y rutas
+      const syncPedidosResponse = await apiRequest(API_URLS.SYNC_PEDIDOS, {
+        method: 'POST',
+      });
+
+      if (!syncPedidosResponse.ok) {
+        throw new Error(`Error en la sincronización de pedidos: ${syncPedidosResponse.status}`);
+      }
+
+      const syncPedidosResult = await syncPedidosResponse.json();
+      console.log('Sincronización de pedidos exitosa:', syncPedidosResult);
+      
+      setLastUpdateTime(Date.now());
+      
+      // Recargar los pedidos después de la sincronización
+      await loadPedidos();
+      
+    } catch (error) {
+      console.error('Error en la sincronización:', error);
+      // Aquí podrías añadir un toast para mostrar el error
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   const handleEditPedido = (pedido: PedidoTest) => {
     setSelectedPedido(pedido);
@@ -229,9 +294,27 @@ export default function AdminPedidosPage() {
           </p>
         </div>
         <div className="flex items-center space-x-4">
-          <Button onClick={loadPedidos} variant="outline">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Actualizar
+          <Button 
+            onClick={handleUpdate} 
+            disabled={updating || !canUpdate()}
+            variant="outline"
+            className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none border-0"
+          >
+            <div className="flex items-center gap-2">
+              {updating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              <span>
+                {updating ? 'Sincronizando...' : 'Actualizar'}
+              </span>
+              {!canUpdate() && lastUpdateTime && (
+                <span className="text-xs opacity-90 ml-1">
+                  ({getTimeUntilNextUpdate()})
+                </span>
+              )}
+            </div>
           </Button>
           
           <Button 
