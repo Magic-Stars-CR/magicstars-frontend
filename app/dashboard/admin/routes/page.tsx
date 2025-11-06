@@ -393,7 +393,7 @@ export default function AdminRoutesPage() {
         method: 'POST',
         body: JSON.stringify({
           id_pedido: orderId,
-          mensajero_asignado: messengerId
+          mensajero_asignado: messengerName
         })
       });
 
