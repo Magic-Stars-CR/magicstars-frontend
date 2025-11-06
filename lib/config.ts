@@ -36,6 +36,7 @@ export const API_ENDPOINTS = {
   // Sincronización
   SYNC: {
     SYNC_TODAY_REGISTRIES: '/webhook/Sync-Today-Registries',
+    SYNC_PEDIDOS: '/webhook/sincronizar-pedidos',
   },
 
   // Gestión de Rutas
@@ -68,8 +69,9 @@ export const API_URLS = {
   ADD_LIQUIDACION: buildApiUrl(API_ENDPOINTS.LIQUIDATIONS.ADD_LIQUIDACION),
   ALERTA_LIQUIDACIONES_VENCIDAS: buildApiUrl(API_ENDPOINTS.LIQUIDATIONS.ALERTA_LIQUIDACIONES_VENCIDAS),
   
-  // Sincronización
-  SYNC_TODAY_REGISTRIES: buildApiUrl(API_ENDPOINTS.SYNC.SYNC_TODAY_REGISTRIES),
+  // Sincronización - Usar rutas de API locales como proxy para evitar CORS
+  SYNC_TODAY_REGISTRIES: '/api/sync/registries',
+  SYNC_PEDIDOS: '/api/sync/pedidos',
 
   // Rutas
   GENERAR_RUTAS: buildApiUrl(API_ENDPOINTS.ROUTES.GENERAR_RUTAS),
