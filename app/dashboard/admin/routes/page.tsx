@@ -495,7 +495,17 @@ export default function AdminRoutesPage() {
   };
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('es-CR', {
+    // Si la fecha es solo YYYY-MM-DD (sin hora), añadir la hora local para evitar desfase de zona horaria
+    let dateObj: Date;
+
+    if (date && date.length === 10 && !date.includes('T')) {
+      // Fecha en formato YYYY-MM-DD, añadir hora local para evitar conversión UTC
+      dateObj = new Date(date + 'T00:00:00');
+    } else {
+      dateObj = new Date(date);
+    }
+
+    return dateObj.toLocaleDateString('es-CR', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -830,9 +840,20 @@ export default function AdminRoutesPage() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm">{order.deliveryAddress || 'Sin dirección'}</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-muted-foreground" />
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">
+                          {order.customerProvince && order.customerCanton && order.customerDistrict
+                            ? `${order.customerProvince}, ${order.customerCanton}, ${order.customerDistrict}`
+                            : 'Sin ubicación'}
+                        </span>
+                        <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                          {order.deliveryAddress || 'Sin dirección exacta'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
                   <div>
@@ -906,9 +927,20 @@ export default function AdminRoutesPage() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm">{order.deliveryAddress || 'Sin dirección'}</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-muted-foreground" />
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">
+                          {order.customerProvince && order.customerCanton && order.customerDistrict
+                            ? `${order.customerProvince}, ${order.customerCanton}, ${order.customerDistrict}`
+                            : 'Sin ubicación'}
+                        </span>
+                        <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                          {order.deliveryAddress || 'Sin dirección exacta'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -1028,9 +1060,20 @@ export default function AdminRoutesPage() {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm truncate">{order.customerDistrict}</span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-muted-foreground" />
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">
+                            {order.customerProvince && order.customerCanton && order.customerDistrict
+                              ? `${order.customerProvince}, ${order.customerCanton}, ${order.customerDistrict}`
+                              : 'Sin ubicación'}
+                          </span>
+                          <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                            {order.deliveryAddress || 'Sin dirección exacta'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
                     <div>
