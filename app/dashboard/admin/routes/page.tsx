@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { mockMessengers } from '@/lib/mock-messengers';
-import { Order, User } from '@/lib/types';
+import { Order, User, OrderStatus } from '@/lib/types';
 import { API_URLS, apiRequest } from '@/lib/config';
 import { useToast } from '@/hooks/use-toast';
 import { getPedidosByFecha, getCostaRicaDateISO, supabasePedidos } from '@/lib/supabase-pedidos';
@@ -40,6 +40,9 @@ export default function AdminRoutesPage() {
   const [loading, setLoading] = useState(true);
   const [loadingUnassigned, setLoadingUnassigned] = useState(false);
   const [messengerFilter, setMessengerFilter] = useState<string>('all');
+  const [provinciaFilter, setProvinciaFilter] = useState<string>('all');
+  const [cantonFilter, setCantonFilter] = useState<string>('all');
+  const [distritoFilter, setDistritoFilter] = useState<string>('all');
 
   // Nuevo: Estado para fecha seleccionada (por defecto día actual)
   const [selectedDate, setSelectedDate] = useState(getCostaRicaDateISO());
@@ -47,6 +50,8 @@ export default function AdminRoutesPage() {
   // Estados para generar rutas
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [generateRouteDate, setGenerateRouteDate] = useState(new Date().toISOString().split('T')[0]);
+  const [capacidadNomina, setCapacidadNomina] = useState<string>('30');
+  const [capacidadExtra, setCapacidadExtra] = useState<string>('0');
   const [generatingRoutes, setGeneratingRoutes] = useState(false);
   const [showResultDialog, setShowResultDialog] = useState(false);
   const [resultMessage, setResultMessage] = useState({ title: '', description: '', isError: false });
@@ -57,8 +62,11 @@ export default function AdminRoutesPage() {
   const [newMessengerId, setNewMessengerId] = useState<string>('');
   const [reassignRouteDate, setReassignRouteDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // Estados para asignar pedido individual - mapa de pedido ID a mensajero ID
+  // Estados para asignar pedido individual - mapa de pedido ID a mensajero NOMBRE
   const [messengerSelections, setMessengerSelections] = useState<Record<string, string>>({});
+
+  // Estado para diálogo de resumen por ubicación
+  const [showLocationSummaryDialog, setShowLocationSummaryDialog] = useState(false);
 
   // Auto-refresh cuando el componente se monta
   useEffect(() => {
@@ -70,6 +78,29 @@ export default function AdminRoutesPage() {
   useEffect(() => {
     loadData();
   }, [selectedDate]);
+
+  // Función helper para normalizar estados de pedido
+  const normalizeOrderStatus = (status: string | null | undefined): OrderStatus => {
+    if (!status) return 'pendiente';
+
+    const normalizedStatus = status.toLowerCase().trim();
+
+    // Mapeo de variantes de estados a los estados válidos
+    const statusMap: Record<string, OrderStatus> = {
+      'pendiente': 'pendiente',
+      'confirmado': 'confirmado',
+      'en_ruta': 'en_ruta',
+      'en ruta': 'en_ruta',
+      'entregado': 'entregado',
+      'devolucion': 'devolucion',
+      'devolución': 'devolucion',
+      'reagendado': 'reagendado',
+      'reagendo': 'reagendado',  // ← Mapear REAGENDO a reagendado
+      'cancelado': 'pendiente',  // Cancelado lo mapeamos a pendiente
+    };
+
+    return statusMap[normalizedStatus] || 'pendiente';
+  };
 
   // Función para convertir PedidoTest de Supabase a Order del frontend
   const convertPedidoToOrder = (pedido: any): Order => {
@@ -128,7 +159,7 @@ export default function AdminRoutesPage() {
       items: [],
       productos: pedido.productos,
       totalAmount: Number(pedido.valor_total),
-      status: pedido.estado_pedido?.toLowerCase() as any || 'pendiente',
+      status: normalizeOrderStatus(pedido.estado_pedido),
       paymentMethod: pedido.metodo_pago?.toLowerCase() as any || 'efectivo',
       createdAt: pedido.fecha_creacion,
       updatedAt: pedido.fecha_creacion,
@@ -283,11 +314,17 @@ export default function AdminRoutesPage() {
 
       console.log('🚀 ==================== GENERAR RUTAS ====================');
       console.log('🚀 Fecha:', generateRouteDate);
+      console.log('🚀 Capacidad Nómina:', capacidadNomina);
+      console.log('🚀 Capacidad Extra:', capacidadExtra);
       console.log('🚀 Endpoint:', API_URLS.GENERAR_RUTAS);
 
       const response = await apiRequest(API_URLS.GENERAR_RUTAS, {
         method: 'POST',
-        body: JSON.stringify({ fecha: generateRouteDate })
+        body: JSON.stringify({
+          fecha: generateRouteDate,
+          capacidad_nomina: parseInt(capacidadNomina) || 30,
+          capacidad_extra: parseInt(capacidadExtra) || 0
+        })
       });
 
       console.log('📡 Status de respuesta:', response.status, response.statusText);
@@ -328,7 +365,7 @@ export default function AdminRoutesPage() {
 
         // Recargar datos
         console.log('🔄 Recargando datos...');
-        await loadData();
+        await handleRefreshAll();
         console.log('✅ ==================== FIN GENERAR RUTAS ====================');
       } else {
         // Error del servidor
@@ -366,50 +403,115 @@ export default function AdminRoutesPage() {
     }
   };
 
-  // 2. Función para asignar pedido individual
-  const handleAssignOrder = async (orderId: string, messengerId: string) => {
+  // 2. Función para asignar TODOS los pedidos con cambios pendientes
+  const handleAssignAllPendingOrders = async () => {
     try {
       setLoading(true);
 
-      // Encontrar el mensajero seleccionado para obtener su nombre
-      const selectedMessenger = messengers.find((m: User) => m.id === messengerId);
-      const messengerName = selectedMessenger?.name;
+      // Obtener todos los pedidos (unassigned, assigned, historical)
+      const allOrders = [...unassignedOrders, ...assignedOrdersAll, ...unassignedAllDates];
 
-      console.log('🚀 ==================== ASIGNACIÓN INDIVIDUAL ====================');
-      console.log('🚀 Asignando pedido:', {
-        id_pedido: orderId,
-        mensajero_id: messengerId,
-        mensajero_nombre: messengerName
-      });
-      console.log('⚠️  IMPORTANTE: El endpoint recibe NOMBRE, no ID');
-
-      const response = await apiRequest(API_URLS.ASIGNAR_PEDIDO_INDIVIDUAL, {
-        method: 'POST',
-        body: JSON.stringify({
-          id_pedido: orderId,
-          mensajero_asignado: messengerName
+      // Filtrar solo los pedidos que tienen una selección de mensajero
+      const pendingAssignments = Object.entries(messengerSelections)
+        .map(([orderId, messengerName]) => {
+          const order = allOrders.find(o => o.id === orderId);
+          return { orderId, messengerName, currentMessenger: order?.assignedMessenger?.name };
         })
-      });
-
-      const result = await response.json();
-      console.log('📡 Respuesta del servidor:', result);
-
-      if (response.ok && result === 'generado exitosamente') {
-        console.log('✅ Asignación exitosa según servidor');
-        toast({
-          title: "¡Pedido asignado exitosamente!",
-          description: `El pedido ${orderId} ha sido asignado correctamente.`,
+        .filter(({ messengerName, currentMessenger }) => {
+          // Solo incluir si hay un mensajero seleccionado Y es diferente al actual
+          return messengerName && messengerName !== currentMessenger;
         });
-        console.log('🔄 Recargando datos desde Supabase...');
-        await loadData();
-        console.log('✅ ==================== FIN ASIGNACIÓN ====================');
-      } else {
-        throw new Error(result.message || 'Error al asignar pedido');
+
+      if (pendingAssignments.length === 0) {
+        toast({
+          title: "No hay cambios pendientes",
+          description: "No se encontraron pedidos con cambios de mensajero.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
       }
+
+      console.log('🚀 ==================== ASIGNACIÓN MASIVA ====================');
+      console.log(`🚀 Asignando ${pendingAssignments.length} pedidos con cambios pendientes`);
+
+      let successCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
+
+      // Procesar cada asignación (con delay para evitar conflictos en Google Sheets)
+      for (const { orderId, messengerName } of pendingAssignments) {
+        try {
+          console.log(`📦 Asignando pedido ${orderId} a ${messengerName}`);
+
+          const response = await apiRequest(API_URLS.ASIGNAR_PEDIDO_INDIVIDUAL, {
+            method: 'POST',
+            body: JSON.stringify({
+              id_pedido: orderId,
+              mensajero_asignado: messengerName
+            })
+          });
+
+          const result = await response.json();
+          console.log(`📡 Respuesta para ${orderId}:`, result);
+
+          // El endpoint puede devolver "generado exitosamente" o { "response": "generado exitosamente" }
+          const mensaje = typeof result === 'string' ? result : result.response || result.message;
+          const esExitoso = response.ok && (
+            mensaje === 'generado exitosamente' ||
+            mensaje === 'asignado exitosamente' ||
+            (typeof mensaje === 'string' && mensaje.toLowerCase().includes('exitosa'))
+          );
+
+          if (esExitoso) {
+            console.log(`✅ Pedido ${orderId} asignado exitosamente`);
+            successCount++;
+          } else {
+            throw new Error(mensaje || 'Error al asignar pedido');
+          }
+
+          // Delay de 500ms entre cada asignación para evitar conflictos en Google Sheets
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+          console.error(`❌ Error al asignar pedido ${orderId}:`, error);
+          errorCount++;
+          errors.push(`${orderId}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+      }
+
+      // Limpiar selecciones después de procesar
+      setMessengerSelections({});
+
+      // Mostrar resultado
+      if (successCount > 0) {
+        toast({
+          title: `¡${successCount} pedido(s) asignado(s) exitosamente!`,
+          description: errorCount > 0
+            ? `${errorCount} pedido(s) fallaron. Revisa la consola para más detalles.`
+            : 'Todos los pedidos fueron asignados correctamente.',
+        });
+      }
+
+      if (errorCount > 0) {
+        console.error('❌ Errores en asignaciones:', errors);
+        if (successCount === 0) {
+          toast({
+            title: "Error al asignar pedidos",
+            description: `Fallaron ${errorCount} asignaciones. Revisa la consola para más detalles.`,
+            variant: "destructive",
+          });
+        }
+      }
+
+      console.log(`✅ Completado: ${successCount} éxitos, ${errorCount} errores`);
+      console.log('🔄 Recargando datos desde Supabase...');
+      await handleRefreshAll();
+      console.log('✅ ==================== FIN ASIGNACIÓN MASIVA ====================');
+
     } catch (error) {
-      console.error('❌ Error al asignar pedido:', error);
+      console.error('❌ Error general al asignar pedidos:', error);
       toast({
-        title: "Error al asignar pedido",
+        title: "Error al asignar pedidos",
         description: error instanceof Error ? error.message : 'Error desconocido',
         variant: "destructive",
       });
@@ -424,16 +526,10 @@ export default function AdminRoutesPage() {
       setLoading(true);
       setShowReassignDialog(false);
 
-      // Encontrar los nombres de los mensajeros seleccionados
-      const oldMessengerName = messengers.find((m: User) => m.id === oldMessengerId)?.name;
-      const newMessengerName = messengers.find((m: User) => m.id === newMessengerId)?.name;
-
       console.log('🚀 ==================== REASIGNACIÓN MASIVA ====================');
       console.log('🚀 Reasignando pedidos masivamente:', {
-        mensajero_antiguo_id: oldMessengerId,
-        mensajero_antiguo_nombre: oldMessengerName,
-        mensajero_actual_id: newMessengerId,
-        mensajero_actual_nombre: newMessengerName,
+        mensajero_antiguo_nombre: oldMessengerId,
+        mensajero_actual_nombre: newMessengerId,
         fecha_ruta: reassignRouteDate
       });
       console.log('⚠️  IMPORTANTE: El endpoint recibe NOMBRES, no IDs');
@@ -441,8 +537,8 @@ export default function AdminRoutesPage() {
       const response = await apiRequest(API_URLS.REASIGNAR_PEDIDOS_MENSAJERO, {
         method: 'POST',
         body: JSON.stringify({
-          mensajero_antiguo: oldMessengerName,
-          mensajero_actual: newMessengerName,
+          mensajero_antiguo: oldMessengerId,
+          mensajero_actual: newMessengerId,
           fecha_ruta: reassignRouteDate
         })
       });
@@ -450,11 +546,21 @@ export default function AdminRoutesPage() {
       const result = await response.json();
       console.log('📡 Respuesta del servidor:', result);
 
-      if (response.ok && result === 'generado exitosamente') {
+      // El endpoint puede devolver "generado exitosamente" o { "response": "generado exitosamente" }
+      const mensaje = typeof result === 'string' ? result : result.response || result.message;
+
+      // Aceptar múltiples mensajes de éxito
+      const successMessages = ['generado exitosamente', 'asignado exitosamente', 'reasignado exitosamente'];
+      const isSuccess = response.ok && (
+        successMessages.includes(mensaje) ||
+        (typeof mensaje === 'string' && mensaje.toLowerCase().includes('exitosa'))
+      );
+
+      if (isSuccess) {
         console.log('✅ Reasignación exitosa según servidor');
         toast({
           title: "¡Pedidos reasignados exitosamente!",
-          description: `Todos los pedidos de ${oldMessengerName} han sido reasignados a ${newMessengerName}.`,
+          description: `Todos los pedidos de ${oldMessengerId} han sido reasignados a ${newMessengerId}.`,
         });
 
         // Limpiar selecciones
@@ -462,10 +568,10 @@ export default function AdminRoutesPage() {
         setNewMessengerId('');
 
         console.log('🔄 Recargando datos desde Supabase...');
-        await loadData();
+        await handleRefreshAll();
         console.log('✅ ==================== FIN REASIGNACIÓN ====================');
       } else {
-        throw new Error(result.message || 'Error al reasignar pedidos');
+        throw new Error(mensaje || 'Error al reasignar pedidos');
       }
     } catch (error) {
       console.error('❌ Error al reasignar pedidos:', error);
@@ -511,6 +617,26 @@ export default function AdminRoutesPage() {
   const getMessengerName = (messengerId: string) => {
     const messenger = users.find(u => u.id === messengerId && u.role === 'mensajero');
     return messenger?.name || 'Sin asignar';
+  };
+
+  // Handlers para filtros en cascada
+  const handleProvinciaChange = (value: string) => {
+    setProvinciaFilter(value);
+    // Limpiar cantón y distrito cuando cambia la provincia
+    setCantonFilter('all');
+    setDistritoFilter('all');
+  };
+
+  const handleCantonChange = (value: string) => {
+    setCantonFilter(value);
+    // Limpiar distrito cuando cambia el cantón
+    setDistritoFilter('all');
+  };
+
+  const handleLimpiarFiltrosUbicacion = () => {
+    setProvinciaFilter('all');
+    setCantonFilter('all');
+    setDistritoFilter('all');
   };
 
   const getUnassignedOrders = () => {
@@ -574,15 +700,156 @@ export default function AdminRoutesPage() {
     return filtered;
   };
 
-  const messengers = users.filter(u => u.role === 'mensajero' && u.isActive);
   const unassignedOrders = getUnassignedOrders();
   const assignedOrdersAll = getAssignedOrders();
 
-  // Aplicar filtro de mensajero solo a pedidos asignados
-  const assignedOrders = assignedOrdersAll.filter(order => {
-    const matchesMessenger = messengerFilter === 'all' || order.assignedMessenger?.id === messengerFilter;
-    return matchesMessenger;
+  // Obtener mensajeros únicos por NOMBRE que tienen pedidos asignados en el día seleccionado
+  const messengersMap = new Map<string, User>();
+
+  // Primero, obtener nombres de mensajeros que tienen pedidos asignados
+  const messengersWithOrdersToday = new Set<string>();
+  assignedOrdersAll.forEach(order => {
+    if (order.assignedMessenger?.name) {
+      messengersWithOrdersToday.add(order.assignedMessenger.name);
+    }
   });
+
+  // Filtrar usuarios por mensajeros que tienen pedidos hoy
+  users
+    .filter(u => u.role === 'mensajero' && u.isActive && messengersWithOrdersToday.has(u.name))
+    .forEach(messenger => {
+      if (!messengersMap.has(messenger.name)) {
+        messengersMap.set(messenger.name, messenger);
+      }
+    });
+  const messengers = Array.from(messengersMap.values());
+
+  // Obtener TODOS los mensajeros activos del sistema (para reasignación)
+  const allMessengersMap = new Map<string, User>();
+  users
+    .filter(u => u.role === 'mensajero' && u.isActive)
+    .forEach(messenger => {
+      if (!allMessengersMap.has(messenger.name)) {
+        allMessengersMap.set(messenger.name, messenger);
+      }
+    });
+  const allMessengers = Array.from(allMessengersMap.values());
+
+  // Obtener provincias únicas de todos los pedidos del día
+  const provinciasUnicas = Array.from(
+    new Set(
+      orders
+        .filter(o => o.customerProvince && o.customerProvince.trim() !== '')
+        .map(o => o.customerProvince)
+    )
+  ).sort();
+
+  // Obtener cantones únicos filtrados por provincia seleccionada
+  const cantonesUnicos = Array.from(
+    new Set(
+      orders
+        .filter(o => {
+          const hasData = o.customerCanton && o.customerCanton.trim() !== '';
+          const matchesProvincia = provinciaFilter === 'all' || o.customerProvince === provinciaFilter;
+          return hasData && matchesProvincia;
+        })
+        .map(o => o.customerCanton)
+    )
+  ).sort();
+
+  // Obtener distritos únicos filtrados por provincia y cantón seleccionados
+  const distritosUnicos = Array.from(
+    new Set(
+      orders
+        .filter(o => {
+          const hasData = o.customerDistrict && o.customerDistrict.trim() !== '';
+          const matchesProvincia = provinciaFilter === 'all' || o.customerProvince === provinciaFilter;
+          const matchesCanton = cantonFilter === 'all' || o.customerCanton === cantonFilter;
+          return hasData && matchesProvincia && matchesCanton;
+        })
+        .map(o => o.customerDistrict)
+    )
+  ).sort();
+
+  // Aplicar filtros a pedidos asignados (usando NOMBRE en vez de ID)
+  const assignedOrders = assignedOrdersAll.filter(order => {
+    const matchesMessenger = messengerFilter === 'all' || order.assignedMessenger?.name === messengerFilter;
+    const matchesProvincia = provinciaFilter === 'all' || order.customerProvince === provinciaFilter;
+    const matchesCanton = cantonFilter === 'all' || order.customerCanton === cantonFilter;
+    const matchesDistrito = distritoFilter === 'all' || order.customerDistrict === distritoFilter;
+
+    return matchesMessenger && matchesProvincia && matchesCanton && matchesDistrito;
+  });
+
+  // Función para organizar pedidos por ubicación (Provincia -> Cantón -> Distrito)
+  const getLocationSummary = () => {
+    interface DistritoData {
+      distrito: string;
+      totalPedidos: number;
+      mensajeros: Set<string>;
+    }
+
+    interface CantonData {
+      canton: string;
+      distritos: DistritoData[];
+    }
+
+    interface ProvinciaData {
+      provincia: string;
+      cantones: CantonData[];
+    }
+
+    const locationMap = new Map<string, Map<string, Map<string, DistritoData>>>();
+
+    // Procesar todos los pedidos asignados del día
+    assignedOrdersAll.forEach(order => {
+      const provincia = order.customerProvince || 'Sin Provincia';
+      const canton = order.customerCanton || 'Sin Cantón';
+      const distrito = order.customerDistrict || 'Sin Distrito';
+      const mensajero = order.assignedMessenger?.name;
+
+      if (!locationMap.has(provincia)) {
+        locationMap.set(provincia, new Map());
+      }
+
+      const provinciaMap = locationMap.get(provincia)!;
+      if (!provinciaMap.has(canton)) {
+        provinciaMap.set(canton, new Map());
+      }
+
+      const cantonMap = provinciaMap.get(canton)!;
+      if (!cantonMap.has(distrito)) {
+        cantonMap.set(distrito, {
+          distrito,
+          totalPedidos: 0,
+          mensajeros: new Set()
+        });
+      }
+
+      const distritoData = cantonMap.get(distrito)!;
+      distritoData.totalPedidos++;
+      if (mensajero) {
+        distritoData.mensajeros.add(mensajero);
+      }
+    });
+
+    // Convertir a estructura de array ordenada
+    const result: ProvinciaData[] = [];
+    locationMap.forEach((cantonesMap, provincia) => {
+      const cantones: CantonData[] = [];
+      cantonesMap.forEach((distritosMap, canton) => {
+        const distritos: DistritoData[] = Array.from(distritosMap.values()).sort((a, b) =>
+          a.distrito.localeCompare(b.distrito)
+        );
+        cantones.push({ canton, distritos });
+      });
+      cantones.sort((a, b) => a.canton.localeCompare(b.canton));
+      result.push({ provincia, cantones });
+    });
+    result.sort((a, b) => a.provincia.localeCompare(b.provincia));
+
+    return result;
+  };
 
   // Log para depuración
   useEffect(() => {
@@ -650,9 +917,9 @@ export default function AdminRoutesPage() {
             <RefreshCw className="w-4 h-4 mr-2" />
             Reasignar Mensajero
           </Button>
-          <Button variant="outline">
-            <Download className="w-4 h-4 mr-2" />
-            Exportar
+          <Button onClick={() => setShowLocationSummaryDialog(true)} disabled={loading} variant="outline">
+            <MapPin className="w-4 h-4 mr-2" />
+            Resumen por Ubicación
           </Button>
         </div>
       </div>
@@ -748,32 +1015,121 @@ export default function AdminRoutesPage() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex items-center gap-4">
-            <Label htmlFor="messenger-filter" className="font-semibold whitespace-nowrap">
-              Filtrar por mensajero:
-            </Label>
-            <Select value={messengerFilter} onValueChange={setMessengerFilter}>
-              <SelectTrigger id="messenger-filter" className="w-auto min-w-[200px]">
-                <SelectValue placeholder="Todos los mensajeros" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los mensajeros</SelectItem>
-                {messengers.map(messenger => (
-                  <SelectItem key={messenger.id} value={messenger.id}>
-                    {messenger.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {messengerFilter !== 'all' && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setMessengerFilter('all')}
-              >
-                Limpiar filtro
-              </Button>
-            )}
+          <div className="space-y-4">
+            {/* Filtro de Mensajero */}
+            <div className="flex items-center gap-4">
+              <Label htmlFor="messenger-filter" className="font-semibold whitespace-nowrap min-w-[120px]">
+                Mensajero:
+              </Label>
+              <Select value={messengerFilter} onValueChange={setMessengerFilter}>
+                <SelectTrigger id="messenger-filter" className="w-full max-w-[250px]">
+                  <SelectValue placeholder="Todos los mensajeros" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los mensajeros</SelectItem>
+                  {messengers.map(messenger => (
+                    <SelectItem key={messenger.name} value={messenger.name}>
+                      {messenger.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {messengerFilter !== 'all' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setMessengerFilter('all')}
+                >
+                  Limpiar
+                </Button>
+              )}
+            </div>
+
+            {/* Filtros de Ubicación */}
+            <div className="border-t pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Filtro de Provincia */}
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="provincia-filter" className="font-semibold">
+                    Provincia:
+                  </Label>
+                  <Select value={provinciaFilter} onValueChange={handleProvinciaChange}>
+                    <SelectTrigger id="provincia-filter">
+                      <SelectValue placeholder="Todas las provincias" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas las provincias</SelectItem>
+                      {provinciasUnicas.map(provincia => (
+                        <SelectItem key={provincia} value={provincia}>
+                          {provincia}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Filtro de Cantón */}
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="canton-filter" className="font-semibold">
+                    Cantón:
+                  </Label>
+                  <Select
+                    value={cantonFilter}
+                    onValueChange={handleCantonChange}
+                    disabled={provinciaFilter === 'all'}
+                  >
+                    <SelectTrigger id="canton-filter">
+                      <SelectValue placeholder="Todos los cantones" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los cantones</SelectItem>
+                      {cantonesUnicos.map(canton => (
+                        <SelectItem key={canton} value={canton}>
+                          {canton}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Filtro de Distrito */}
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="distrito-filter" className="font-semibold">
+                    Distrito:
+                  </Label>
+                  <Select
+                    value={distritoFilter}
+                    onValueChange={setDistritoFilter}
+                    disabled={cantonFilter === 'all'}
+                  >
+                    <SelectTrigger id="distrito-filter">
+                      <SelectValue placeholder="Todos los distritos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los distritos</SelectItem>
+                      {distritosUnicos.map(distrito => (
+                        <SelectItem key={distrito} value={distrito}>
+                          {distrito}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Botón para limpiar filtros de ubicación */}
+              {(provinciaFilter !== 'all' || cantonFilter !== 'all' || distritoFilter !== 'all') && (
+                <div className="mt-4 flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleLimpiarFiltrosUbicacion}
+                  >
+                    Limpiar filtros de ubicación
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -843,8 +1199,8 @@ export default function AdminRoutesPage() {
                       <SelectValue placeholder="Asignar a..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {messengers.map(messenger => (
-                        <SelectItem key={messenger.id} value={messenger.id}>
+                      {allMessengers.map(messenger => (
+                        <SelectItem key={messenger.name} value={messenger.name}>
                           {messenger.name}
                         </SelectItem>
                       ))}
@@ -852,7 +1208,7 @@ export default function AdminRoutesPage() {
                   </Select>
                   <Button
                     size="sm"
-                    onClick={() => handleAssignOrder(order.id, messengerSelections[order.id])}
+                    onClick={handleAssignAllPendingOrders}
                     disabled={!messengerSelections[order.id] || loading}
                   >
                     <Zap className="w-4 h-4 mr-2" />
@@ -928,30 +1284,17 @@ export default function AdminRoutesPage() {
 
                 <div className="flex gap-2">
                   <Select
-                    value={messengerSelections[order.id] || order.assignedMessenger?.id || ''}
+                    value={messengerSelections[order.id] || order.assignedMessenger?.name || ''}
                     onValueChange={(value) => setMessengerSelections(prev => ({ ...prev, [order.id]: value }))}
                   >
                     <SelectTrigger className="w-40">
                       <SelectValue placeholder="Cambiar a...">
-                        {/* Mostrar el nombre del mensajero actual o seleccionado */}
-                        {(() => {
-                          const selectedId = messengerSelections[order.id] || order.assignedMessenger?.id;
-                          if (!selectedId) return 'Cambiar a...';
-
-                          // Si hay una selección nueva, buscar en messengers
-                          if (messengerSelections[order.id]) {
-                            const selected = messengers.find((m: User) => m.id === messengerSelections[order.id]);
-                            return selected?.name || 'Cambiar a...';
-                          }
-
-                          // Si no hay selección nueva, mostrar el mensajero asignado actual
-                          return order.assignedMessenger?.name || 'Cambiar a...';
-                        })()}
+                        {messengerSelections[order.id] || order.assignedMessenger?.name || 'Cambiar a...'}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {messengers.map(messenger => (
-                        <SelectItem key={messenger.id} value={messenger.id}>
+                      {allMessengers.map(messenger => (
+                        <SelectItem key={messenger.name} value={messenger.name}>
                           {messenger.name}
                         </SelectItem>
                       ))}
@@ -961,8 +1304,8 @@ export default function AdminRoutesPage() {
                     variant="outline"
                     size="sm"
                     className="text-red-600 hover:text-red-700"
-                    onClick={() => handleAssignOrder(order.id, messengerSelections[order.id])}
-                    disabled={!messengerSelections[order.id] || messengerSelections[order.id] === order.assignedMessenger?.id || loading}
+                    onClick={handleAssignAllPendingOrders}
+                    disabled={!messengerSelections[order.id] || messengerSelections[order.id] === order.assignedMessenger?.name || loading}
                   >
                     Reasignar
                   </Button>
@@ -1062,8 +1405,8 @@ export default function AdminRoutesPage() {
                           <SelectValue placeholder="Asignar a..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {messengers.map(messenger => (
-                            <SelectItem key={messenger.id} value={messenger.id}>
+                          {allMessengers.map(messenger => (
+                            <SelectItem key={messenger.name} value={messenger.name}>
                               {messenger.name}
                             </SelectItem>
                           ))}
@@ -1075,11 +1418,7 @@ export default function AdminRoutesPage() {
                   <div className="ml-4">
                     <Button
                       size="sm"
-                      onClick={() => {
-                        handleAssignOrder(order.id, messengerSelections[order.id]);
-                        // Recargar la lista después de asignar
-                        setTimeout(loadUnassignedAllDates, 1000);
-                      }}
+                      onClick={handleAssignAllPendingOrders}
                       disabled={!messengerSelections[order.id] || loading}
                     >
                       <Zap className="w-4 h-4 mr-2" />
@@ -1099,7 +1438,7 @@ export default function AdminRoutesPage() {
           <DialogHeader>
             <DialogTitle>Generar Rutas Automáticamente</DialogTitle>
             <DialogDescription>
-              Selecciona la fecha para la cual deseas generar las rutas de los mensajeros.
+              Configura los parámetros para generar las rutas de los mensajeros.
             </DialogDescription>
           </DialogHeader>
 
@@ -1114,10 +1453,45 @@ export default function AdminRoutesPage() {
                 className="w-full"
               />
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="capacidad-nomina">Capacidad Nómina</Label>
+              <Input
+                id="capacidad-nomina"
+                type="number"
+                min="1"
+                max="100"
+                value={capacidadNomina}
+                onChange={(e) => setCapacidadNomina(e.target.value)}
+                className="w-full"
+                placeholder="30"
+              />
+              <p className="text-xs text-muted-foreground">
+                Número de pedidos por mensajero de nómina
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="capacidad-extra">Capacidad Extra</Label>
+              <Input
+                id="capacidad-extra"
+                type="number"
+                min="0"
+                max="100"
+                value={capacidadExtra}
+                onChange={(e) => setCapacidadExtra(e.target.value)}
+                className="w-full"
+                placeholder="0"
+              />
+              <p className="text-xs text-muted-foreground">
+                Número de pedidos por mensajero extra
+              </p>
+            </div>
+
             <Alert>
               <Calendar className="h-4 w-4" />
               <AlertDescription>
-                Se generarán automáticamente las rutas con 30 pedidos por mensajero para la fecha seleccionada.
+                Se generarán automáticamente las rutas para la fecha seleccionada con las capacidades especificadas.
               </AlertDescription>
             </Alert>
           </div>
@@ -1169,7 +1543,7 @@ export default function AdminRoutesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {messengers.map((messenger: User) => (
-                    <SelectItem key={messenger.id} value={messenger.id}>
+                    <SelectItem key={messenger.name} value={messenger.name}>
                       {messenger.name}
                     </SelectItem>
                   ))}
@@ -1184,8 +1558,8 @@ export default function AdminRoutesPage() {
                   <SelectValue placeholder="Selecciona mensajero destino..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {messengers.map((messenger: User) => (
-                    <SelectItem key={messenger.id} value={messenger.id}>
+                  {allMessengers.map((messenger: User) => (
+                    <SelectItem key={messenger.name} value={messenger.name}>
                       {messenger.name}
                     </SelectItem>
                   ))}
@@ -1252,6 +1626,101 @@ export default function AdminRoutesPage() {
           <DialogFooter>
             <Button onClick={() => setShowResultDialog(false)}>
               Aceptar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Resumen por Ubicación */}
+      <Dialog open={showLocationSummaryDialog} onOpenChange={setShowLocationSummaryDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Resumen de Pedidos por Ubicación</DialogTitle>
+            <DialogDescription>
+              Pedidos del {(() => {
+                const [year, month, day] = selectedDate.split('-');
+                const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                return date.toLocaleDateString('es-CR', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                });
+              })()}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4 space-y-6">
+            {getLocationSummary().map((provincia) => (
+              <div key={provincia.provincia} className="space-y-4">
+                {/* Título de Provincia */}
+                <h3 className="text-xl font-bold text-blue-700 border-b-2 border-blue-200 pb-2">
+                  {provincia.provincia}
+                </h3>
+
+                {/* Cantones */}
+                {provincia.cantones.map((canton) => (
+                  <div key={canton.canton} className="ml-4 space-y-3">
+                    {/* Título de Cantón */}
+                    <h4 className="text-lg font-semibold text-blue-600">
+                      {canton.canton}
+                    </h4>
+
+                    {/* Tarjetas de Distritos */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 ml-4">
+                      {canton.distritos.map((distrito) => (
+                        <Card key={distrito.distrito} className="border hover:shadow-md transition-shadow">
+                          <CardHeader className="pb-2 pt-3 px-3">
+                            <CardTitle className="text-xs font-medium flex items-center gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                              <span className="truncate">{distrito.distrito}</span>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-1.5 px-3 pb-3">
+                            <div className="flex items-center gap-1.5">
+                              <Package className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                              <span className="text-xs font-semibold">
+                                {distrito.totalPedidos} {distrito.totalPedidos === 1 ? 'pedido' : 'pedidos'}
+                              </span>
+                            </div>
+
+                            {distrito.mensajeros.size > 0 && (
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-1.5 text-[10px] text-gray-600">
+                                  <Truck className="w-3 h-3 flex-shrink-0" />
+                                  <span>Mensajeros:</span>
+                                </div>
+                                <div className="flex flex-wrap gap-0.5">
+                                  {Array.from(distrito.mensajeros).map((mensajero) => (
+                                    <Badge
+                                      key={mensajero}
+                                      variant="secondary"
+                                      className="text-[10px] px-1.5 py-0"
+                                    >
+                                      {mensajero}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+            {getLocationSummary().length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                No hay pedidos asignados para esta fecha
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setShowLocationSummaryDialog(false)}>
+              Cerrar
             </Button>
           </DialogFooter>
         </DialogContent>
