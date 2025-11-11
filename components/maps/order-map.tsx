@@ -26,12 +26,15 @@ const PIN_COLORS = {
 
 // Crear icono con color
 function createColoredIcon(color: string) {
+  // Sanitizar color: solo permitir colores hex válidos
+  const sanitizedColor = /^#[0-9A-Fa-f]{6}$/.test(color) ? color : '#f97316';
+
   return L.divIcon({
     className: 'custom-marker',
     html: `
       <div style="position: relative;">
         <div style="
-          background-color: ${color};
+          background-color: ${sanitizedColor};
           width: 28px;
           height: 28px;
           border-radius: 50% 50% 50% 0;
@@ -48,6 +51,9 @@ function createColoredIcon(color: string) {
 
 // Crear icono para cluster de distrito
 function createDistrictClusterIcon(count: number) {
+  // Sanitizar count: asegurar que sea un número entero positivo
+  const sanitizedCount = Math.max(0, Math.floor(Number(count) || 0));
+
   return L.divIcon({
     className: 'custom-marker',
     html: `
@@ -65,7 +71,7 @@ function createDistrictClusterIcon(count: number) {
         font-weight: bold;
         font-size: 16px;
       ">
-        ${count}
+        ${sanitizedCount}
       </div>
     `,
     iconSize: [45, 45],
