@@ -108,8 +108,8 @@ function distributeMarkersInCircle(
 // Componente para trackear el zoom
 function ZoomTracker({ onZoomChange }: { onZoomChange: (zoom: number) => void }) {
   useMapEvents({
-    zoomend: (e) => {
-      onZoomChange(e.target.getZoom());
+    zoomend: (e: L.LeafletEvent) => {
+      onZoomChange((e.target as L.Map).getZoom());
     },
   });
   return null;
