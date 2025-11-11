@@ -24,6 +24,7 @@ import {
   DollarSign,
   Route,
   ScanLine,
+  MapPin,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -49,6 +50,7 @@ const menuItems = {
   ],
   mensajero: [
     { icon: Route, label: 'Mi Ruta de Hoy', href: '/dashboard/mensajero/mi-ruta-hoy' },
+    { icon: MapPin, label: 'Mapa', href: '/dashboard/mensajero/mapa' },
     { icon: LayoutDashboard, label: 'Mis Pedidos', href: '/dashboard/mensajero' },
     { icon: Truck, label: 'Historial de Rutas', href: '/dashboard/mensajero/route-history' },
     { icon: User, label: 'Mi Perfil', href: '/dashboard/mensajero/profile' },

@@ -80,3 +80,14 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Estilos para marcadores del mapa */
+.custom-marker {
+  background: transparent;
+  border: none;
+}
+
+.custom-marker:hover {
+  transform: scale(1.1);
+  transition: transform 0.2s ease;
+}
