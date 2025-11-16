@@ -2,7 +2,11 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User } from '@/lib/types';
-import { mockLogin, mockLogout, mockGetUserByToken } from '@/lib/mock-messengers';
+import {
+  getUsuarioByEmail,
+  loginUsuario,
+  mapUsuarioRowToUser,
+} from '@/lib/supabase-usuarios';
 import { useHydration } from '@/hooks/use-hydration';
 
 interface AuthContextType {
@@ -27,62 +31,81 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     // Verificar si hay una sesión guardada
     const checkStoredSession = async () => {
-      const storedToken = localStorage.getItem('magicstars_token');
-      const storedUser = localStorage.getItem('magicstars_user');
-      
-      if (storedToken && storedUser) {
-        const userData = JSON.parse(storedUser);
-        const isValidToken = await mockGetUserByToken(storedToken);
-        
-        if (isValidToken) {
-          setUser(userData);
+      try {
+        const storedToken = localStorage.getItem('magicstars_token');
+        const storedUser = localStorage.getItem('magicstars_user');
+
+        if (!storedToken || !storedUser) {
+          setLoading(false);
+          return;
+        }
+
+        let tokenData: { source?: string; email?: string } | null = null;
+
+        try {
+          tokenData = JSON.parse(storedToken);
+        } catch {
+          if (storedToken.startsWith('supabase:')) {
+            tokenData = { source: 'supabase', email: storedToken.replace('supabase:', '') };
+          }
+        }
+
+        if (tokenData?.source !== 'supabase' || !tokenData.email) {
+          // Limpiar tokens legacy o inválidos
+          localStorage.removeItem('magicstars_token');
+          localStorage.removeItem('magicstars_user');
+          setLoading(false);
+          return;
+        }
+
+        const usuario = await getUsuarioByEmail(tokenData.email);
+
+        if (usuario) {
+          const authUser = mapUsuarioRowToUser(usuario);
+          setUser(authUser);
+          localStorage.setItem('magicstars_user', JSON.stringify(authUser));
         } else {
-          // Token inválido, limpiar storage
           localStorage.removeItem('magicstars_token');
           localStorage.removeItem('magicstars_user');
         }
+      } catch (error) {
+        console.error('❌ Error verificando sesión almacenada:', error);
+        localStorage.removeItem('magicstars_token');
+        localStorage.removeItem('magicstars_user');
+      } finally {
+        setLoading(false);
       }
-      
-      setLoading(false);
     };
 
     checkStoredSession();
   }, [isHydrated]);
 
   const login = async (emailOrName: string, password: string) => {
+    setLoading(true);
+
     try {
-      setLoading(true);
-      const user = await mockLogin(emailOrName, password);
-      
-      if (user) {
-        // Solo guardar en localStorage si estamos en el cliente
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('magicstars_user', JSON.stringify(user));
-          localStorage.setItem('magicstars_token', 'mock_token_' + user.id);
-        }
-        
-        setUser(user);
-        
-        // Esperar un poco para que el estado se actualice
-        setTimeout(() => {
-          setLoading(false);
-        }, 50);
-        
-        return user;
-      } else {
-        setLoading(false);
-        throw new Error('Credenciales inválidas');
+      const usuario = await loginUsuario(emailOrName, password);
+      const authUser = mapUsuarioRowToUser(usuario);
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('magicstars_user', JSON.stringify(authUser));
+        localStorage.setItem(
+          'magicstars_token',
+          JSON.stringify({ source: 'supabase', email: usuario.email })
+        );
       }
+
+      setUser(authUser);
+      return authUser;
     } catch (error) {
       console.error('❌ Error en login:', error);
-      setLoading(false);
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
   const logout = async () => {
-    await mockLogout();
-    
     // Solo limpiar localStorage si estamos en el cliente
     if (typeof window !== 'undefined') {
       localStorage.removeItem('magicstars_user');
@@ -90,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     setUser(null);
+    setLoading(false);
   };
 
   const finalLoading = loading || !isHydrated;
