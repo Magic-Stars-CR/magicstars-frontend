@@ -18,6 +18,9 @@ export default function Home() {
         if (user.role === 'mensajero') {
           console.log('Redirigiendo mensajero a Mi Ruta Hoy');
           router.push('/dashboard/mensajero/mi-ruta-hoy');
+        } else if (user.role === 'mensajero-lider') {
+          console.log('Redirigiendo mensajero líder a rutas');
+          router.push('/dashboard/mensajero-lider');
         } else {
           console.log('Redirigiendo a:', `/dashboard/${user.role}`);
           router.push(`/dashboard/${user.role}`);

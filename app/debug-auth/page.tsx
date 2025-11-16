@@ -39,7 +39,9 @@ export default function DebugAuthPage() {
 
   const testAllMessengers = async () => {
     console.log('🧪 Iniciando prueba de login para todos los mensajeros...');
-    const messengers = mockMessengers.filter(u => u.role === 'mensajero');
+    const messengers = mockMessengers.filter(
+      u => u.role === 'mensajero' || u.role === 'mensajero-lider'
+    );
     console.log(`📊 Total de mensajeros a probar: ${messengers.length}`);
     
     let successCount = 0;

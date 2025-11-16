@@ -31,7 +31,7 @@ const menuItems = {
   admin: [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/admin' },
     { icon: Package, label: 'Pedidos', href: '/dashboard/admin/pedidos' },
-    // { icon: Warehouse, label: 'Inventario', href: '/dashboard/admin/inventory' },
+    { icon: Warehouse, label: 'Inventario', href: '/dashboard/admin/inventory' },
     // { icon: Network, label: 'Logística Externa', href: '/dashboard/admin/red-logistic' },
     { icon: Truck, label: 'Rutas', href: '/dashboard/admin/routes' },
     // { icon: Route, label: 'Gestión de Rutas', href: '/dashboard/admin/route-management' },
@@ -51,6 +51,13 @@ const menuItems = {
     { icon: Route, label: 'Mi Ruta de Hoy', href: '/dashboard/mensajero/mi-ruta-hoy' },
     { icon: LayoutDashboard, label: 'Mis Pedidos', href: '/dashboard/mensajero' },
     { icon: Truck, label: 'Historial de Rutas', href: '/dashboard/mensajero/route-history' },
+    { icon: User, label: 'Mi Perfil', href: '/dashboard/mensajero/profile' },
+  ] as any[],
+  'mensajero-lider': [
+    { icon: Route, label: 'Mi Ruta de Hoy', href: '/dashboard/mensajero/mi-ruta-hoy' },
+    { icon: LayoutDashboard, label: 'Mis Pedidos', href: '/dashboard/mensajero' },
+    { icon: Truck, label: 'Historial de Rutas', href: '/dashboard/mensajero/route-history' },
+    { icon: Route, label: 'Rutas', href: '/dashboard/mensajero-lider' },
     { icon: User, label: 'Mi Perfil', href: '/dashboard/mensajero/profile' },
   ] as any[],
   tienda: [
@@ -99,17 +106,13 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
   // Obtener menú base según el rol
   let userMenuItems = menuItems[user.role] || [];
   
-  // Si es el líder de mensajeros, agregar la opción de ver todas las rutas
+  // Fallback para mensajeros anteriores con flag de líder
   if (user.role === 'mensajero' && user.isMessengerLeader) {
-    userMenuItems = [
-      ...userMenuItems.slice(0, 1), // Mantener "Mi Ruta de Hoy"
-      { icon: Truck, label: 'Rutas de Mensajeros', href: '/dashboard/mensajero/rutas-mensajeros' },
-      ...userMenuItems.slice(1), // Resto del menú
-    ];
+    userMenuItems = menuItems['mensajero-lider'];
   }
 
   // Agregar botón de escaneo para mensajeros
-  if (user.role === 'mensajero') {
+  if (user.role === 'mensajero' || user.role === 'mensajero-lider') {
     const messengerName = user.name || '';
     const escaneoUrl = `https://inventario-magic-stars.vercel.app/?mensajero=${encodeURIComponent(messengerName)}`;
     userMenuItems = [
