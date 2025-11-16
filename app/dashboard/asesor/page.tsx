@@ -166,7 +166,9 @@ export default function AsesorDashboard() {
   } as any);
 
   // Obtener mensajeros del mock-messengers
-  const availableMessengers = mockMessengers.filter(user => user.role === 'mensajero');
+  const availableMessengers = mockMessengers.filter(user => 
+    user.role === 'mensajero' || user.role === 'mensajero-lider'
+  );
 
   // Asesores de Beauty Fan y All Stars
   const asesores = [
@@ -262,8 +264,8 @@ export default function AsesorDashboard() {
 
   const loadData = async () => {
     console.log('🔍 Cargando datos para asesor:', user);
-    if (!user?.company?.id) {
-      console.log('❌ No hay company.id en el usuario');
+    if (!user?.companyId) {
+      console.log('❌ No hay companyId en el usuario');
       return;
     }
     
@@ -271,7 +273,7 @@ export default function AsesorDashboard() {
       setLoading(true);
       
       // Determinar la tienda del asesor
-      const asesorTienda = getAsesorTienda(user.email);
+      const asesorTienda = (user.companyId || getAsesorTienda(user.email)).toUpperCase();
       setAsesorTienda(asesorTienda);
       console.log('🏪 Tienda del asesor:', asesorTienda);
       
@@ -368,7 +370,7 @@ export default function AsesorDashboard() {
       console.log('📋 Primeros pedidos:', ordersRes.slice(0, 3));
       
       // Obtener estadísticas mock
-      const statsRes = await mockApi.getStats({ userCompanyId: user.company.id });
+      const statsRes = await mockApi.getStats({ userCompanyId: user.companyId });
       
       console.log('✅ Datos obtenidos:', { orders: ordersRes.length, stats: statsRes });
       
