@@ -89,6 +89,9 @@ export default function LoginPage() {
       } else if (user?.role === 'mensajero') {
         console.log('🔄 Redirigiendo a mi ruta de hoy');
         router.push('/dashboard/mensajero/mi-ruta-hoy');
+      } else if (user?.role === 'mensajero-lider') {
+        console.log('🔄 Redirigiendo a gestión de rutas');
+        router.push('/dashboard/mensajero-lider');
       } else {
         console.log('🔄 Redirigiendo a página principal');
         router.push('/');
