@@ -248,7 +248,7 @@ export const mockMessengers: User[] = [
     id: 'msg-012',
     email: 'luis@magicstars.com',
     name: 'Luis',
-    role: 'mensajero',
+    role: 'mensajero-lider',
     phone: '+506 8888-0012',
     isMessengerLeader: true, // Luis es el líder de mensajeros
     company: {
