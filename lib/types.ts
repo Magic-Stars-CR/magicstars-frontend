@@ -658,6 +658,8 @@ export interface PedidoTest {
   mensajero_concretado: string | null;
   confirmado: boolean | null;
   tipo_envio?: string | null; // CONTRAENTREGA o RED LOGISTIC
+  lon?: number | null; // Longitud para mapa
+  lat?: number | null; // Latitud para mapa
 }
 
 // Interfaz para liquidación por tienda
