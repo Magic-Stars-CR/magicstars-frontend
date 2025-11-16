@@ -509,7 +509,9 @@ export default function AdminRoutesPage() {
   };
 
   const getMessengerName = (messengerId: string) => {
-    const messenger = users.find(u => u.id === messengerId && u.role === 'mensajero');
+    const messenger = users.find(
+      u => u.id === messengerId && (u.role === 'mensajero' || u.role === 'mensajero-lider')
+    );
     return messenger?.name || 'Sin asignar';
   };
 
@@ -574,7 +576,9 @@ export default function AdminRoutesPage() {
     return filtered;
   };
 
-  const messengers = users.filter(u => u.role === 'mensajero' && u.isActive);
+  const messengers = users.filter(
+    u => (u.role === 'mensajero' || u.role === 'mensajero-lider') && u.isActive
+  );
   const unassignedOrders = getUnassignedOrders();
   const assignedOrdersAll = getAssignedOrders();
 

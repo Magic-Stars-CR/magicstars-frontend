@@ -1,147 +1,413 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/auth-context';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  Users, 
-  Search, 
-  Filter, 
-  Download, 
-  Eye, 
+import {
+  Users,
+  Search,
+  Filter,
+  Download,
+  Eye,
   EyeOff,
   Phone,
   Mail,
   Building,
   Shield,
   UserCheck,
-  UserX
+  UserX,
+  Pencil,
+  Trash2,
+  PlusCircle,
+  ClipboardCopy,
 } from 'lucide-react';
-import { mockMessengers } from '@/lib/mock-messengers';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { useToast } from '@/hooks/use-toast';
+import {
+  UsuarioRow,
+  fetchUsuarios,
+  createUsuario,
+  updateUsuario,
+  deleteUsuario,
+} from '@/lib/supabase-usuarios';
 
-interface UserInfo {
-  id: string;
+type FormMode = 'create' | 'edit';
+
+type UsuarioFormState = {
   email: string;
-  name: string;
-  role: string;
-  phone: string;
-  company: string;
-  isActive: boolean;
-  createdAt: string;
-}
+  nombre: string;
+  rol: 'admin' | 'asesor' | 'mensajero' | string;
+  password: string;
+  telefono: string;
+  empresa: string;
+  estado: string;
+};
+
+const DEFAULT_FORM_STATE: UsuarioFormState = {
+  email: '',
+  nombre: '',
+  rol: 'mensajero',
+  password: '',
+  telefono: '',
+  empresa: '',
+  estado: 'Activo',
+};
+
+const isUsuarioActivo = (estado?: string | null) =>
+  estado?.trim().toLowerCase() === 'activo' || estado?.trim().toLowerCase() === 'active';
+
+const formatDate = (value?: string | null) => {
+  if (!value) {
+    return 'No disponible';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleDateString('es-CR');
+};
+
+const getRoleBadgeVariant = (role: string) => {
+  switch (role) {
+    case 'admin':
+      return 'destructive';
+    case 'asesor':
+      return 'default';
+    case 'mensajero':
+      return 'secondary';
+    case 'mensajero-extra':
+      return 'outline';
+    default:
+      return 'outline';
+  }
+};
+
+const getRoleLabel = (role: string) => {
+  switch (role) {
+    case 'admin':
+      return 'Administrador';
+    case 'asesor':
+      return 'Asesor';
+    case 'mensajero':
+      return 'Mensajero';
+    case 'mensajero-extra':
+      return 'Mensajero Extra';
+    default:
+      return role;
+  }
+};
 
 export default function UsuariosPage() {
-  const { user } = useAuth();
-  const [users, setUsers] = useState<UserInfo[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<UserInfo[]>([]);
+  const { toast } = useToast();
+  const [users, setUsers] = useState<UsuarioRow[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<UsuarioRow[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('todos');
   const [statusFilter, setStatusFilter] = useState('todos');
   const [showPasswords, setShowPasswords] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<FormMode>('create');
+  const [formState, setFormState] = useState<UsuarioFormState>(DEFAULT_FORM_STATE);
+  const [formError, setFormError] = useState('');
+  const [processing, setProcessing] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UsuarioRow | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UsuarioRow | null>(null);
+  const [passwordPreview, setPasswordPreview] = useState<UsuarioRow | null>(null);
+
+  const buildToastSummary = (usuario: UsuarioRow | null) => {
+    if (!usuario) return null;
+
+    return (
+      <div className="rounded-md border border-muted bg-background/80 p-3 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              {usuario.nombre ?? 'Sin nombre'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {usuario.email ?? 'Sin email'}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <Badge variant={getRoleBadgeVariant(usuario.rol)}>
+              {getRoleLabel(usuario.rol)}
+            </Badge>
+            <Badge variant={isUsuarioActivo(usuario.estado) ? 'default' : 'secondary'}>
+              {isUsuarioActivo(usuario.estado) ? 'Activo' : 'Inactivo'}
+            </Badge>
+          </div>
+        </div>
+        <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Mail className="h-3.5 w-3.5 text-blue-600" />
+            <span>{usuario.email ?? 'Sin email'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Phone className="h-3.5 w-3.5 text-emerald-600" />
+            <span>{usuario.telefono ?? 'Sin teléfono'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Building className="h-3.5 w-3.5 text-purple-600" />
+            <span>{usuario.empresa ?? 'Sin empresa'}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const handleCopyPassword = async (password: string | undefined) => {
+    if (!password) return;
+    try {
+      await navigator.clipboard.writeText(password);
+      toast({
+        title: 'Contraseña copiada',
+        description: 'La contraseña se copió al portapapeles.',
+      });
+    } catch (error) {
+      console.error('❌ Error al copiar contraseña:', error);
+      toast({
+        title: 'Error al copiar contraseña',
+        description: 'No se pudo copiar la contraseña.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   useEffect(() => {
-    loadUsers();
+    void loadUsers();
   }, []);
 
   useEffect(() => {
-    filterUsers();
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const filtered = users.filter((usuario) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        usuario.nombre?.toLowerCase().includes(normalizedSearch) ||
+        usuario.email?.toLowerCase().includes(normalizedSearch) ||
+        usuario.telefono?.toLowerCase().includes(normalizedSearch);
+
+      const matchesRole = roleFilter === 'todos' || usuario.rol === roleFilter;
+
+      const matchesStatus =
+        statusFilter === 'todos' ||
+        (statusFilter === 'activos' && isUsuarioActivo(usuario.estado)) ||
+        (statusFilter === 'inactivos' && !isUsuarioActivo(usuario.estado));
+
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+
+    setFilteredUsers(filtered);
   }, [users, searchTerm, roleFilter, statusFilter]);
 
-  const loadUsers = () => {
+  const stats = useMemo(() => {
+    const total = users.length;
+    const activos = users.filter((u) => isUsuarioActivo(u.estado)).length;
+    const inactivos = total - activos;
+    const admins = users.filter((u) => u.rol === 'admin').length;
+    const asesores = users.filter((u) => u.rol === 'asesor').length;
+    const mensajeros = users.filter((u) => u.rol === 'mensajero').length;
+    const mensajerosExtra = users.filter((u) => u.rol === 'mensajero-extra').length;
+
+    return { total, activos, inactivos, admins, asesores, mensajeros, mensajerosExtra };
+  }, [users]);
+
+  const loadUsers = async () => {
     try {
       setLoading(true);
-      
-      // Convertir usuarios mock a formato de tabla
-      const usersData: UserInfo[] = mockMessengers.map(user => ({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        phone: user.phone || 'Sin teléfono',
-        company: user.company?.name || 'Sin empresa',
-        isActive: user.isActive,
-        createdAt: user.createdAt
-      }));
-
-      setUsers(usersData);
-    } catch (error) {
-      console.error('Error loading users:', error);
+      const data = await fetchUsuarios();
+      setUsers(data);
+    } catch (error: any) {
+      console.error('❌ Error al cargar usuarios:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error al cargar usuarios',
+        description: error?.message ?? 'Ocurrió un error inesperado.',
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const filterUsers = () => {
-    let filtered = [...users];
-
-    // Filtrar por término de búsqueda
-    if (searchTerm) {
-      filtered = filtered.filter(user => 
-        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.phone.includes(searchTerm)
-      );
-    }
-
-    // Filtrar por rol
-    if (roleFilter !== 'todos') {
-      filtered = filtered.filter(user => user.role === roleFilter);
-    }
-
-    // Filtrar por estado
-    if (statusFilter !== 'todos') {
-      const isActive = statusFilter === 'activos';
-      filtered = filtered.filter(user => user.isActive === isActive);
-    }
-
-    setFilteredUsers(filtered);
+  const openCreateModal = () => {
+    setFormMode('create');
+    setFormState(DEFAULT_FORM_STATE);
+    setSelectedUser(null);
+    setFormError('');
+    setFormOpen(true);
   };
 
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return 'destructive';
-      case 'asesor':
-        return 'default';
-      case 'mensajero':
-        return 'secondary';
-      default:
-        return 'outline';
+  const openEditModal = (usuario: UsuarioRow) => {
+    setFormMode('edit');
+    setSelectedUser(usuario);
+    setFormState({
+      email: usuario.email ?? '',
+      nombre: usuario.nombre ?? '',
+      rol: (usuario.rol as UsuarioFormState['rol']) ?? 'mensajero',
+      password: '',
+      telefono: usuario.telefono ?? '',
+      empresa: usuario.empresa ?? '',
+      estado: usuario.estado ?? (isUsuarioActivo(usuario.estado) ? 'Activo' : 'Inactivo'),
+    });
+    setFormError('');
+    setFormOpen(true);
+  };
+
+  const handleFormClose = (open: boolean) => {
+    if (!open) {
+      setFormOpen(false);
+      setFormError('');
+      setSelectedUser(null);
+      setProcessing(false);
+    } else {
+      setFormOpen(true);
     }
   };
 
-  const getRoleLabel = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return 'Administrador';
-      case 'asesor':
-        return 'Asesor';
-      case 'mensajero':
-        return 'Mensajero';
-      default:
-        return role;
+  const handleFormChange = (field: keyof UsuarioFormState, value: string) => {
+    setFormState((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setProcessing(true);
+    setFormError('');
+
+    const payload = {
+      email: formState.email.trim(),
+      nombre: formState.nombre.trim(),
+      rol: formState.rol.trim(),
+      password: formState.password.trim(),
+      telefono: formState.telefono.trim(),
+      empresa: formState.empresa.trim(),
+      estado: formState.estado.trim() || 'Activo',
+    };
+
+    if (!payload.email || !payload.nombre) {
+      setFormError('Email y nombre son obligatorios.');
+      setProcessing(false);
+      return;
+    }
+
+    if (formMode === 'create' && !payload.password) {
+      setFormError('La contraseña es obligatoria para crear un usuario.');
+      setProcessing(false);
+      return;
+    }
+
+    try {
+      if (formMode === 'create') {
+        const nuevoUsuario = await createUsuario({
+          email: payload.email,
+          nombre: payload.nombre,
+          rol: payload.rol,
+          password: payload.password,
+          telefono: payload.telefono || null,
+          empresa: payload.empresa || null,
+          estado: payload.estado || 'Activo',
+        });
+        toast({
+          title: 'Usuario creado',
+          description: buildToastSummary(nuevoUsuario),
+        });
+      } else if (selectedUser) {
+        const usuarioActualizado = await updateUsuario(selectedUser, {
+          email: payload.email,
+          nombre: payload.nombre,
+          rol: payload.rol,
+          password: payload.password || undefined,
+          telefono: payload.telefono || null,
+          empresa: payload.empresa || null,
+          estado: payload.estado || 'Activo',
+        });
+        toast({
+          title: 'Usuario actualizado',
+          description: buildToastSummary(usuarioActualizado),
+        });
+      }
+
+      setFormOpen(false);
+      setFormState(DEFAULT_FORM_STATE);
+      setSelectedUser(null);
+      await loadUsers();
+    } catch (error: any) {
+      console.error('❌ Error guardando usuario:', error);
+      setFormError(error?.message ?? 'No se pudo guardar el usuario.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+
+    try {
+      setProcessing(true);
+      const deletedSnapshot = deleteTarget;
+      await deleteUsuario(deleteTarget);
+      toast({
+        title: 'Usuario eliminado',
+        description: buildToastSummary(deletedSnapshot),
+        variant: 'destructive',
+      });
+      setDeleteTarget(null);
+      await loadUsers();
+    } catch (error: any) {
+      console.error('❌ Error eliminando usuario:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error al eliminar usuario',
+        description: error?.message ?? 'No se pudo eliminar el usuario.',
+      });
+    } finally {
+      setProcessing(false);
     }
   };
 
   const exportToCSV = () => {
-    const csvContent = [
-      ['Email', 'Nombre', 'Rol', 'Teléfono', 'Empresa', 'Estado', 'Fecha Creación'],
-      ...filteredUsers.map(user => [
-        user.email,
-        user.name,
-        getRoleLabel(user.role),
-        user.phone,
-        user.company,
-        user.isActive ? 'Activo' : 'Inactivo',
-        new Date(user.createdAt).toLocaleDateString('es-CR')
-      ])
-    ].map(row => row.join(',')).join('\n');
+    const header = ['Email', 'Nombre', 'Rol', 'Teléfono', 'Empresa', 'Estado', 'Fecha Creación'];
+    const rows = filteredUsers.map((usuario) => [
+      usuario.email ?? '',
+      usuario.nombre ?? '',
+      getRoleLabel(usuario.rol),
+      usuario.telefono ?? '',
+      usuario.empresa ?? '',
+      isUsuarioActivo(usuario.estado) ? 'Activo' : 'Inactivo',
+      formatDate(usuario.created_at),
+    ]);
+
+    const csvContent = [header, ...rows]
+      .map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(','))
+      .join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -152,15 +418,6 @@ export default function UsuariosPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  const stats = {
-    total: users.length,
-    activos: users.filter(u => u.isActive).length,
-    inactivos: users.filter(u => !u.isActive).length,
-    admins: users.filter(u => u.role === 'admin').length,
-    asesores: users.filter(u => u.role === 'asesor').length,
-    mensajeros: users.filter(u => u.role === 'mensajero').length
   };
 
   if (loading) {
@@ -175,14 +432,12 @@ export default function UsuariosPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <>
+      <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Gestión de Usuarios</h1>
-          <p className="text-gray-600 mt-1">
-            Administra todos los usuarios del sistema
-          </p>
+          <p className="text-gray-600 mt-1">Administra todos los usuarios del sistema</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -193,12 +448,16 @@ export default function UsuariosPage() {
             {showPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             {showPasswords ? 'Ocultar' : 'Mostrar'} Contraseñas
           </Button>
+          <Button onClick={openCreateModal} className="flex items-center gap-2">
+            <PlusCircle className="w-4 h-4" />
+            Nuevo Usuario
+          </Button>
           <Button onClick={exportToCSV} className="flex items-center gap-2">
             <Download className="w-4 h-4" />
             Exportar CSV
           </Button>
-          <Button 
-            onClick={() => window.open('/usuarios-login.csv', '_blank')} 
+          <Button
+            onClick={() => window.open('/usuarios-login.csv', '_blank')}
             className="flex items-center gap-2"
             variant="outline"
           >
@@ -208,8 +467,7 @@ export default function UsuariosPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
@@ -259,7 +517,7 @@ export default function UsuariosPage() {
         </Card>
 
         <Card>
-          <CardContent className="p4">
+          <CardContent className="p-4">
             <div className="flex items-center gap-2">
               <Building className="w-5 h-5 text-orange-600" />
               <div>
@@ -281,9 +539,19 @@ export default function UsuariosPage() {
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-indigo-600" />
+              <div>
+                <p className="text-sm text-gray-600">Mensajeros Extra</p>
+                <p className="text-2xl font-bold text-indigo-600">{stats.mensajerosExtra}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Filters */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -300,7 +568,7 @@ export default function UsuariosPage() {
                 <Input
                   placeholder="Nombre, email o teléfono..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(event) => setSearchTerm(event.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -317,6 +585,7 @@ export default function UsuariosPage() {
                   <SelectItem value="admin">Administrador</SelectItem>
                   <SelectItem value="asesor">Asesor</SelectItem>
                   <SelectItem value="mensajero">Mensajero</SelectItem>
+                  <SelectItem value="mensajero-extra">Mensajero Extra</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -338,13 +607,10 @@ export default function UsuariosPage() {
         </CardContent>
       </Card>
 
-      {/* Users Table */}
       <Card>
         <CardHeader>
           <CardTitle>Lista de Usuarios ({filteredUsers.length})</CardTitle>
-          <CardDescription>
-            Información completa de todos los usuarios del sistema
-          </CardDescription>
+          <CardDescription>Información completa de todos los usuarios del sistema</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -358,55 +624,80 @@ export default function UsuariosPage() {
                   <TableHead>Estado</TableHead>
                   <TableHead>Fecha Creación</TableHead>
                   {showPasswords && <TableHead>Contraseña</TableHead>}
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
-                  <TableRow key={user.id}>
+                {filteredUsers.map((usuario) => (
+                  <TableRow key={usuario.id ?? usuario.email}>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{user.name}</p>
-                        <p className="text-sm text-gray-500">{user.email}</p>
+                        <p className="font-medium">{usuario.nombre ?? 'Sin nombre'}</p>
+                        <p className="text-sm text-gray-500">{usuario.email ?? 'Sin email'}</p>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={getRoleBadgeVariant(user.role)}>
-                        {getRoleLabel(user.role)}
+                      <Badge variant={getRoleBadgeVariant(usuario.rol)}>
+                        {getRoleLabel(usuario.rol)}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Phone className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm">{user.phone}</span>
+                        <span className="text-sm">{usuario.telefono ?? 'Sin teléfono'}</span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Building className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm">{user.company}</span>
+                        <span className="text-sm">{usuario.empresa ?? 'Sin empresa'}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={user.isActive ? 'default' : 'secondary'}>
-                        {user.isActive ? 'Activo' : 'Inactivo'}
+                      <Badge variant={isUsuarioActivo(usuario.estado) ? 'default' : 'secondary'}>
+                        {isUsuarioActivo(usuario.estado) ? 'Activo' : 'Inactivo'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm text-gray-500">
-                        {new Date(user.createdAt).toLocaleDateString('es-CR')}
-                      </span>
+                      <span className="text-sm text-gray-500">{formatDate(usuario.created_at)}</span>
                     </TableCell>
                     {showPasswords && (
                       <TableCell>
                         <code className="text-xs bg-gray-100 px-2 py-1 rounded">
-                          {user.role === 'admin' ? 'Admin1234' : 
-                           user.role === 'asesor' ? 'Asesor1234' :
-                           user.name === 'JeanK' ? 'JeanK1234' :
-                           user.name === 'Cristopher' ? 'Cristopher5678' :
-                           user.name + '1234'}
+                          {usuario.password ?? 'Sin contraseña'}
                         </code>
                       </TableCell>
                     )}
+                    <TableCell>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setPasswordPreview(usuario)}
+                          aria-label="Ver contraseña"
+                          disabled={!usuario.password}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditModal(usuario)}
+                          aria-label="Editar usuario"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-red-600 hover:text-red-600"
+                          onClick={() => setDeleteTarget(usuario)}
+                          aria-label="Eliminar usuario"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -422,6 +713,200 @@ export default function UsuariosPage() {
         </CardContent>
       </Card>
     </div>
+
+      <Dialog open={formOpen} onOpenChange={handleFormClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{formMode === 'create' ? 'Crear Usuario' : 'Editar Usuario'}</DialogTitle>
+          <DialogDescription>
+            {formMode === 'create'
+              ? 'Completa la información para registrar un nuevo usuario.'
+              : 'Actualiza la información del usuario seleccionado.'}
+          </DialogDescription>
+        </DialogHeader>
+        <ScrollArea className="max-h-[70vh] pr-2">
+          <form id="usuario-form" onSubmit={handleSubmit} className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={formState.email}
+                onChange={(event) => handleFormChange('email', event.target.value)}
+                required
+                disabled={processing}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="nombre">Nombre</Label>
+              <Input
+                id="nombre"
+                value={formState.nombre}
+                onChange={(event) => handleFormChange('nombre', event.target.value)}
+                required
+                disabled={processing}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="rol">Rol</Label>
+              <Select
+                value={formState.rol}
+                onValueChange={(value) => handleFormChange('rol', value)}
+                disabled={processing}
+              >
+                <SelectTrigger id="rol">
+                  <SelectValue placeholder="Selecciona un rol" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                  <SelectItem value="asesor">Asesor</SelectItem>
+                  <SelectItem value="mensajero">Mensajero</SelectItem>
+                  <SelectItem value="mensajero-extra">Mensajero Extra</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">
+                Contraseña{' '}
+                {formMode === 'edit' && (
+                  <span className="text-xs text-gray-500">(dejar en blanco para no cambiar)</span>
+                )}
+              </Label>
+              <Input
+                id="password"
+                type="text"
+                value={formState.password}
+                onChange={(event) => handleFormChange('password', event.target.value)}
+                placeholder={formMode === 'edit' ? '••••••••' : ''}
+                required={formMode === 'create'}
+                disabled={processing}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="telefono">Teléfono</Label>
+              <Input
+                id="telefono"
+                value={formState.telefono}
+                onChange={(event) => handleFormChange('telefono', event.target.value)}
+                placeholder="+506 8888-0000"
+                disabled={processing}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="empresa">Empresa</Label>
+              <Input
+                id="empresa"
+                value={formState.empresa}
+                onChange={(event) => handleFormChange('empresa', event.target.value)}
+                placeholder="Nombre de la empresa"
+                disabled={processing}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="estado">Estado</Label>
+              <Select
+                value={formState.estado}
+                onValueChange={(value) => handleFormChange('estado', value)}
+                disabled={processing}
+              >
+                <SelectTrigger id="estado">
+                  <SelectValue placeholder="Selecciona un estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Activo">Activo</SelectItem>
+                  <SelectItem value="Inactivo">Inactivo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {formError && (
+              <Alert variant="destructive">
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
+            )}
+          </form>
+        </ScrollArea>
+        <DialogFooter className="sm:justify-between">
+          <Button type="button" variant="outline" onClick={() => handleFormClose(false)} disabled={processing}>
+            Cancelar
+          </Button>
+          <Button type="submit" form="usuario-form" disabled={processing}>
+            {processing ? 'Guardando...' : formMode === 'create' ? 'Crear' : 'Guardar cambios'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Eliminar usuario</AlertDialogTitle>
+          <AlertDialogDescription>
+            ¿Seguro que deseas eliminar al usuario{' '}
+            <span className="font-semibold">
+              {deleteTarget?.nombre ?? deleteTarget?.email ?? 'seleccionado'}
+            </span>
+            ? Esta acción no se puede deshacer.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={processing} onClick={() => setDeleteTarget(null)}>
+            Cancelar
+          </AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-red-600 hover:bg-red-700"
+            onClick={handleDelete}
+            disabled={processing}
+          >
+            Eliminar
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <AlertDialog open={!!passwordPreview} onOpenChange={(open) => !open && setPasswordPreview(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Contraseña del usuario</AlertDialogTitle>
+          <AlertDialogDescription>
+            Revisa la contraseña actual del usuario seleccionado.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="rounded-md border border-muted bg-muted/40 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                {passwordPreview?.nombre ?? 'Sin nombre'}
+              </p>
+              <p className="text-xs text-muted-foreground">{passwordPreview?.email}</p>
+            </div>
+            <Badge variant={getRoleBadgeVariant(passwordPreview?.rol ?? '')}>
+              {getRoleLabel(passwordPreview?.rol ?? '')}
+            </Badge>
+          </div>
+          <div className="mt-3">
+            <p className="text-xs text-muted-foreground">Contraseña</p>
+            <code className="mt-1 inline-block rounded bg-background px-2 py-1 text-sm font-semibold">
+              {passwordPreview?.password ?? 'Sin contraseña'}
+            </code>
+          </div>
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={() => setPasswordPreview(null)}>
+            Cerrar
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              handleCopyPassword(passwordPreview?.password);
+            }}
+            disabled={!passwordPreview?.password}
+          >
+            <ClipboardCopy className="mr-2 h-4 w-4" />
+            Copiar contraseña
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 

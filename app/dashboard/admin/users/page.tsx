@@ -22,7 +22,8 @@ import {
   Mail,
   Phone,
   MapPin,
-  Shield
+  Shield,
+  Route,
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -54,7 +55,9 @@ export default function AdminUsersPage() {
     const roleLabels = {
       'admin': 'Administrador',
       'asesor': 'Asesor',
-      'mensajero': 'Mensajero'
+      'mensajero': 'Mensajero',
+      'mensajero-lider': 'Mensajero Líder',
+      'mensajero-extra': 'Mensajero Extra',
     };
     return roleLabels[role as keyof typeof roleLabels] || role;
   };
@@ -63,7 +66,9 @@ export default function AdminUsersPage() {
     const roleColors = {
       'admin': 'bg-red-100 text-red-800 border-red-200',
       'asesor': 'bg-blue-100 text-blue-800 border-blue-200',
-      'mensajero': 'bg-green-100 text-green-800 border-green-200'
+      'mensajero': 'bg-green-100 text-green-800 border-green-200',
+      'mensajero-lider': 'bg-purple-100 text-purple-800 border-purple-200',
+      'mensajero-extra': 'bg-amber-100 text-amber-800 border-amber-200',
     };
     return roleColors[role as keyof typeof roleColors] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
@@ -89,6 +94,7 @@ export default function AdminUsersPage() {
   }
 
   const messengers = users.filter(u => u.role === 'mensajero');
+  const messengerLeaders = users.filter(u => u.role === 'mensajero-lider');
   const advisors = users.filter(u => u.role === 'asesor');
   const admins = users.filter(u => u.role === 'admin');
 
@@ -117,7 +123,7 @@ export default function AdminUsersPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -141,6 +147,20 @@ export default function AdminUsersPage() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Mensajeros</p>
                 <p className="text-2xl font-bold">{messengers.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                <Route className="w-5 h-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Mensajeros Líder</p>
+                <p className="text-2xl font-bold">{messengerLeaders.length}</p>
               </div>
             </div>
           </CardContent>
@@ -196,6 +216,7 @@ export default function AdminUsersPage() {
               <SelectContent>
                 <SelectItem value="all">Todos los roles</SelectItem>
                 <SelectItem value="mensajero">Mensajeros</SelectItem>
+                <SelectItem value="mensajero-lider">Mensajeros Líder</SelectItem>
                 <SelectItem value="asesor">Asesores</SelectItem>
                 <SelectItem value="admin">Administradores</SelectItem>
               </SelectContent>
