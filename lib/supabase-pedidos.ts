@@ -883,24 +883,59 @@ export const getPedidosDelDiaByMensajeroEspecifico = async (mensajeroName: strin
 // Función para obtener pedidos del día actual
 export const getPedidosDelDia = async (fecha: string = getCostaRicaDateISO()) => {
   try {
-    console.log('🔍 getPedidosDelDia - Buscando pedidos para fecha:', fecha);
+    console.log('🔍 [DEBUG] getPedidosDelDia - Buscando pedidos para fecha:', fecha);
     
-    const { data, error } = await supabasePedidos
-      .from('pedidos')
-      .select('*')
-      .eq('fecha_creacion', fecha) // Usar eq en lugar de gte/lt ya que los datos solo tienen fecha
-      .order('fecha_creacion', { ascending: false })
-      .limit(10);
+    // Obtener todos los pedidos del día sin límite
+    let allPedidos: PedidoTest[] = [];
+    let from = 0;
+    const limit = 1000;
+    let hasMore = true;
 
-    if (error) {
-      console.error('Error fetching pedidos del día:', error);
-      return [];
+    while (hasMore) {
+      const { data, error } = await supabasePedidos
+        .from('pedidos')
+        .select('*')
+        .eq('fecha_creacion', fecha)
+        .order('fecha_creacion', { ascending: false })
+        .range(from, from + limit - 1);
+
+      if (error) {
+        console.error('❌ [DEBUG] Error fetching pedidos del día:', error);
+        return [];
+      }
+
+      if (data && data.length > 0) {
+        allPedidos = [...allPedidos, ...data];
+        from += limit;
+        hasMore = data.length === limit;
+        console.log(`📦 [DEBUG] Página obtenida: ${data.length} registros. Total acumulado: ${allPedidos.length}`);
+      } else {
+        hasMore = false;
+      }
     }
 
-    console.log('✅ Pedidos del día encontrados:', data?.length || 0);
-    return data || [];
+    console.log('✅ [DEBUG] Pedidos del día encontrados:', allPedidos.length);
+    if (allPedidos.length > 0) {
+      console.log('📋 [DEBUG] Muestra de primeros 3 pedidos:', allPedidos.slice(0, 3).map(p => ({
+        id: p.id_pedido,
+        fecha: p.fecha_creacion,
+        cliente: p.cliente_nombre,
+        estado: p.estado_pedido
+      })));
+    } else {
+      console.warn('⚠️ [DEBUG] NO SE ENCONTRARON PEDIDOS para la fecha:', fecha);
+      // Intentar verificar si hay pedidos en otras fechas cercanas
+      const { data: testData } = await supabasePedidos
+        .from('pedidos')
+        .select('fecha_creacion')
+        .order('fecha_creacion', { ascending: false })
+        .limit(5);
+      console.log('📅 [DEBUG] Últimas fechas en la BD:', testData?.map(p => p.fecha_creacion));
+    }
+    
+    return allPedidos;
   } catch (error) {
-    console.error('Error in getPedidosDelDia:', error);
+    console.error('❌ [DEBUG] Error in getPedidosDelDia:', error);
     return [];
   }
 };
@@ -1493,29 +1528,50 @@ export const getGastosMensajeros = async (fecha: string): Promise<{
   }
 };
 
-// Función para obtener tiendas únicas de Supabase
+// Función para obtener tiendas únicas de Supabase desde la tabla tiendas
 export const getTiendasUnicas = async (): Promise<string[]> => {
   try {
-    console.log('🔍 Obteniendo tiendas únicas...');
+    console.log('🔍 Obteniendo tiendas desde la tabla tiendas...');
     
-    const { data, error } = await supabasePedidos
+    // Intentar obtener de la tabla 'tiendas' primero
+    const { data: tiendasData, error: tiendasError } = await supabasePedidos
+      .from('tiendas')
+      .select('nombre')
+      .not('nombre', 'is', null)
+      .not('nombre', 'eq', '')
+      .order('nombre', { ascending: true });
+
+    if (!tiendasError && tiendasData && tiendasData.length > 0) {
+      // Si hay datos en la tabla tiendas, usarlos
+      const tiendasUnicas = tiendasData
+        .map(t => t.nombre?.trim())
+        .filter(Boolean) as string[];
+      
+      console.log('📋 Tiendas obtenidas de tabla tiendas:', tiendasUnicas);
+      console.log('📋 Total de tiendas:', tiendasUnicas.length);
+      return tiendasUnicas;
+    }
+
+    // Si no hay tabla tiendas o está vacía, intentar obtener de pedidos como fallback
+    console.log('⚠️ No se encontró tabla tiendas o está vacía, usando pedidos como fallback...');
+    const { data: pedidosData, error: pedidosError } = await supabasePedidos
       .from('pedidos')
       .select('tienda')
       .not('tienda', 'is', null)
       .not('tienda', 'eq', '')
       .order('tienda', { ascending: true });
 
-    if (error) {
-      console.error('❌ Error al obtener tiendas:', error);
+    if (pedidosError) {
+      console.error('❌ Error al obtener tiendas desde pedidos:', pedidosError);
       return [];
     }
 
     // Extraer tiendas únicas y normalizar
     const tiendasUnicas = Array.from(new Set(
-      data?.map(p => p.tienda?.toUpperCase().trim()).filter(Boolean) || []
+      pedidosData?.map(p => p.tienda?.trim()).filter(Boolean) || []
     ));
 
-    console.log('📋 Tiendas únicas encontradas:', tiendasUnicas);
+    console.log('📋 Tiendas únicas encontradas desde pedidos:', tiendasUnicas);
     console.log('📋 Total de tiendas únicas:', tiendasUnicas.length);
     return tiendasUnicas;
   } catch (error) {
@@ -1709,17 +1765,38 @@ export const getLiquidacionesRealesByTienda = async (fecha: string): Promise<{
       const topDistrict = Object.entries(distritoCounts)
         .sort(([,a], [,b]) => b - a)[0]?.[0] || 'SIN_DISTRITO';
 
-      // Calcular gastos totales de la tienda (suma de gastos de todos los mensajeros que trabajaron en esta tienda)
-      const mensajerosDeLaTienda = Array.from(new Set(
-        pedidos.map(p => p.mensajero_concretado || p.mensajero_asignado).filter(Boolean)
-      ));
+      // Determinar si es ALL STARS o MAGIC STARS
+      const esAllStars = tienda.toUpperCase().includes('ALL STARS') || tienda.toUpperCase().includes('MAGIC STARS');
       
-      const totalSpent = gastosData
-        .filter(g => mensajerosDeLaTienda.includes(g.mensajero))
-        .reduce((sum, g) => sum + g.totalGastos, 0);
+      // Calcular gastos totales:
+      // - Para ALL STARS/MAGIC STARS: sumar TODOS los gastos de TODOS los mensajeros
+      // - Para otras tiendas: solo gastos de mensajeros que trabajaron en esa tienda
+      let totalSpent = 0;
+      let gastosParaTienda = [];
+      
+      if (esAllStars) {
+        // Para ALL STARS: sumar TODOS los gastos de todos los mensajeros
+        totalSpent = gastosData.reduce((sum, g) => sum + g.totalGastos, 0);
+        gastosParaTienda = gastosData.flatMap(g => g.gastos);
+        console.log(`💰 ALL STARS: Sumando TODOS los gastos de ${gastosData.length} mensajeros = ${totalSpent}`);
+      } else {
+        // Para otras tiendas: solo gastos de mensajeros que trabajaron en esa tienda
+        const mensajerosDeLaTienda = Array.from(new Set(
+          pedidos.map(p => p.mensajero_concretado || p.mensajero_asignado).filter(Boolean)
+        ));
+        totalSpent = gastosData
+          .filter(g => mensajerosDeLaTienda.includes(g.mensajero))
+          .reduce((sum, g) => sum + g.totalGastos, 0);
+        gastosParaTienda = gastosData
+          .filter(g => mensajerosDeLaTienda.includes(g.mensajero))
+          .flatMap(g => g.gastos);
+      }
 
       const initialAmount = 0; // Monto inicial por defecto
-      const finalAmount = initialAmount + cashPayments - totalSpent;
+      // Solo restar gastos si es ALL STARS o MAGIC STARS, para otras tiendas el monto final es el total recaudado
+      const finalAmount = esAllStars 
+        ? initialAmount + cashPayments - totalSpent
+        : totalCollected;
 
       liquidaciones.push({
         tienda,
@@ -1742,9 +1819,7 @@ export const getLiquidacionesRealesByTienda = async (fecha: string): Promise<{
         averageOrderValue,
         topMessenger,
         topDistrict,
-        gastos: gastosData
-          .filter(g => mensajerosDeLaTienda.includes(g.mensajero))
-          .flatMap(g => g.gastos)
+        gastos: gastosParaTienda
       });
     }
     
