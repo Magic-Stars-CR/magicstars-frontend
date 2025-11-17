@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import {
   Package,
   AlertTriangle,
@@ -17,12 +19,63 @@ import {
   Building2,
   Search,
   RefreshCw,
+  Settings,
+  ArrowDown,
+  ArrowUp,
+  Info,
+  CheckCircle2,
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { InventoryMovements } from '@/components/dashboard/inventory-movements';
+import { ProductFormModal } from '@/components/dashboard/product-form-modal';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Plus, Edit } from 'lucide-react';
 
 const DEFAULT_MINIMUM_STOCK = 5;
 const DEFAULT_MAXIMUM_STOCK = 1000;
+
+// Tipo para configuraciones de alertas por producto
+type StockAlertConfig = {
+  stockMinimo?: number;
+  stockMaximo?: number;
+};
+
+type ProductKey = string; // Formato: "tienda|producto"
+
+// Función para generar clave única de producto
+const getProductKey = (tienda: string, producto: string): ProductKey => {
+  return `${normalizeStoreName(tienda)}|${producto}`;
+};
+
+// Funciones para guardar/cargar configuraciones desde localStorage
+const STORAGE_KEY = 'inventory_stock_alerts';
+
+const loadAlertConfigs = (): Record<ProductKey, StockAlertConfig> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveAlertConfig = (key: ProductKey, config: StockAlertConfig) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const configs = loadAlertConfigs();
+    if (config.stockMinimo === undefined && config.stockMaximo === undefined) {
+      // Si ambos son undefined, eliminar la configuración
+      delete configs[key];
+    } else {
+      configs[key] = config;
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(configs));
+  } catch (error) {
+    console.error('Error guardando configuración de alertas:', error);
+  }
+};
 
 type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock' | 'overstock';
 type StockFilterValue = 'all' | StockStatus;
@@ -36,14 +89,20 @@ type StatusInfo = {
 const normalizeStoreName = (store?: string | null) =>
   store?.trim() && store.trim().length > 0 ? store.trim() : 'Sin tienda';
 
-const getStatusInfo = (quantity: number): StatusInfo => {
+const getStatusInfo = (
+  quantity: number,
+  config?: StockAlertConfig
+): StatusInfo => {
+  const stockMinimo = config?.stockMinimo ?? DEFAULT_MINIMUM_STOCK;
+  const stockMaximo = config?.stockMaximo ?? DEFAULT_MAXIMUM_STOCK;
+
   if (quantity <= 0) {
     return { status: 'out_of_stock', label: 'Agotado', variant: 'destructive' };
   }
-  if (quantity <= DEFAULT_MINIMUM_STOCK) {
+  if (quantity <= stockMinimo) {
     return { status: 'low_stock', label: 'Stock bajo', variant: 'destructive' };
   }
-  if (quantity > DEFAULT_MAXIMUM_STOCK) {
+  if (quantity > stockMaximo) {
     return { status: 'overstock', label: 'Sobre stock', variant: 'secondary' };
   }
   return { status: 'in_stock', label: 'En stock', variant: 'default' };
@@ -56,6 +115,28 @@ export default function AdminInventoryPage() {
   const [selectedStore, setSelectedStore] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<StockFilterValue>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Estados para el modal de configuración de alertas
+  const [showAlertConfigModal, setShowAlertConfigModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<ProductoInventario | null>(null);
+  const [alertConfig, setAlertConfig] = useState<StockAlertConfig>({});
+  const [alertConfigs, setAlertConfigs] = useState<Record<ProductKey, StockAlertConfig>>({});
+  
+  // Estados para el modal de productos
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<ProductoInventario | null>(null);
+  
+  // Obtener tiendas únicas
+  const stores = useMemo(() => {
+    const storeSet = new Set<string>();
+    inventory.forEach((item) => {
+      const storeName = normalizeStoreName(item.tienda);
+      if (storeName && storeName !== 'Sin tienda') {
+        storeSet.add(storeName);
+      }
+    });
+    return Array.from(storeSet).sort();
+  }, [inventory]);
 
   const loadInventory = async () => {
     try {
@@ -73,8 +154,66 @@ export default function AdminInventoryPage() {
 
   useEffect(() => {
     loadInventory();
+    // Cargar configuraciones guardadas
+    setAlertConfigs(loadAlertConfigs());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Función para abrir el modal de configuración
+  const handleOpenAlertConfig = (item: ProductoInventario) => {
+    const key = getProductKey(item.tienda, item.producto);
+    const existingConfig = alertConfigs[key] || {};
+    setSelectedProduct(item);
+    setAlertConfig({
+      stockMinimo: existingConfig.stockMinimo ?? DEFAULT_MINIMUM_STOCK,
+      stockMaximo: existingConfig.stockMaximo ?? DEFAULT_MAXIMUM_STOCK,
+    });
+    setShowAlertConfigModal(true);
+  };
+
+  // Función para guardar la configuración
+  const handleSaveAlertConfig = () => {
+    if (!selectedProduct) return;
+    
+    const key = getProductKey(selectedProduct.tienda, selectedProduct.producto);
+    saveAlertConfig(key, alertConfig);
+    
+    // Actualizar estado local
+    const updatedConfigs = { ...alertConfigs };
+    if (alertConfig.stockMinimo === undefined && alertConfig.stockMaximo === undefined) {
+      delete updatedConfigs[key];
+    } else {
+      updatedConfigs[key] = alertConfig;
+    }
+    setAlertConfigs(updatedConfigs);
+    setShowAlertConfigModal(false);
+  };
+
+  // Función para resetear a valores por defecto
+  const handleResetAlertConfig = () => {
+    setAlertConfig({
+      stockMinimo: DEFAULT_MINIMUM_STOCK,
+      stockMaximo: DEFAULT_MAXIMUM_STOCK,
+    });
+  };
+
+  // Funciones para productos
+  const handleCreateProduct = () => {
+    setEditingProduct(null);
+    setShowProductModal(true);
+  };
+
+  const handleEditProduct = (item: ProductoInventario) => {
+    setEditingProduct(item);
+    setShowProductModal(true);
+  };
+
+  const handleSaveProduct = (productData: Omit<ProductoInventario, 'idx'>) => {
+    // Aquí deberías guardar en Supabase
+    // Por ahora solo recargamos el inventario
+    console.log('Guardar producto:', productData);
+    loadInventory();
+  };
 
   useEffect(() => {
     if (selectedStore === 'all') return;
@@ -120,12 +259,14 @@ export default function AdminInventoryPage() {
     };
 
     inventoryForStore.forEach((item) => {
-      const status = getStatusInfo(item.cantidad).status;
+      const key = getProductKey(item.tienda, item.producto);
+      const config = alertConfigs[key];
+      const status = getStatusInfo(item.cantidad, config).status;
       counts[status] += 1;
     });
 
     return counts;
-  }, [inventoryForStore]);
+  }, [inventoryForStore, alertConfigs]);
 
   const stockFilterOptions = useMemo<
     Array<{ value: StockFilterValue; label: string; count: number }>
@@ -153,10 +294,12 @@ export default function AdminInventoryPage() {
 
   const filteredItems = useMemo(() => {
     if (stockFilter === 'all') return searchFilteredItems;
-    return searchFilteredItems.filter(
-      (item) => getStatusInfo(item.cantidad).status === stockFilter
-    );
-  }, [searchFilteredItems, stockFilter]);
+    return searchFilteredItems.filter((item) => {
+      const key = getProductKey(item.tienda, item.producto);
+      const config = alertConfigs[key];
+      return getStatusInfo(item.cantidad, config).status === stockFilter;
+    });
+  }, [searchFilteredItems, stockFilter, alertConfigs]);
 
   const sortedItems = useMemo(() => {
     return [...filteredItems].sort((a, b) => {
@@ -321,19 +464,32 @@ export default function AdminInventoryPage() {
         </CardHeader>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle>
-            Inventario detallado ({sortedItems.length}
-            {stockFilter === 'all' ? '' : ` • ${stockFilterOptions.find((o) => o.value === stockFilter)?.label ?? ''}`})
-          </CardTitle>
-          {isRefreshing && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Actualizando inventario...
-            </div>
-          )}
-        </CardHeader>
+      <Tabs defaultValue="inventory" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="inventory">Inventario</TabsTrigger>
+          <TabsTrigger value="movements">Movimientos</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="inventory" className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle>
+                Inventario detallado ({sortedItems.length}
+                {stockFilter === 'all' ? '' : ` • ${stockFilterOptions.find((o) => o.value === stockFilter)?.label ?? ''}`})
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                {isRefreshing && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Actualizando inventario...
+                  </div>
+                )}
+                <Button variant="outline" size="sm" onClick={handleCreateProduct}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nuevo Producto
+                </Button>
+              </div>
+            </CardHeader>
         <CardContent>
           {sortedItems.length === 0 ? (
             <Alert>
@@ -350,12 +506,15 @@ export default function AdminInventoryPage() {
                     <TableHead>Producto</TableHead>
                     <TableHead className="w-[120px] text-right">Unidades</TableHead>
                     <TableHead className="w-[140px] text-center">Estado</TableHead>
+                    <TableHead className="w-[80px] text-center">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {sortedItems.map((item, index) => {
                     const storeName = normalizeStoreName(item.tienda);
-                    const statusInfo = getStatusInfo(item.cantidad);
+                    const key = getProductKey(item.tienda, item.producto);
+                    const config = alertConfigs[key];
+                    const statusInfo = getStatusInfo(item.cantidad, config);
 
                     return (
                       <TableRow key={`${storeName}-${item.producto}-${index}`}>
@@ -373,6 +532,28 @@ export default function AdminInventoryPage() {
                         <TableCell className="text-center">
                           <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
                         </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenAlertConfig(item)}
+                              className="h-8 w-8 p-0"
+                              title="Configurar alertas de stock"
+                            >
+                              <Settings className="h-4 w-4 text-muted-foreground hover:text-primary" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditProduct(item)}
+                              className="h-8 w-8 p-0"
+                              title="Editar producto"
+                            >
+                              <Edit className="h-4 w-4 text-muted-foreground hover:text-primary" />
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -382,6 +563,179 @@ export default function AdminInventoryPage() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="movements" className="space-y-4">
+          <InventoryMovements productos={inventory} limit={30} />
+        </TabsContent>
+      </Tabs>
+
+      {/* Modal de Configuración de Alertas */}
+      <Dialog open={showAlertConfigModal} onOpenChange={setShowAlertConfigModal}>
+        <DialogContent className="max-h-[90vh] w-[95vw] max-w-[480px] overflow-y-auto">
+          <DialogHeader className="pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                <Settings className="h-4 w-4 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-lg leading-tight">Configurar Alertas de Stock</DialogTitle>
+                <DialogDescription className="mt-0.5 text-xs">
+                  Define los umbrales personalizados
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {selectedProduct && (
+            <div className="space-y-3">
+              {/* Información del producto - Compacto */}
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <div className="flex items-center gap-2.5">
+                  <Package className="h-4 w-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-sm text-foreground">
+                      {selectedProduct.producto || 'Producto sin nombre'}
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Building2 className="h-3 w-3" />
+                        {normalizeStoreName(selectedProduct.tienda)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Package className="h-3 w-3" />
+                        {selectedProduct.cantidad} unidades
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Configuración de Stock Mínimo - Compacto */}
+              <div className="rounded-lg border border-orange-200/60 bg-orange-50/50 p-3">
+                <div className="mb-2 flex items-center gap-2">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-orange-100">
+                    <ArrowDown className="h-3.5 w-3.5 text-orange-600" />
+                  </div>
+                  <Label htmlFor="stock-minimo" className="text-sm font-semibold">
+                    Stock Mínimo
+                  </Label>
+                </div>
+                <div className="pl-9">
+                  <Input
+                    id="stock-minimo"
+                    type="number"
+                    min="0"
+                    value={alertConfig.stockMinimo ?? DEFAULT_MINIMUM_STOCK}
+                    onChange={(e) =>
+                      setAlertConfig({
+                        ...alertConfig,
+                        stockMinimo: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                      })
+                    }
+                    placeholder={DEFAULT_MINIMUM_STOCK.toString()}
+                    className="h-9 text-sm font-medium"
+                  />
+                  <div className="mt-1.5 flex items-start gap-1.5 rounded bg-orange-100/60 p-1.5">
+                    <Info className="mt-0.5 h-3 w-3 shrink-0 text-orange-600" />
+                    <p className="text-[10px] leading-tight text-orange-900/80">
+                      Alerta de <strong>Stock Bajo</strong> cuando sea ≤ este valor
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Configuración de Stock Máximo - Compacto */}
+              <div className="rounded-lg border border-blue-200/60 bg-blue-50/50 p-3">
+                <div className="mb-2 flex items-center gap-2">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-blue-100">
+                    <ArrowUp className="h-3.5 w-3.5 text-blue-600" />
+                  </div>
+                  <Label htmlFor="stock-maximo" className="text-sm font-semibold">
+                    Stock Máximo
+                  </Label>
+                </div>
+                <div className="pl-9">
+                  <Input
+                    id="stock-maximo"
+                    type="number"
+                    min="1"
+                    value={alertConfig.stockMaximo ?? DEFAULT_MAXIMUM_STOCK}
+                    onChange={(e) =>
+                      setAlertConfig({
+                        ...alertConfig,
+                        stockMaximo: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                      })
+                    }
+                    placeholder={DEFAULT_MAXIMUM_STOCK.toString()}
+                    className="h-9 text-sm font-medium"
+                  />
+                  <div className="mt-1.5 flex items-start gap-1.5 rounded bg-blue-100/60 p-1.5">
+                    <Info className="mt-0.5 h-3 w-3 shrink-0 text-blue-600" />
+                    <p className="text-[10px] leading-tight text-blue-900/80">
+                      Alerta de <strong>Sobre Stock</strong> cuando sea &gt; este valor
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Vista previa compacta */}
+              <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                <div className="mb-2 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-slate-600" />
+                  <p className="text-xs font-semibold text-slate-900">Vista Previa</p>
+                </div>
+                <div className="flex items-center justify-between rounded bg-white px-2.5 py-2 shadow-sm">
+                  <span className="text-xs text-muted-foreground">
+                    {selectedProduct.cantidad} unidades →
+                  </span>
+                  <Badge
+                    variant={getStatusInfo(selectedProduct.cantidad, alertConfig).variant}
+                    className="text-xs font-medium px-2 py-0.5"
+                  >
+                    {getStatusInfo(selectedProduct.cantidad, alertConfig).label}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex-col gap-2 border-t pt-3 sm:flex-row sm:justify-between">
+            <Button
+              variant="outline"
+              onClick={handleResetAlertConfig}
+              className="h-9 w-full text-xs sm:w-auto"
+              size="sm"
+            >
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              Restablecer
+            </Button>
+            <div className="flex w-full gap-2 sm:w-auto">
+              <Button
+                variant="outline"
+                onClick={() => setShowAlertConfigModal(false)}
+                className="h-9 flex-1 text-xs sm:flex-initial"
+                size="sm"
+              >
+                Cancelar
+              </Button>
+              <Button onClick={handleSaveAlertConfig} className="h-9 flex-1 text-xs sm:flex-initial" size="sm">
+                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                Guardar
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Crear/Editar Producto */}
+      <ProductFormModal
+        open={showProductModal}
+        onOpenChange={setShowProductModal}
+        product={editingProduct}
+        onSave={handleSaveProduct}
+        stores={stores.length > 0 ? stores : ['ALL STARS']}
+      />
     </div>
   );
 }
