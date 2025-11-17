@@ -40,9 +40,10 @@ export default function DashboardLayout({
       <main className={cn(
         "flex-1 overflow-auto transition-all duration-300 ease-in-out",
         "min-w-0", // Evita que el contenido se desborde
-        "scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent" // Scrollbar personalizado
+        "scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent", // Scrollbar personalizado
+        "flex flex-col" // Flex para optimizar espacio
       )}>
-        <div className="p-4 sm:p-5 md:p-6 lg:p-7 xl:p-8 max-w-full mx-auto w-full">
+        <div className="p-4 sm:p-5 md:p-6 lg:p-7 xl:p-8 max-w-full mx-auto w-full flex-1 pb-2">
           <div className="max-w-[1920px] mx-auto">
             {children}
           </div>

@@ -919,7 +919,6 @@ useEffect(() => {
           phone: '+506 0000-0000',
           isActive: true,
           createdAt: pedido.fecha_creacion || new Date().toISOString(),
-          updatedAt: pedido.fecha_creacion || new Date().toISOString(),
         };
       }
 
@@ -1239,7 +1238,7 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 pb-4">
       <ProgressLoader
         isVisible={isLoaderVisible}
         title="Preparando dashboard"
@@ -1512,14 +1511,14 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                 </Card>
 
                 <Card className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/80 to-indigo-50/70 shadow-sm">
-                  <CardContent className="space-y-4 p-5">
+                  <CardContent className="space-y-3 px-5 py-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div>
+                      <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">Operación</p>
                         <p className="mt-1 text-sm font-semibold text-slate-800">Gestión de pedidos</p>
-                        <p className="text-xs text-slate-500">Administra asignaciones y estados en tiempo real.</p>
+                        <p className="text-xs text-slate-500 leading-relaxed">Administra asignaciones y estados en tiempo real.</p>
                       </div>
-                      <div className="rounded-xl border border-white/80 bg-white/70 p-3 text-indigo-500 shadow-inner backdrop-blur">
+                      <div className="rounded-xl border border-white/80 bg-white/70 p-2.5 text-indigo-500 shadow-inner backdrop-blur flex-shrink-0">
                         <Package className="h-5 w-5" />
                       </div>
                     </div>
@@ -1537,14 +1536,14 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                 </Card>
 
                 <Card className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/80 to-purple-50/70 shadow-sm">
-                  <CardContent className="space-y-4 px-5 py-4">
+                  <CardContent className="space-y-3 px-5 py-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div>
+                      <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">Usuarios</p>
                         <p className="mt-1 text-sm font-semibold text-slate-800">Gestión de usuarios</p>
-                        <p className="text-xs text-slate-500">Administra roles, accesos y estados de las cuentas.</p>
+                        <p className="text-xs text-slate-500 leading-relaxed">Administra roles, accesos y estados de las cuentas.</p>
                       </div>
-                      <div className="rounded-xl border border-white/80 bg-white/70 p-3 text-purple-500 shadow-inner backdrop-blur">
+                      <div className="rounded-xl border border-white/80 bg-white/70 p-2.5 text-purple-500 shadow-inner backdrop-blur flex-shrink-0">
                         <Users className="h-5 w-5" />
                       </div>
                     </div>
@@ -1562,14 +1561,14 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                 </Card>
 
                 <Card className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/80 to-emerald-50/70 shadow-sm">
-                  <CardContent className="space-y-4 px-5 py-4">
+                  <CardContent className="space-y-3 px-5 py-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-500">Finanzas</p>
                     <p className="mt-1 text-sm font-semibold text-slate-800">Liquidaciones diarias</p>
-                    <p className="text-xs text-slate-500">Revisa montos, pagos y devoluciones consolidadas.</p>
+                    <p className="text-xs text-slate-500 leading-relaxed">Revisa montos, pagos y devoluciones consolidadas.</p>
                   </div>
-                  <div className="rounded-xl border border-white/80 bg-white/70 p-3 text-emerald-500 shadow-inner backdrop-blur">
+                  <div className="rounded-xl border border-white/80 bg-white/70 p-2.5 text-emerald-500 shadow-inner backdrop-blur flex-shrink-0">
                     <DollarSign className="h-5 w-5" />
                   </div>
                 </div>

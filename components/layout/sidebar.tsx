@@ -62,6 +62,13 @@ const menuItems = {
     { icon: Route, label: 'Rutas', href: '/dashboard/mensajero-lider' },
     { icon: User, label: 'Mi Perfil', href: '/dashboard/mensajero/profile' },
   ] as any[],
+  'mensajero-extra': [
+    { icon: Route, label: 'Mi Ruta de Hoy', href: '/dashboard/mensajero/mi-ruta-hoy' },
+    { icon: MapPin, label: 'Mapa', href: '/dashboard/mensajero/mapa' },
+    { icon: LayoutDashboard, label: 'Mis Pedidos', href: '/dashboard/mensajero' },
+    { icon: Truck, label: 'Historial de Rutas', href: '/dashboard/mensajero/route-history' },
+    { icon: User, label: 'Mi Perfil', href: '/dashboard/mensajero/profile' },
+  ] as any[],
   tienda: [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/tienda' },
     { icon: Package, label: 'Pedidos', href: '/dashboard/tienda/orders' },
@@ -114,7 +121,7 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
   }
 
   // Agregar botón de escaneo para mensajeros
-  if (user.role === 'mensajero' || user.role === 'mensajero-lider') {
+  if (user.role === 'mensajero' || user.role === 'mensajero-lider' || user.role === 'mensajero-extra') {
     const messengerName = user.name || '';
     const escaneoUrl = `https://inventario-magic-stars.vercel.app/?mensajero=${encodeURIComponent(messengerName)}`;
     userMenuItems = [
