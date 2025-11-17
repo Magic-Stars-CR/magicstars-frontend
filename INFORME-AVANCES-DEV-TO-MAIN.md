@@ -4,7 +4,6 @@
 **Rama Origen:** `dev`  
 **Rama Destino:** `main`  
 **Total de Commits:** 18 commits  
-**Período:** Últimas 19 horas de desarrollo
 
 ---
 
