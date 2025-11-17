@@ -919,7 +919,6 @@ useEffect(() => {
           phone: '+506 0000-0000',
           isActive: true,
           createdAt: pedido.fecha_creacion || new Date().toISOString(),
-          updatedAt: pedido.fecha_creacion || new Date().toISOString(),
         };
       }
 

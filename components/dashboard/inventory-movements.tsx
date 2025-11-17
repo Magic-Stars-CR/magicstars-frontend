@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { InventoryTransaction, ProductoInventario } from '@/lib/types';
+import { InventoryTransaction } from '@/lib/types';
+import { ProductoInventario } from '@/lib/supabase-inventario';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -77,7 +78,7 @@ export function InventoryMovements({ productos, limit = 20 }: InventoryMovements
 
         if (producto) {
           // Determinar el tipo de acción basado en el estado del pedido
-          let actionType: InventoryTransaction['actionType'] = 'pedido_confirmado';
+          let actionType: InventoryTransaction['actionType'] = 'pedido_montado';
           let quantity = -item.quantity; // Por defecto, resta stock
 
           if (order.status === 'entregado') {
@@ -88,11 +89,12 @@ export function InventoryMovements({ productos, limit = 20 }: InventoryMovements
             actionType = 'pedido_devuelto';
             quantity = Math.abs(quantity); // Devuelve stock
           } else if (order.status === 'confirmado' || order.status === 'en_ruta') {
-            actionType = 'pedido_confirmado';
+            actionType = 'pedido_montado';
             quantity = -item.quantity; // Descuenta stock
-          } else if (order.status === 'cancelado') {
-            actionType = 'pedido_cancelado';
-            quantity = Math.abs(quantity); // Restaura stock
+          } else if (order.status === 'reagendado') {
+            // Para pedidos reagendados, mantener el descuento
+            actionType = 'pedido_montado';
+            quantity = -item.quantity;
           }
 
           const transactionId = `mov-${order.id}-${itemIndex}-${orderIndex}`;
@@ -137,11 +139,11 @@ export function InventoryMovements({ productos, limit = 20 }: InventoryMovements
             referenceId: order.id,
             referenceType: 'order',
             userId: order.assignedMessenger?.id || 'system',
-            user: order.assignedMessenger || {
+            user: (order.assignedMessenger && 'email' in order.assignedMessenger ? order.assignedMessenger : undefined) || {
               id: 'system',
               name: 'Sistema',
               email: 'sistema@magicstars.com',
-              role: 'admin',
+              role: 'admin' as const,
               phone: '',
               isActive: true,
               createdAt: new Date().toISOString(),
@@ -196,7 +198,7 @@ export function InventoryMovements({ productos, limit = 20 }: InventoryMovements
           createdAt: date.toISOString(),
           isActive: true,
         },
-        actionType: index % 2 === 0 ? 'inicial' : 'ajuste_manual',
+        actionType: index % 2 === 0 ? 'inicial' : 'ajuste',
         quantity: index % 2 === 0 ? 10 : -2,
         previousStock: (producto.cantidad || 0) - (index % 2 === 0 ? 10 : -2),
         newStock: producto.cantidad || 0,

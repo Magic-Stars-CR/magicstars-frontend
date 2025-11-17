@@ -62,6 +62,13 @@ const menuItems = {
     { icon: Route, label: 'Rutas', href: '/dashboard/mensajero-lider' },
     { icon: User, label: 'Mi Perfil', href: '/dashboard/mensajero/profile' },
   ] as any[],
+  'mensajero-extra': [
+    { icon: Route, label: 'Mi Ruta de Hoy', href: '/dashboard/mensajero/mi-ruta-hoy' },
+    { icon: MapPin, label: 'Mapa', href: '/dashboard/mensajero/mapa' },
+    { icon: LayoutDashboard, label: 'Mis Pedidos', href: '/dashboard/mensajero' },
+    { icon: Truck, label: 'Historial de Rutas', href: '/dashboard/mensajero/route-history' },
+    { icon: User, label: 'Mi Perfil', href: '/dashboard/mensajero/profile' },
+  ] as any[],
   tienda: [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/tienda' },
     { icon: Package, label: 'Pedidos', href: '/dashboard/tienda/orders' },
@@ -106,7 +113,7 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
   if (!user) return null;
 
   // Obtener menú base según el rol
-  let userMenuItems = menuItems[user.role] || [];
+  let userMenuItems = (menuItems as any)[user.role] || [];
   
   // Fallback para mensajeros anteriores con flag de líder
   if (user.role === 'mensajero' && user.isMessengerLeader) {
@@ -114,7 +121,7 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
   }
 
   // Agregar botón de escaneo para mensajeros
-  if (user.role === 'mensajero' || user.role === 'mensajero-lider') {
+  if (user.role === 'mensajero' || user.role === 'mensajero-lider' || user.role === 'mensajero-extra') {
     const messengerName = user.name || '';
     const escaneoUrl = `https://inventario-magic-stars.vercel.app/?mensajero=${encodeURIComponent(messengerName)}`;
     userMenuItems = [
@@ -150,7 +157,7 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
 
       {/* Navegación principal - scrollable */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent" role="navigation" aria-label="Navegación principal">
-        {userMenuItems.map((item, index) => {
+        {userMenuItems.map((item: any, index: number) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
           const isExternal = (item as any).isExternal || false;
