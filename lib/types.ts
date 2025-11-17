@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'asesor' | 'mensajero' | 'tienda';
+export type UserRole = 'admin' | 'asesor' | 'mensajero' | 'mensajero-lider' | 'mensajero-extra' | 'tienda';
 
 export type OrderStatus = 
   | 'pendiente'

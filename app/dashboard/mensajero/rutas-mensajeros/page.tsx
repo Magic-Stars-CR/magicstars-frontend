@@ -67,12 +67,16 @@ export default function RutasMensajerosPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  const isMessengerLeaderUser =
+    !!user &&
+    (user.role === 'mensajero-lider' || (user.role === 'mensajero' && user.isMessengerLeader));
+
   // Verificar que el usuario sea líder de mensajeros
   useEffect(() => {
-    if (user && user.role === 'mensajero' && !user.isMessengerLeader) {
+    if (user && !isMessengerLeaderUser) {
       router.push('/dashboard/mensajero');
     }
-  }, [user, router]);
+  }, [user, router, isMessengerLeaderUser]);
 
   // Inicializar fecha al cargar el componente
   useEffect(() => {
@@ -300,7 +304,7 @@ export default function RutasMensajerosPage() {
     ? ((totalGeneralEntregados / totalGeneralOrders) * 100).toFixed(1) 
     : '0';
 
-  if (!user || user.role !== 'mensajero' || !user.isMessengerLeader) {
+  if (!isMessengerLeaderUser) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Alert className="max-w-md">

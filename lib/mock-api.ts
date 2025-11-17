@@ -9,6 +9,18 @@ import {
   UnassignedOrder, RouteMessengerStats, RouteManagementFilters, RouteCreationData, RouteInfo, RouteStats
 } from './types';
 
+const isMessengerRole = (role: string) =>
+  role === 'mensajero' || role === 'mensajero-lider' || role === 'mensajero-extra';
+
+const resolveCompanyPrefix = (value?: string | null) => {
+  if (!value) return null;
+  const normalized = value.trim().toUpperCase();
+  if (value === '1' || normalized === 'PMC' || normalized.includes('PARA MACHOS')) return 'PMC';
+  if (value === '2' || normalized === 'BF' || normalized.includes('BEAUTY')) return 'BF';
+  if (value === '3' || normalized === 'AS' || normalized.includes('ALL STARS')) return 'AS';
+  return null;
+};
+
 // Mock Companies
 export const mockCompanies: Company[] = [
   {
@@ -88,13 +100,14 @@ export const mockUsers: User[] = [
     id: '4',
     email: 'luis.mensajero@magicstars.com',
     name: 'Luis González',
-    role: 'mensajero',
+    role: 'mensajero-lider',
     phone: '+506 8888-4444',
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
     createdAt: '2023-09-20T09:00:00Z',
     isActive: true,
     companyId: undefined, // Mensajero no tiene empresa asociada
     company: undefined,
+    isMessengerLeader: true,
   },
   {
     id: '5',
@@ -578,7 +591,7 @@ const generateRealisticDates = (): Date[] => {
 // Generate today's orders with specific scenarios
 const generateTodayOrders = (): Order[] => {
   const todayOrders: Order[] = [];
-  const messengers = mockUsers.filter(u => u.role === 'mensajero');
+  const messengers = mockUsers.filter(u => isMessengerRole(u.role));
   const advisors = mockUsers.filter(u => u.role === 'asesor');
   
   // Obtener la fecha de hoy
@@ -701,7 +714,7 @@ const generateTodayOrders = (): Order[] => {
 // Generate mock orders with realistic distribution
 const generateMockOrders = (): Order[] => {
   const orders: Order[] = [];
-  const messengers = mockUsers.filter(u => u.role === 'mensajero');
+  const messengers = mockUsers.filter(u => isMessengerRole(u.role));
   const advisors = mockUsers.filter(u => u.role === 'asesor');
 
   // Para Machos CR - 3 pedidos
@@ -1579,9 +1592,7 @@ export const mockApi = {
 
     // Filter by company if user is an advisor (only show orders from their company)
     if (filters?.userCompanyId) {
-      const companyPrefix = filters.userCompanyId === '1' ? 'PMC' : 
-                           filters.userCompanyId === '2' ? 'BF' : 
-                           filters.userCompanyId === '3' ? 'AS' : null;
+      const companyPrefix = resolveCompanyPrefix(filters.userCompanyId);
       if (companyPrefix) {
         filteredOrders = filteredOrders.filter(o => o.id.startsWith(companyPrefix));
       }
@@ -1639,9 +1650,7 @@ export const mockApi = {
     
     // Filter by company if user is an advisor (only show stats from their company)
     if (filters?.userCompanyId) {
-      const companyPrefix = filters.userCompanyId === '1' ? 'PMC' : 
-                           filters.userCompanyId === '2' ? 'BF' : 
-                           filters.userCompanyId === '3' ? 'AS' : null;
+      const companyPrefix = resolveCompanyPrefix(filters.userCompanyId);
       if (companyPrefix) {
         orders = orders.filter(o => o.id.startsWith(companyPrefix));
       }
@@ -3392,7 +3401,7 @@ export const mockApi = {
     await new Promise(resolve => setTimeout(resolve, 300));
     
     // Obtener todos los mensajeros disponibles
-    const allMessengers = mockUsers.filter(user => user.role === 'mensajero' && user.isActive);
+    const allMessengers = mockUsers.filter(user => isMessengerRole(user.role) && user.isActive);
     
     // Calcular cuántos grupos de 30 pedidos necesitamos
     const totalOrders = orders.length;
@@ -3514,7 +3523,7 @@ export const mockApi = {
   getRouteMessengerStats: async (filters: RouteManagementFilters): Promise<RouteMessengerStats[]> => {
     await new Promise(resolve => setTimeout(resolve, 600));
     
-    const messengers = mockUsers.filter(user => user.role === 'mensajero' && user.isActive);
+    const messengers = mockUsers.filter(user => isMessengerRole(user.role) && user.isActive);
     const stats: RouteMessengerStats[] = [];
     
     // Crear datos de ejemplo para el día de hoy si no hay filtros de fecha
@@ -3653,7 +3662,7 @@ export const mockApi = {
     
     // Simular asignaciones existentes basadas en pedidos asignados
     const assignments: RouteAssignment[] = [];
-    const messengers = mockUsers.filter(user => user.role === 'mensajero' && user.isActive);
+    const messengers = mockUsers.filter(user => isMessengerRole(user.role) && user.isActive);
     const today = new Date().toISOString().split('T')[0];
     
     messengers.forEach((messenger, index) => {
@@ -3877,7 +3886,7 @@ function getAllRoutes(): string[] {
 
 // Function to get messengers assigned to routes
 function getMessengersForRoute(route: string): User[] {
-  const messengers = mockUsers.filter(user => user.role === 'mensajero' && user.isActive);
+  const messengers = mockUsers.filter(user => isMessengerRole(user.role) && user.isActive);
   
   // Assign messengers to routes in a round-robin fashion
   const routeMessengers: { [key: string]: User[] } = {

@@ -319,14 +319,6 @@ export default function AdminLiquidationPage() {
       
       const liquidacionesReales = await getLiquidacionesReales(fechaParaUsar);
       
-      
-      if (liquidacionesReales.length > 0) {
-      }
-      
-      
-      
-      
-      
       // Paso 2: Procesar pedidos
       if (!isReload) {
         updateStep('mensajeros', { status: 'completed' });
@@ -334,21 +326,29 @@ export default function AdminLiquidationPage() {
       }
       
       // Convertir a formato LiquidationCalculation
-      const calculationsData: LiquidationCalculation[] = liquidacionesReales.map(liquidacion => ({
-        messengerId: liquidacion.mensajero,
-        messengerName: liquidacion.mensajero,
-        routeDate: selectedDate,
-        initialAmount: 0, // Se puede editar después
-        totalCollected: liquidacion.totalCollected || 0,
-        totalSpent: liquidacion.totalSpent || 0,
-        sinpePayments: liquidacion.sinpePayments || 0,
-        cashPayments: liquidacion.cashPayments || 0,
-        tarjetaPayments: liquidacion.tarjetaPayments || 0,
-        finalAmount: (liquidacion.totalCollected || 0) - (liquidacion.totalSpent || 0),
-        orders: liquidacion.pedidos || [],
-        isLiquidated: liquidacion.isLiquidated || false,
-        canEdit: !liquidacion.isLiquidated
-      }));
+      // IMPORTANTE: Verificar el estado de liquidación para cada mensajero
+      const { checkLiquidationStatus } = await import('@/lib/supabase-pedidos');
+      const calculationsData: LiquidationCalculation[] = await Promise.all(
+        liquidacionesReales.map(async (liquidacion) => {
+          // Verificar estado actualizado de liquidación
+          const isLiquidated = await checkLiquidationStatus(liquidacion.mensajero, fechaParaUsar);
+          return {
+            messengerId: liquidacion.mensajero,
+            messengerName: liquidacion.mensajero,
+            routeDate: fechaParaUsar,
+            initialAmount: 0, // Se puede editar después
+            totalCollected: liquidacion.totalCollected || 0,
+            totalSpent: liquidacion.totalSpent || 0,
+            sinpePayments: liquidacion.sinpePayments || 0,
+            cashPayments: liquidacion.cashPayments || 0,
+            tarjetaPayments: liquidacion.tarjetaPayments || 0,
+            finalAmount: (liquidacion.totalCollected || 0) - (liquidacion.totalSpent || 0),
+            orders: liquidacion.pedidos || [],
+            isLiquidated: isLiquidated, // Usar el estado verificado
+            canEdit: !isLiquidated
+          };
+        })
+      );
       
       // Paso 3: Finalizar cálculos
       if (!isReload) {
@@ -480,7 +480,19 @@ export default function AdminLiquidationPage() {
           });
         });
         
-        liquidacionesReales = Array.from(tiendasConsolidadas.values());
+        // Recalcular finalAmount para ALL STARS después de consolidar
+        liquidacionesReales = Array.from(tiendasConsolidadas.values()).map(liquidacion => {
+          const esAllStars = liquidacion.tienda?.toUpperCase().includes('ALL STARS') || 
+                             liquidacion.tienda?.toUpperCase().includes('MAGIC STARS');
+          
+          if (esAllStars) {
+            // Para ALL STARS: recalcular finalAmount = cashPayments - totalSpent
+            liquidacion.finalAmount = liquidacion.cashPayments - (liquidacion.totalSpent || 0);
+          }
+          // Para otras tiendas, el finalAmount ya está correcto (totalCollected)
+          
+          return liquidacion;
+        });
         
       } else {
         // Usar fecha simple
@@ -866,22 +878,24 @@ export default function AdminLiquidationPage() {
     setSelectedViewAndLiquidate(calculation);
     setShowViewAndLiquidateModal(true);
     
-    // Verificar estado de liquidación en background
+    // Verificar estado de liquidación en background y actualizar
     try {
       const { checkLiquidationStatus } = await import('@/lib/supabase-pedidos');
       const fechaParaVerificar = selectedDate || calculation.routeDate;
       const isCompleted = await checkLiquidationStatus(calculation.messengerName, fechaParaVerificar);
       setIsLiquidationCompleted(isCompleted);
       
-      if (isCompleted) {
-        setCalculations(prev => 
-          prev.map(calc => 
-            calc.messengerId === calculation.messengerId 
-              ? { ...calc, isLiquidated: true }
-              : calc
-          )
-        );
-      }
+      // Actualizar el estado en el cálculo seleccionado y en la lista
+      const updatedCalculation = { ...calculation, isLiquidated: isCompleted, canEdit: !isCompleted };
+      setSelectedViewAndLiquidate(updatedCalculation);
+      
+      setCalculations(prev => 
+        prev.map(calc => 
+          calc.messengerId === calculation.messengerId 
+            ? { ...calc, isLiquidated: isCompleted, canEdit: !isCompleted }
+            : calc
+        )
+      );
       
     } catch (error) {
       console.error('❌ Error verificando estado de liquidación:', error);
@@ -893,6 +907,10 @@ export default function AdminLiquidationPage() {
     try {
       
       // Convertir TiendaLiquidationCalculation a LiquidationCalculation para el modal
+      // Determinar si es ALL STARS o MAGIC STARS
+      const esAllStars = tiendaCalculation.tienda?.toUpperCase().includes('ALL STARS') || 
+                         tiendaCalculation.tienda?.toUpperCase().includes('MAGIC STARS');
+      
       const calculation: LiquidationCalculation = {
         messengerId: tiendaCalculation.tienda,
         messengerName: tiendaCalculation.tienda,
@@ -903,7 +921,10 @@ export default function AdminLiquidationPage() {
         cashPayments: tiendaCalculation.cashPayments,
         sinpePayments: tiendaCalculation.sinpePayments,
         tarjetaPayments: tiendaCalculation.tarjetaPayments || 0,
-        finalAmount: tiendaCalculation.totalCollected - (tiendaCalculation.totalSpent || 0),
+        // Solo restar gastos si es ALL STARS o MAGIC STARS, para otras tiendas el monto final es el total recaudado
+        finalAmount: esAllStars 
+          ? tiendaCalculation.cashPayments - (tiendaCalculation.totalSpent || 0)
+          : tiendaCalculation.totalCollected,
         orders: tiendaCalculation.orders || [],
         isLiquidated: false,
         canEdit: true
@@ -1384,131 +1405,150 @@ export default function AdminLiquidationPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Módulo de Liquidación</h1>
-          <p className="text-gray-600">Calcula la liquidación diaria de cada mensajero</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {isLoadingData && (
-            <div className="flex items-center gap-2 text-sm text-blue-600">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Cargando datos...</span>
+    <div className="space-y-8">
+      {/* Header mejorado con gradiente */}
+      <div className="relative rounded-2xl bg-gradient-to-r from-sky-500 via-indigo-500 to-purple-500 p-8 text-white overflow-hidden">
+        <div className="absolute inset-0 opacity-20"></div>
+        <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm shadow-lg">
+              <Calculator className="h-8 w-8 text-white" />
             </div>
-          )}
-          
-          {/* Filtro de fecha simple */}
-          {/* Selector de fecha única - se oculta cuando el rango de fechas está activo */}
-          {!(activeTab === 'tiendas' && usarRangoFechas) && (
-            <div className="flex items-center gap-2">
-              <Input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-40"
-                disabled={isLoadingData}
-              />
-              <Button 
-                variant="outline"
-                onClick={() => {
-                  const today = new Date().toISOString().split('T')[0];
-                  setSelectedDate(today);
-                }}
-                disabled={isLoadingData}
-              >
-                <Calendar className="w-4 h-4 mr-2" />
-                Hoy
-              </Button>
+            <div>
+              <p className="inline-flex items-center gap-2 rounded-full bg-white/20 backdrop-blur-sm px-4 py-1.5 text-sm font-medium text-white mb-3">
+                <Calculator className="h-4 w-4" />
+                Panel de gestión de liquidaciones
+              </p>
+              <h1 className="text-4xl font-bold tracking-tight text-white mb-2">
+                Módulo de Liquidación
+              </h1>
+              <p className="text-white/90 text-base">
+                Calcula y gestiona la liquidación diaria de mensajeros y tiendas de forma centralizada.
+              </p>
             </div>
-          )}
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {isLoadingData && (
+              <div className="flex items-center gap-2 text-sm text-white bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg border border-white/30">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Cargando datos...</span>
+              </div>
+            )}
+            
+            {/* Filtro de fecha simple */}
+            {!(activeTab === 'tiendas' && usarRangoFechas) && (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="w-40 h-10 bg-white/10 backdrop-blur-sm border-white/20 text-white placeholder:text-white/70 focus:ring-2 focus:ring-white/50"
+                  disabled={isLoadingData}
+                />
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    setSelectedDate(today);
+                  }}
+                  disabled={isLoadingData}
+                  className="bg-white/10 backdrop-blur-sm border-white/20 text-white hover:bg-white/20 transition-all duration-200 hover:scale-105"
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Hoy
+                </Button>
+              </div>
+            )}
 
-          {/* Filtro de rango de fechas para tiendas */}
-          {activeTab === 'tiendas' && (
-            <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-5 h-5 text-blue-600" />
-                      {!usarRangoFechas ? (
-                        <span className="text-xs whitespace-nowrap font-medium text-gray-700">Rango de fechas:</span>
-                      ) : (
-                        <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
-                          <span>
-                            {tiendaFechaInicio && tiendaFechaFin 
-                              ? `${Math.ceil((new Date(tiendaFechaFin).getTime() - new Date(tiendaFechaInicio).getTime()) / (1000 * 60 * 60 * 24)) + 1} días`
-                              : 'Selecciona fechas'
-                            }
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={usarRangoFechas}
-                        onChange={(e) => setUsarRangoFechas(e.target.checked)}
-                        className="sr-only peer"
-                        disabled={loadingRangoFechas}
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"></div>
-                    </label>
-                  </div>
-                  
-                  {usarRangoFechas && (
+            {/* Filtro de rango de fechas para tiendas */}
+            {activeTab === 'tiendas' && (
+              <Card className="bg-white/10 backdrop-blur-sm border-white/20 shadow-lg">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      {loadingRangoFechas ? (
-                        <div className="flex items-center gap-2 text-sm text-blue-600">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Cargando rango...</span>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-2">
-                            <Label className="text-xs ml-3 font-medium text-gray-600">Desde</Label>
-                            <Input
-                              type="date"
-                              value={tiendaFechaInicio}
-                              onChange={(e) => handleFechaInicioChange(e.target.value)}
-                              className={`w-36 h-9 text-sm ${fechasError ? 'border-red-500' : ''}`}
-                              disabled={loadingRangoFechas}
-                              max={tiendaFechaFin || undefined}
-                            />
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-5 h-5 text-white" />
+                        {!usarRangoFechas ? (
+                          <span className="text-xs whitespace-nowrap font-medium text-white">Rango de fechas:</span>
+                        ) : (
+                          <div className="flex items-center gap-1 text-xs text-white bg-white/20 px-2 py-1 rounded">
+                            <span>
+                              {tiendaFechaInicio && tiendaFechaFin 
+                                ? `${Math.ceil((new Date(tiendaFechaFin).getTime() - new Date(tiendaFechaInicio).getTime()) / (1000 * 60 * 60 * 24)) + 1} días`
+                                : 'Selecciona fechas'
+                              }
+                            </span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Label className="text-xs font-medium text-gray-600">Hasta</Label>
-                            <Input
-                              type="date"
-                              value={tiendaFechaFin}
-                              onChange={(e) => handleFechaFinChange(e.target.value)}
-                              className={`w-36 h-9 text-sm ${fechasError ? 'border-red-500' : ''}`}
-                              disabled={loadingRangoFechas}
-                              min={tiendaFechaInicio || undefined}
-                            />
-                          </div>
-                          {fechasError && (
-                            <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
-                              <AlertCircle className="w-3 h-3" />
-                              <span>{fechasError}</span>
-                            </div>
-                          )}
-                        </>
-                      )}
+                        )}
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={usarRangoFechas}
+                          onChange={(e) => setUsarRangoFechas(e.target.checked)}
+                          className="sr-only peer"
+                          disabled={loadingRangoFechas}
+                        />
+                        <div className="w-11 h-6 bg-white/30 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-white/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white/40 peer-disabled:opacity-50"></div>
+                      </label>
                     </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          
-          <Button asChild>
-            <Link href="/dashboard/admin">
-              <Truck className="w-4 h-4 mr-2" />
-              Dashboard
-            </Link>
-          </Button>
+                    
+                    {usarRangoFechas && (
+                      <div className="flex items-center gap-4">
+                        {loadingRangoFechas ? (
+                          <div className="flex items-center gap-2 text-sm text-white">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Cargando rango...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <Label className="text-xs ml-3 font-medium text-white">Desde</Label>
+                              <Input
+                                type="date"
+                                value={tiendaFechaInicio}
+                                onChange={(e) => handleFechaInicioChange(e.target.value)}
+                                className={`w-36 h-9 text-sm bg-white/10 backdrop-blur-sm border-white/20 text-white ${fechasError ? 'border-red-300' : ''}`}
+                                disabled={loadingRangoFechas}
+                                max={tiendaFechaFin || undefined}
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Label className="text-xs font-medium text-white">Hasta</Label>
+                              <Input
+                                type="date"
+                                value={tiendaFechaFin}
+                                onChange={(e) => handleFechaFinChange(e.target.value)}
+                                className={`w-36 h-9 text-sm bg-white/10 backdrop-blur-sm border-white/20 text-white ${fechasError ? 'border-red-300' : ''}`}
+                                disabled={loadingRangoFechas}
+                                min={tiendaFechaInicio || undefined}
+                              />
+                            </div>
+                            {fechasError && (
+                              <div className="flex items-center gap-1 text-xs text-red-200 bg-red-500/30 px-2 py-1 rounded">
+                                <AlertCircle className="w-3 h-3" />
+                                <span>{fechasError}</span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
+            <Button 
+              asChild 
+              className="bg-white text-sky-600 hover:bg-white/90 transition-all duration-200 hover:scale-105 shadow-lg"
+            >
+              <Link href="/dashboard/admin">
+                <Truck className="w-4 h-4 mr-2" />
+                Dashboard
+              </Link>
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -1522,122 +1562,111 @@ export default function AdminLiquidationPage() {
         </Alert>
       )}
 
-      {/* Sistema de Tabs */}
+      {/* Sistema de Tabs - Mejorado */}
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'mensajeros' | 'tiendas')} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="mensajeros" className="flex items-center gap-2">
-            <Truck className="w-4 h-4" />
-            Liquidaciones de Mensajeros
-          </TabsTrigger>
-          <TabsTrigger value="tiendas" className="flex items-center gap-2">
-            <Building2 className="w-4 h-4" />
-            Liquidaciones por Tienda
-          </TabsTrigger>
-        </TabsList>
+        <div className="relative group">
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-sky-400 to-indigo-400 rounded-xl opacity-10 group-hover:opacity-20 blur transition duration-300"></div>
+          <TabsList className="relative grid w-full grid-cols-2 bg-gradient-to-br from-sky-50/50 to-indigo-50/50 dark:from-sky-950/50 dark:to-indigo-950/50 border border-sky-200/50 dark:border-sky-800/50 shadow-md">
+            <TabsTrigger 
+              value="mensajeros" 
+              className="flex items-center gap-2 transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-md"
+            >
+              <Truck className="w-4 h-4" />
+              Liquidaciones de Mensajeros
+            </TabsTrigger>
+            <TabsTrigger 
+              value="tiendas" 
+              className="flex items-center gap-2 transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-md"
+            >
+              <Building2 className="w-4 h-4" />
+              Liquidaciones por Tienda
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Tab de Mensajeros */}
         <TabsContent value="mensajeros" className="space-y-6">
-          {/* Stats Cards para Mensajeros */}
+          {/* Stats Cards para Mensajeros - Diseño Profesional */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {/* Primera fila: Mensajeros con Pedidos, Pendientes por Liquidar, Pedidos Totales del Día, Contador de Estados */}
+            {/* Mensajeros con Pedidos */}
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-blue-50 to-blue-100">
-          <CardContent className="p-4">
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Truck className="w-5 h-5 text-white" />
-              </div>
-              <div>
+                    </div>
+                    <div>
                       <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Mensajeros con Pedidos</p>
                       <p className="text-lg font-bold text-blue-900 mt-1">{calculations.length}</p>
-              </div>
-                  </div>
-                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-            </div>
-          </CardContent>
-        </Card>
-
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-yellow-50 to-yellow-100">
-          <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-yellow-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <Clock className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                      <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide">Pendientes por Liquidar</p>
-                      <p className="text-lg font-bold text-yellow-900 mt-1">
-                  {calculations.filter(c => !c.isLiquidated).length}
-                </p>
-              </div>
-                  </div>
-                  <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-            </div>
-          </CardContent>
-        </Card>
-
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-orange-50 to-orange-100">
-          <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <Package className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                      <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Pedidos Totales del Día (Asignados)</p>
-                      <p className="text-lg font-bold text-orange-900 mt-1">
-                        {calculations.reduce((sum, c) => sum + c.orders.length, 0)}
-                </p>
-              </div>
-                  </div>
-                  <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
-            </div>
-          </CardContent>
-        </Card>
-
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-purple-50 to-purple-100">
-          <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <CheckCircle className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                      <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Estados</p>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-xs text-green-700">
-                            {calculations.reduce((sum, c) => sum + c.orders.filter(o => o.estado_pedido === 'ENTREGADO').length, 0)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                          <span className="text-xs text-yellow-700">
-                            {calculations.reduce((sum, c) => sum + c.orders.filter(o => o.estado_pedido === 'PENDIENTE').length, 0)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                          <span className="text-xs text-red-700">
-                            {calculations.reduce((sum, c) => sum + c.orders.filter(o => o.estado_pedido === 'DEVOLUCION').length, 0)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                          <span className="text-xs text-blue-700">
-                            {calculations.reduce((sum, c) => sum + c.orders.filter(o => o.estado_pedido === 'REAGENDADO').length, 0)}
-                          </span>
-                        </div>
-                      </div>
                     </div>
                   </div>
-                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Segunda fila: Total Recaudado, Total a Entregar, Total Efectivo, SINPE, Tarjeta, Otros */}
+            {/* Pendientes por Liquidar */}
+            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-yellow-50 to-yellow-100">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-yellow-500 rounded-xl flex items-center justify-center shadow-lg">
+                      <Clock className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide">Pendientes por Liquidar</p>
+                      <p className="text-lg font-bold text-yellow-900 mt-1">
+                        {calculations.filter(c => !c.isLiquidated).length}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Pedidos Totales del Día */}
+            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-orange-50 to-orange-100">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg">
+                      <Package className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Pedidos Totales</p>
+                      <p className="text-lg font-bold text-orange-900 mt-1">
+                        {calculations.reduce((sum, c) => sum + c.orders.length, 0)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Tasa de Entrega */}
+            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-emerald-50 to-emerald-100">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg">
+                      <TrendingUp className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Tasa de Entrega</p>
+                      <p className="text-lg font-bold text-emerald-900 mt-1">
+                        {calculateTotalDeliveryRateMensajeros()}%
+                      </p>
+                    </div>
+                  </div>
+                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Total Recaudado */}
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-green-50 to-green-100">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
@@ -1647,30 +1676,29 @@ export default function AdminLiquidationPage() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Total Recaudado</p>
-                      <p className="text-xs text-green-600">(todos los medios)</p>
                       <p className="text-lg font-bold text-green-900 mt-1">
                         {formatCurrency(calculations.reduce((sum, c) => {
                           const calculated = calculateLiquidation(c);
                           return sum + calculated.totalCollected;
                         }, 0))}
-                </p>
-              </div>
+                      </p>
+                    </div>
                   </div>
                   <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-            </div>
-          </CardContent>
-        </Card>
+                </div>
+              </CardContent>
+            </Card>
 
+            {/* Total a Entregar */}
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-purple-50 to-purple-100">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Calculator className="w-5 h-5 text-white" />
-      </div>
+                    </div>
                     <div>
                       <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Total a Entregar</p>
-                      <p className="text-xs text-purple-600 font-medium">Efectivo - Gastos</p>
                       <p className="text-lg font-bold text-purple-900 mt-1">
                         {formatCurrency(calculations.reduce((sum, c) => {
                           const calculated = calculateLiquidation(c);
@@ -1679,29 +1707,28 @@ export default function AdminLiquidationPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
-                  </div>
+                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-green-50 to-green-100">
+            {/* Total Efectivo */}
+            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-emerald-50 to-emerald-100">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shadow-lg">
+                    <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg">
                       <Banknote className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Total Efectivo</p>
-                      <p className="text-lg font-bold text-green-900 mt-1">
+                      <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Total Efectivo</p>
+                      <p className="text-lg font-bold text-emerald-900 mt-1">
                         {formatCurrency(calculations.reduce((sum, c) => {
                           const calculated = calculateLiquidation(c);
                           return sum + calculated.cashPayments;
                         }, 0))}
                       </p>
-                      <p className="text-xs text-green-600 mt-1">
+                      <p className="text-xs text-emerald-600 mt-1">
                         {(() => {
                           const efectivoCount = calculations.reduce((sum, c) => {
                             return sum + c.orders.filter(o => 
@@ -1714,11 +1741,12 @@ export default function AdminLiquidationPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
                 </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
 
+            {/* SINPE */}
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-cyan-50 to-cyan-100">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
@@ -1735,7 +1763,7 @@ export default function AdminLiquidationPage() {
                         }, 0))}
                       </p>
                       <p className="text-xs text-cyan-600 mt-1">
-            {(() => {
+                        {(() => {
                           const sinpeCount = calculations.reduce((sum, c) => {
                             return sum + c.orders.filter(o => 
                               o.estado_pedido === 'ENTREGADO' && 
@@ -1752,6 +1780,7 @@ export default function AdminLiquidationPage() {
               </CardContent>
             </Card>
 
+            {/* Tarjeta */}
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-pink-50 to-pink-100">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
@@ -1779,13 +1808,14 @@ export default function AdminLiquidationPage() {
                           return `${tarjetaCount} pedidos`;
                         })()}
                       </p>
-                  </div>
+                    </div>
                   </div>
                   <div className="w-2 h-2 bg-pink-400 rounded-full animate-pulse"></div>
                 </div>
               </CardContent>
             </Card>
 
+            {/* 2 Pagos */}
             <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-orange-50 to-orange-100">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
@@ -1795,33 +1825,31 @@ export default function AdminLiquidationPage() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">2 Pagos</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-sm font-bold text-orange-900">
-                          {(() => {
-                            const dosPagosTotal = calculations.reduce((sum, calc) => {
-                              const calculated = calculateLiquidation(calc);
-                              return sum + calculated.orders
-                                .filter(o => o.metodo_pago === '2PAGOS' && o.estado_pedido === 'ENTREGADO')
-                                .reduce((s, o) => s + parseFloat(o.efectivo_2_pagos || '0') + parseFloat(o.sinpe_2_pagos || '0'), 0);
-                            }, 0);
-                            return formatCurrency(dosPagosTotal);
-            })()}
-                        </span>
-                      </div>
-                      <div className="text-xs text-orange-600 mt-1">
+                      <p className="text-lg font-bold text-orange-900 mt-1">
+                        {(() => {
+                          const dosPagosTotal = calculations.reduce((sum, calc) => {
+                            const calculated = calculateLiquidation(calc);
+                            return sum + calculated.orders
+                              .filter(o => o.metodo_pago === '2PAGOS' && o.estado_pedido === 'ENTREGADO')
+                              .reduce((s, o) => s + parseFloat(o.efectivo_2_pagos || '0') + parseFloat(o.sinpe_2_pagos || '0'), 0);
+                          }, 0);
+                          return formatCurrency(dosPagosTotal);
+                        })()}
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">
                         {(() => {
                           const dosPagosCount = calculations.reduce((sum, calc) => {
                             return sum + calc.orders.filter(o => o.metodo_pago === '2PAGOS' && o.estado_pedido === 'ENTREGADO').length;
                           }, 0);
                           return `${dosPagosCount} pedidos`;
                         })()}
-                      </div>
+                      </p>
                     </div>
                   </div>
                   <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
                 </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
 
       </div>
 
@@ -1908,15 +1936,6 @@ export default function AdminLiquidationPage() {
                   <p className="text-lg font-bold text-blue-900">{formatCurrency(pruebaMetrics.dosPagosPayments)}</p>
                 </div>
 
-                {/* Gastos */}
-                <div className="bg-white rounded-lg p-3 border border-blue-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Receipt className="w-4 h-4 text-red-600" />
-                    <span className="text-xs font-semibold text-blue-700 uppercase">Gastos</span>
-                  </div>
-                  <p className="text-lg font-bold text-blue-900">{formatCurrency(pruebaMetrics.totalSpent)}</p>
-                </div>
-
                 {/* Monto Final */}
                 <div className="bg-white rounded-lg p-3 border border-blue-200">
                   <div className="flex items-center gap-2 mb-2">
@@ -1957,19 +1976,6 @@ export default function AdminLiquidationPage() {
                   Tasa de Entrega Total: <span className="font-semibold">{calculateTotalDeliveryRateMensajeros()}%</span>
                 </span>
               </div>
-              <Button 
-                onClick={handleViewAllExpenses} 
-                disabled={loadingAllExpenses}
-                size="sm"
-                className="bg-red-600 hover:bg-red-700 text-white"
-              >
-                {loadingAllExpenses ? (
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                ) : (
-                  <Receipt className="w-4 h-4 mr-2" />
-                )}
-                Reporte de Gastos
-              </Button>
             </div>
           </div>
         </CardHeader>
@@ -1983,7 +1989,6 @@ export default function AdminLiquidationPage() {
                 <TableHead>Total Recaudado</TableHead>
                     <TableHead>SINPE</TableHead>
                     <TableHead>Efectivo</TableHead>
-                    <TableHead>Gastos</TableHead>
                     <TableHead>Monto Final</TableHead>
                 <TableHead>Acciones</TableHead>
               </TableRow>
@@ -1991,7 +1996,7 @@ export default function AdminLiquidationPage() {
             <TableBody>
               {calculations.length === 0 ? (
                 <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8">
+                      <TableCell colSpan={8} className="text-center py-8">
                         <div className="flex flex-col items-center gap-2">
                           <Package className="w-8 h-8 text-gray-400" />
                           <p className="text-gray-500">
@@ -2090,15 +2095,6 @@ export default function AdminLiquidationPage() {
                     
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Receipt className="w-4 h-4 text-red-600" />
-                              <span className="font-medium text-red-600">
-                          {formatCurrency(calculated.totalSpent)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <div className="flex items-center gap-2">
                         <Calculator className="w-4 h-4 text-purple-600" />
                               <span className="font-medium text-purple-600">
                           {formatCurrency(calculated.finalAmount)}
@@ -2148,219 +2144,272 @@ export default function AdminLiquidationPage() {
                 </div>
           )}
           
-          {/* Stats Cards para Tiendas */}
-          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4 ${loadingRangoFechas ? 'opacity-50 pointer-events-none' : ''}`}>
-            {/* Primera fila: Tiendas con Pedidos, Pedidos sin Asignar, Pedidos Totales del Día, Estados */}
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-blue-50 to-blue-100">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <Building2 className="w-5 h-5 text-white" />
+          {/* Stats Cards para Tiendas - Reorganizado con métricas importantes destacadas */}
+          <div className={`space-y-4 ${loadingRangoFechas ? 'opacity-50 pointer-events-none' : ''}`}>
+            {/* Primera Fila: Métricas Principales (Más Importantes) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Pedidos Pendientes - PRIMERO Y DESTACADO EN ROJO */}
+              <Card className="hover:shadow-xl transition-all duration-200 border-2 border-red-500 shadow-xl bg-gradient-to-br from-red-100 via-red-200 to-red-100 ring-2 ring-red-300">
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 bg-red-600 rounded-xl flex items-center justify-center shadow-lg ring-2 ring-red-400">
+                        <Clock className="w-7 h-7 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-red-800 uppercase tracking-wide">Pedidos Pendientes</p>
+                        <p className="text-3xl font-extrabold text-red-900 mt-1">
+                          {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'PENDIENTE').length, 0)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="w-4 h-4 bg-red-500 rounded-full animate-pulse shadow-lg"></div>
                   </div>
-                    <div>
-                      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Tiendas con Pedidos</p>
-                      <p className="text-lg font-bold text-blue-900 mt-1">{tiendaCalculations.length}</p>
-                  </div>
-                  </div>
-                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                </div>
                 </CardContent>
               </Card>
 
-            {/* Pedidos sin asignar */}
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-yellow-50 to-yellow-100">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-yellow-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <Clock className="w-5 h-5 text-white" />
-                  </div>
-                    <div>
-                      <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide">Pedidos sin Asignar</p>
-                      <p className="text-lg font-bold text-yellow-900 mt-1">
-                        {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => (o.estado_pedido === 'PENDIENTE' || o.estado_pedido === 'EN_RUTA' || !o.estado_pedido) && (!o.mensajero_asignado || o.mensajero_asignado.trim() === '')).length, 0)}
-                      </p>
-                  </div>
-                  </div>
-                  <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Pedidos totales del día (asignados) */}
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-orange-50 to-orange-100">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <Package className="w-5 h-5 text-white" />
-                  </div>
+              {/* Tasa de Entrega - MÉTRICA CLAVE */}
+              <Card className="hover:shadow-xl transition-all duration-200 border-2 border-emerald-300 shadow-lg bg-gradient-to-br from-emerald-50 via-emerald-100 to-emerald-50">
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <TrendingUp className="w-6 h-6 text-white" />
+                      </div>
                       <div>
-                      <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Pedidos Totales del Día (Asignados)</p>
-                      <p className="text-lg font-bold text-orange-900 mt-1">{tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)}</p>
-                  </div>
-                  </div>
-                  <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Estados (resumen) */}
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-purple-50 to-purple-100">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <CheckCircle className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Estados</p>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-xs text-green-700">
-                            {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'ENTREGADO').length, 0)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                          <span className="text-xs text-yellow-700">
-                            {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'PENDIENTE').length, 0)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                          <span className="text-xs text-red-700">
-                            {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'DEVOLUCION').length, 0)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                          <span className="text-xs text-blue-700">
-                            {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'REAGENDADO').length, 0)}
-                          </span>
-                        </div>
+                        <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Tasa de Entrega</p>
+                        <p className="text-2xl font-bold text-emerald-900 mt-1">
+                          {calculateTotalDeliveryRateTiendas()}%
+                        </p>
                       </div>
                     </div>
+                    <div className="w-3 h-3 bg-emerald-400 rounded-full animate-pulse"></div>
                   </div>
-                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            {/* Segunda fila: Total Recibido, Total Efectivo, SINPE, Tarjeta, Otros */}
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-purple-50 to-purple-100">
-                    <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <DollarSign className="w-5 h-5 text-white" />
+              {/* Total Recaudado - MÉTRICA FINANCIERA PRINCIPAL */}
+              <Card className="hover:shadow-xl transition-all duration-200 border-2 border-purple-300 shadow-lg bg-gradient-to-br from-purple-50 via-purple-100 to-purple-50">
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <DollarSign className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Total Recibido</p>
+                        <p className="text-xs text-purple-600">(todos los medios)</p>
+                        <p className="text-xl font-bold text-purple-900 mt-1">
+                          {formatCurrency(tiendaCalculations.reduce((sum, t) => sum + t.totalCollected, 0))}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="w-3 h-3 bg-purple-400 rounded-full animate-pulse"></div>
                   </div>
-                        <div>
-                      <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Total Recibido</p>
-                      <p className="text-xs text-purple-600">(todos los medios)</p>
-                      <p className="text-lg font-bold text-purple-900 mt-1">
-                        {formatCurrency(tiendaCalculations.reduce((sum, t) => sum + t.totalCollected, 0))}
-                          </p>
+                </CardContent>
+              </Card>
+
+              {/* Pedidos Totales del Día */}
+              <Card className="hover:shadow-xl transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-orange-50 to-orange-100">
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <Package className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Pedidos Totales</p>
+                        <p className="text-2xl font-bold text-orange-900 mt-1">
+                          {tiendaCalculations.reduce((sum, t) => sum + t.totalOrders, 0)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="w-3 h-3 bg-orange-400 rounded-full animate-pulse"></div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-                  </div>
-                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
-                </div>
-              </CardContent>
-            </Card>
 
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-green-50 to-green-100">
-                    <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <Banknote className="w-5 h-5 text-white" />
-                      </div>
-                        <div>
-                      <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Total Efectivo</p>
-                      <p className="text-lg font-bold text-green-900 mt-1">
-                        {formatCurrency(tiendaCalculations.reduce((sum, t) => sum + t.cashPayments, 0))}
-                      </p>
-                      <p className="text-xs text-green-600 mt-1">
-                        {(() => {
-                          const efectivoCount = tiendaCalculations.reduce((sum, t) => {
-                            return sum + t.orders.filter(o => 
-                              o.estado_pedido === 'ENTREGADO' && 
-                              o.metodo_pago === 'EFECTIVO'
-                            ).length;
-                          }, 0);
-                          return `${efectivoCount} pedidos`;
-                        })()}
-                          </p>
-                    </div>
-                      </div>
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-cyan-50 to-cyan-100">
-                    <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <Smartphone className="w-5 h-5 text-white" />
+            {/* Segunda Fila: Métricas Operacionales */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Tiendas con Pedidos */}
+              <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-blue-50 to-blue-100">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <Building2 className="w-5 h-5 text-white" />
                       </div>
                       <div>
-                      <p className="text-xs font-semibold text-cyan-700 uppercase tracking-wide">SINPE</p>
-                      <p className="text-lg font-bold text-cyan-900 mt-1">
-                        {formatCurrency(tiendaCalculations.reduce((sum, t) => sum + t.sinpePayments, 0))}
-                      </p>
-                      <p className="text-xs text-cyan-600 mt-1">
-                        {(() => {
-                          const sinpeCount = tiendaCalculations.reduce((sum, t) => {
-                            return sum + t.orders.filter(o => 
-                              o.estado_pedido === 'ENTREGADO' && 
-                              o.metodo_pago === 'SINPE'
-                            ).length;
-                          }, 0);
-                          return `${sinpeCount} pedidos`;
-                        })()}
-                          </p>
+                        <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Tiendas con Pedidos</p>
+                        <p className="text-lg font-bold text-blue-900 mt-1">{tiendaCalculations.length}</p>
                       </div>
-                      </div>
-                  <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
                     </div>
-                    </CardContent>
-                  </Card>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                  </div>
+                </CardContent>
+              </Card>
 
-            <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-pink-50 to-pink-100">
-                    <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-pink-500 rounded-xl flex items-center justify-center shadow-lg">
-                      <CreditCard className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                      <p className="text-xs font-semibold text-pink-700 uppercase tracking-wide">Tarjeta</p>
-                      <p className="text-lg font-bold text-pink-900 mt-1">
-                        {formatCurrency(tiendaCalculations.reduce((sum, t) => sum + t.tarjetaPayments, 0))}
-                      </p>
-                      <p className="text-xs text-pink-600 mt-1">
-                        {(() => {
-                          const tarjetaCount = tiendaCalculations.reduce((sum, t) => {
-                            return sum + t.orders.filter(o => 
-                              o.estado_pedido === 'ENTREGADO' && 
-                              o.metodo_pago === 'TARJETA'
-                            ).length;
-                          }, 0);
-                          return `${tarjetaCount} pedidos`;
-                        })()}
-                          </p>
-                        </div>
-                        </div>
-                  <div className="w-2 h-2 bg-pink-400 rounded-full animate-pulse"></div>
+              {/* Pedidos sin asignar */}
+              <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-yellow-50 to-yellow-100">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-yellow-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <Clock className="w-5 h-5 text-white" />
                       </div>
-                    </CardContent>
-                  </Card>
+                      <div>
+                        <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide">Pedidos sin Asignar</p>
+                        <p className="text-lg font-bold text-yellow-900 mt-1">
+                          {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => (o.estado_pedido === 'PENDIENTE' || o.estado_pedido === 'EN_RUTA' || !o.estado_pedido) && (!o.mensajero_asignado || o.mensajero_asignado.trim() === '')).length, 0)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                  </div>
+                </CardContent>
+              </Card>
 
+              {/* Estados (resumen) */}
+              <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-purple-50 to-purple-100">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <CheckCircle className="w-5 h-5 text-white" />
                       </div>
+                      <div>
+                        <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Estados</p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span className="text-xs text-green-700">
+                              {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'ENTREGADO').length, 0)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                            <span className="text-xs text-yellow-700">
+                              {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'PENDIENTE').length, 0)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                            <span className="text-xs text-red-700">
+                              {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'DEVOLUCION').length, 0)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            <span className="text-xs text-blue-700">
+                              {tiendaCalculations.reduce((sum, t) => sum + t.orders.filter(o => o.estado_pedido === 'REAGENDADO').length, 0)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Tercera Fila: Desglose Financiero */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Total Efectivo */}
+              <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-green-50 to-green-100">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <Banknote className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Total Efectivo</p>
+                        <p className="text-lg font-bold text-green-900 mt-1">
+                          {formatCurrency(tiendaCalculations.reduce((sum, t) => sum + t.cashPayments, 0))}
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          {(() => {
+                            const efectivoCount = tiendaCalculations.reduce((sum, t) => {
+                              return sum + t.orders.filter(o => 
+                                o.estado_pedido === 'ENTREGADO' && 
+                                o.metodo_pago === 'EFECTIVO'
+                              ).length;
+                            }, 0);
+                            return `${efectivoCount} pedidos`;
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* SINPE */}
+              <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-cyan-50 to-cyan-100">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <Smartphone className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-cyan-700 uppercase tracking-wide">SINPE</p>
+                        <p className="text-lg font-bold text-cyan-900 mt-1">
+                          {formatCurrency(tiendaCalculations.reduce((sum, t) => sum + t.sinpePayments, 0))}
+                        </p>
+                        <p className="text-xs text-cyan-600 mt-1">
+                          {(() => {
+                            const sinpeCount = tiendaCalculations.reduce((sum, t) => {
+                              return sum + t.orders.filter(o => 
+                                o.estado_pedido === 'ENTREGADO' && 
+                                o.metodo_pago === 'SINPE'
+                              ).length;
+                            }, 0);
+                            return `${sinpeCount} pedidos`;
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Tarjeta */}
+              <Card className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-br from-pink-50 to-pink-100">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <CreditCard className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-pink-700 uppercase tracking-wide">Tarjeta</p>
+                        <p className="text-lg font-bold text-pink-900 mt-1">
+                          {formatCurrency(tiendaCalculations.reduce((sum, t) => sum + t.tarjetaPayments, 0))}
+                        </p>
+                        <p className="text-xs text-pink-600 mt-1">
+                          {(() => {
+                            const tarjetaCount = tiendaCalculations.reduce((sum, t) => {
+                              return sum + t.orders.filter(o => 
+                                o.estado_pedido === 'ENTREGADO' && 
+                                o.metodo_pago === 'TARJETA'
+                              ).length;
+                            }, 0);
+                            return `${tarjetaCount} pedidos`;
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="w-2 h-2 bg-pink-400 rounded-full animate-pulse"></div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
                       
           {/* Tabla de Liquidaciones por Tienda */}
           <Card className={loadingRangoFechas ? 'opacity-50 pointer-events-none' : ''}>
@@ -2374,12 +2423,6 @@ export default function AdminLiquidationPage() {
                             : selectedDate
                         }
                       </CardTitle>
-                      <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded-lg border border-green-200">
-                        <CheckCircle className="w-4 h-4 text-green-600" />
-                        <span className="text-sm font-medium text-green-700">
-                          Tasa de Entrega Total: <span className="font-semibold">{calculateTotalDeliveryRateTiendas()}%</span>
-                        </span>
-                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -2399,7 +2442,7 @@ export default function AdminLiquidationPage() {
                             <TableBody>
                   {tiendaCalculations.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8">
+                      <TableCell colSpan={8} className="text-center py-8">
                         <div className="flex flex-col items-center gap-2">
                           <Building2 className="w-8 h-8 text-gray-400" />
                           <p className="text-gray-500">
@@ -2437,15 +2480,46 @@ export default function AdminLiquidationPage() {
                                 }
                               });
                               
-                              return Object.entries(statusCounts)
-                                .filter(([_, data]) => data.count > 0)
-                                .map(([status, data]) => (
-                                  <div key={status} className="flex items-center gap-1">
-                                    <div className={`w-3 h-3 rounded-full ${data.color}`}></div>
-                                    <span className="text-xs font-medium">{data.count}</span>
-                                    <span className="text-xs text-muted-foreground">{data.label}</span>
-                        </div>
-                                ));
+                              // Contar pedidos pendientes y sin asignar
+                              const pendientesCount = tienda.orders.filter(o => o.estado_pedido === 'PENDIENTE').length;
+                              const sinAsignarCount = tienda.orders.filter(o => 
+                                (o.estado_pedido === 'PENDIENTE' || o.estado_pedido === 'EN_RUTA' || !o.estado_pedido) && 
+                                (!o.mensajero_asignado || o.mensajero_asignado.trim() === '')
+                              ).length;
+                              
+                              return (
+                                <>
+                                  {/* Indicadores destacados para pendientes y sin asignar */}
+                                  {pendientesCount > 0 && (
+                                    <div className="flex items-center gap-1 px-2 py-1 bg-red-100 dark:bg-red-950/30 rounded-lg border border-red-300 dark:border-red-800">
+                                      <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse"></div>
+                                      <span className="text-xs font-bold text-red-700 dark:text-red-400">Pendientes: {pendientesCount}</span>
+                                    </div>
+                                  )}
+                                  {sinAsignarCount > 0 && (
+                                    <div className="flex items-center gap-1 px-2 py-1 bg-orange-100 dark:bg-orange-950/30 rounded-lg border border-orange-300 dark:border-orange-800">
+                                      <div className="w-3 h-3 bg-orange-600 rounded-full animate-pulse"></div>
+                                      <span className="text-xs font-bold text-orange-700 dark:text-orange-400">Sin Asignar: {sinAsignarCount}</span>
+                                    </div>
+                                  )}
+                                  {/* Estados normales - Excluir PENDIENTE si ya se mostró en el badge destacado */}
+                                  {Object.entries(statusCounts)
+                                    .filter(([status, data]) => {
+                                      // No mostrar PENDIENTE si ya se mostró en el badge destacado
+                                      if (status === 'PENDIENTE' && pendientesCount > 0) {
+                                        return false;
+                                      }
+                                      return data.count > 0;
+                                    })
+                                    .map(([status, data]) => (
+                                      <div key={status} className="flex items-center gap-1">
+                                        <div className={`w-3 h-3 rounded-full ${data.color}`}></div>
+                                        <span className="text-xs font-medium">{data.count}</span>
+                                        <span className="text-xs text-muted-foreground">{data.label}</span>
+                                      </div>
+                                    ))}
+                                </>
+                              );
                             })()}
                       </div>
                                     </TableCell>
@@ -2667,27 +2741,40 @@ export default function AdminLiquidationPage() {
                         </div>
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-2 border border-gray-200">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1 min-w-0">
-                      <Minus className="w-3 h-3 text-gray-600 flex-shrink-0" />
-                      <span className="font-medium text-gray-800 text-xs">Gastos</span>
                           </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleViewExpenses(selectedViewAndLiquidate)}
-                      className="h-7 px-2 text-xs text-red-600 border-red-200 hover:bg-red-50 flex-shrink-0 font-medium"
-                    >
-                      <Receipt className="w-3 h-3 mr-1" />
-                      Ver Gastos
-                    </Button>
-                        </div>
-                  <p className="text-sm font-bold text-gray-600 truncate">
-                            {formatCurrency(selectedViewAndLiquidate.totalSpent)}
-                  </p>
-                        </div>
-                          </div>
+
+              {/* Card de Gastos - Para mensajeros y para ALL STARS en tiendas */}
+              {(() => {
+                const esAllStars = selectedViewAndLiquidate.messengerName?.toUpperCase().includes('ALL STARS') || 
+                                   selectedViewAndLiquidate.messengerName?.toUpperCase().includes('MAGIC STARS');
+                const mostrarGastos = (activeTab === 'mensajeros') || (activeTab === 'tiendas' && esAllStars);
+                
+                return mostrarGastos && selectedViewAndLiquidate.totalSpent > 0 ? (
+                  <div className="bg-red-50 rounded-lg p-3 border border-red-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Receipt className="w-4 h-4 text-red-600" />
+                        <span className="text-xs font-semibold text-red-700 uppercase">Gastos</span>
+                        {esAllStars && (
+                          <span className="text-xs text-red-600 italic">(Todos los mensajeros)</span>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleViewExpenses(selectedViewAndLiquidate)}
+                        className="h-7 px-2 text-xs text-red-600 border-red-200 hover:bg-red-100 flex-shrink-0 font-medium"
+                      >
+                        <Receipt className="w-3 h-3 mr-1" />
+                        Ver Gastos
+                      </Button>
+                    </div>
+                    <p className="text-sm font-bold text-red-600">
+                      {formatCurrency(selectedViewAndLiquidate.totalSpent)}
+                    </p>
+                  </div>
+                ) : null;
+              })()}
 
               {/* Filtros Compactos */}
               <div className="bg-gray-50 rounded-lg p-4">
@@ -4042,7 +4129,6 @@ export default function AdminLiquidationPage() {
                       <TableHead>Mensajero</TableHead>
                       <TableHead>Total Recaudado</TableHead>
                       <TableHead>Plata Inicial</TableHead>
-                      <TableHead>Gastos</TableHead>
                       <TableHead>Monto Final</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
@@ -4063,9 +4149,6 @@ export default function AdminLiquidationPage() {
                         </TableCell>
                         <TableCell className="text-gray-600">
                           {formatCurrency(parseFloat(liquidation.plata_inicial || '0'))}
-                        </TableCell>
-                        <TableCell className="text-red-600">
-                          {formatCurrency(parseFloat(liquidation.gastos || '0'))}
                         </TableCell>
                         <TableCell className="font-bold text-purple-600">
                           {formatCurrency(parseFloat(liquidation.monto_final || '0'))}

@@ -54,12 +54,14 @@ import {
   MoreHorizontal,
   Copy,
   Clipboard,
+  ClipboardPaste,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
 import { StatsCard } from '@/components/dashboard/stats-card';
 import { ProductosSelector } from '@/components/dashboard/productos-selector';
 import { ProductoInventario, obtenerTodosProductosALLSTARS } from '@/lib/supabase-inventario';
+import { UnmappedProductsManager } from '@/components/dashboard/unmapped-products-manager';
 import { getProvincias, getCantones, getDistritos, getTipoEnvio } from '@/lib/zonas';
 import { createPedidoPreconfirmacion, updatePedidoPreconfirmacion, getPedidosDelDiaByTiendaPreconfirmacion, getAllPedidosByTiendaPreconfirmacion, getPedidosCountByTiendaPreconfirmacion, getTotalPedidosPreconfirmacionCount } from '@/lib/supabase-pedidos';
 import { API_URLS } from '@/lib/config';
@@ -130,6 +132,15 @@ export default function AsesorDashboard() {
   const [orderToEdit, setOrderToEdit] = useState<Order | null>(null);
   const [orderToView, setOrderToView] = useState<Order | null>(null);
   const [editData, setEditData] = useState<{ confirmado: 'true' | 'false'; nota_asesor: string; numero_sinpe: string } | null>(null);
+  
+  // Modal de Maps (solo sección Adicional)
+  const [showMapsModal, setShowMapsModal] = useState(false);
+  const [orderForMaps, setOrderForMaps] = useState<Order | null>(null);
+  const [mapsFormData, setMapsFormData] = useState<{ link_ubicacion: string; nota_asesor: string }>({
+    link_ubicacion: '',
+    nota_asesor: '',
+  });
+  const [isSavingMaps, setIsSavingMaps] = useState(false);
   // Crear pedido
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -166,7 +177,9 @@ export default function AsesorDashboard() {
   } as any);
 
   // Obtener mensajeros del mock-messengers
-  const availableMessengers = mockMessengers.filter(user => user.role === 'mensajero');
+  const availableMessengers = mockMessengers.filter(user => 
+    user.role === 'mensajero' || user.role === 'mensajero-lider'
+  );
 
   // Asesores de Beauty Fan y All Stars
   const asesores = [
@@ -262,8 +275,8 @@ export default function AsesorDashboard() {
 
   const loadData = async () => {
     console.log('🔍 Cargando datos para asesor:', user);
-    if (!user?.company?.id) {
-      console.log('❌ No hay company.id en el usuario');
+    if (!user?.companyId) {
+      console.log('❌ No hay companyId en el usuario');
       return;
     }
     
@@ -271,7 +284,7 @@ export default function AsesorDashboard() {
       setLoading(true);
       
       // Determinar la tienda del asesor
-      const asesorTienda = getAsesorTienda(user.email);
+      const asesorTienda = (user.companyId || getAsesorTienda(user.email)).toUpperCase();
       setAsesorTienda(asesorTienda);
       console.log('🏪 Tienda del asesor:', asesorTienda);
       
@@ -368,7 +381,7 @@ export default function AsesorDashboard() {
       console.log('📋 Primeros pedidos:', ordersRes.slice(0, 3));
       
       // Obtener estadísticas mock
-      const statsRes = await mockApi.getStats({ userCompanyId: user.company.id });
+      const statsRes = await mockApi.getStats({ userCompanyId: user.companyId });
       
       console.log('✅ Datos obtenidos:', { orders: ordersRes.length, stats: statsRes });
       
@@ -1029,6 +1042,80 @@ export default function AsesorDashboard() {
     }
   };
 
+  // Función para guardar datos del modal de Maps
+  const saveMapsModal = async () => {
+    if (!orderForMaps) return;
+    
+    // Validar URL si está presente
+    if (mapsFormData.link_ubicacion && !/^https?:\/\/.+/.test(mapsFormData.link_ubicacion)) {
+      toast({
+        title: '❌ URL inválida',
+        description: 'La URL debe comenzar con http:// o https://',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    setIsSavingMaps(true);
+    try {
+      const fechaCreacion = (orderForMaps as any).fecha_creacion || orderForMaps.createdAt;
+      const orderData = orderForMaps as any;
+      
+      const updates: any = {
+        link_ubicacion: mapsFormData.link_ubicacion || null,
+        nota_asesor: mapsFormData.nota_asesor || null,
+      };
+      
+      const ok = await updatePedidoPreconfirmacion(orderForMaps.id, updates);
+      
+      if (ok) {
+        // Enviar al webhook con todos los datos del pedido
+        await enviarAlWebhook({
+          id_pedido: orderForMaps.id,
+          fecha_creacion: fechaCreacion,
+          cliente_nombre: orderForMaps.customerName || orderData.cliente_nombre || '',
+          cliente_telefono: orderForMaps.customerPhone || orderData.cliente_telefono || '',
+          direccion: orderForMaps.customerAddress || orderData.direccion || '',
+          provincia: orderForMaps.customerProvince || orderData.provincia || '',
+          canton: orderForMaps.customerCanton || orderData.canton || '',
+          distrito: orderForMaps.customerDistrict || orderData.distrito || '',
+          valor_total: orderForMaps.totalAmount || orderData.valor_total || 0,
+          productos: orderData.productos || '',
+          link_ubicacion: mapsFormData.link_ubicacion,
+          nota_asesor: mapsFormData.nota_asesor,
+          confirmado: orderData.confirmado === true,
+          usuario: user?.name || user?.email || null,
+        }, true);
+        
+        toast({
+          title: '✅ Información actualizada exitosamente',
+          description: `El link y nota del pedido ${orderForMaps.id} han sido actualizados`,
+          variant: 'default',
+        });
+        
+        setShowMapsModal(false);
+        setOrderForMaps(null);
+        setMapsFormData({ link_ubicacion: '', nota_asesor: '' });
+        await loadData();
+      } else {
+        toast({
+          title: '❌ Error al actualizar',
+          description: 'Ocurrió un error al actualizar la información',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error al actualizar información de Maps:', error);
+      toast({
+        title: '❌ Error al actualizar',
+        description: 'Ocurrió un error al actualizar la información',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingMaps(false);
+    }
+  };
+
   // Validación del formulario de edición
   const [isEditFormValid, setIsEditFormValid] = useState(false);
   const [isCreateFormValid, setIsCreateFormValid] = useState(false);
@@ -1290,6 +1377,31 @@ export default function AsesorDashboard() {
           </div>
         );
       })()}
+
+      {/* Gestor de Productos No Encontrados */}
+      {productosDisponibles.length > 0 && (
+        <UnmappedProductsManager
+          orders={filteredOrders}
+          inventory={productosDisponibles}
+          defaultStore={asesorTienda}
+          onMappingSaved={() => {
+            toast({
+              title: '✅ Mapeo guardado',
+              description: 'El producto ha sido mapeado correctamente y se aplicará en futuros pedidos.',
+              variant: 'default',
+            });
+          }}
+          onInventoryUpdate={(newProduct) => {
+            // Agregar el nuevo producto al inventario local
+            setProductosDisponibles(prev => [...prev, newProduct]);
+            toast({
+              title: '✅ Producto creado',
+              description: `El producto "${newProduct.producto}" ha sido agregado al inventario.`,
+              variant: 'default',
+            });
+          }}
+        />
+      )}
 
       {/* Filtros Mejorados */}
       <Card className="bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200">
@@ -1848,7 +1960,15 @@ export default function AsesorDashboard() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => openEditModalFor(order)}
+                                onClick={() => {
+                                  const orderData = order as any;
+                                  setOrderForMaps(order);
+                                  setMapsFormData({
+                                    link_ubicacion: orderData.link_ubicacion || order.customerLocationLink || '',
+                                    nota_asesor: orderData.nota_asesor || order.asesorNotes || '',
+                                  });
+                                  setShowMapsModal(true);
+                                }}
                                 className="h-7 px-3 text-xs bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700 whitespace-nowrap"
                                 title="Añadir link de Google Maps"
                                 aria-label="Añadir link de Google Maps"
@@ -2284,6 +2404,125 @@ export default function AsesorDashboard() {
               </>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Maps (Solo sección Adicional) */}
+      <Dialog 
+        open={showMapsModal} 
+        onOpenChange={(open) => {
+          setShowMapsModal(open);
+          if (!open) {
+            setOrderForMaps(null);
+            setMapsFormData({ link_ubicacion: '', nota_asesor: '' });
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto p-4">
+          <DialogHeader className="pb-1.5 border-b mb-2">
+            <DialogTitle className="flex items-center gap-1.5 text-sm">
+              <div className="p-1 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded">
+                <MapPin className="w-3 h-3 text-white" />
+              </div>
+              <span>Información Adicional - {orderForMaps?.id}</span>
+            </DialogTitle>
+            <DialogDescription className="text-[10px] pt-0.5 text-gray-500">
+              Agregue o edite el link de Google Maps y la nota del asesor
+            </DialogDescription>
+          </DialogHeader>
+
+          {orderForMaps && (
+            <div className="space-y-4">
+              {/* Card Adicional - Replicando el estilo del formulario */}
+              <Card className="bg-gradient-to-br from-indigo-50 to-indigo-100 border-indigo-200 p-2">
+                <CardHeader className="pb-1 px-0 pt-0">
+                  <CardTitle className="text-[11px] font-medium flex items-center gap-1">
+                    <FileText className="w-3 h-3 text-indigo-600" />
+                    Adicional
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1.5 px-0 pb-0">
+                  <div className="space-y-0.5">
+                    <Label className="text-[10px] font-medium text-gray-700">Link</Label>
+                    <div className="relative">
+                      <Input 
+                        type="url"
+                        value={mapsFormData.link_ubicacion} 
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === '' || /^https?:\/\/.+/.test(value)) {
+                            setMapsFormData(prev => ({ ...prev, link_ubicacion: value }));
+                          }
+                        }} 
+                        placeholder="https://maps.google.com/..." 
+                        className="bg-white h-7 text-[11px] py-1 px-2 pr-8" 
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const text = await navigator.clipboard.readText();
+                            if (text) {
+                              setMapsFormData(prev => ({ ...prev, link_ubicacion: text }));
+                            }
+                          } catch (err) {
+                            console.error('Error al leer portapapeles:', err);
+                          }
+                        }}
+                        className="absolute right-1 top-0.5 h-6 w-6 p-0 hover:bg-indigo-100 text-indigo-600"
+                        title="Pegar desde portapapeles"
+                      >
+                        <ClipboardPaste className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                    {mapsFormData.link_ubicacion && !/^https?:\/\/.+/.test(mapsFormData.link_ubicacion) && (
+                      <p className="text-[9px] text-red-500 mt-0.5">Ingrese una URL válida (debe comenzar con http:// o https://)</p>
+                    )}
+                  </div>
+                  <div className="space-y-0.5">
+                    <Label className="text-[10px] font-medium text-gray-700">Nota asesor</Label>
+                    <Textarea 
+                      value={mapsFormData.nota_asesor} 
+                      onChange={(e) => setMapsFormData(prev => ({ ...prev, nota_asesor: e.target.value }))} 
+                      rows={2} 
+                      className="bg-white resize-none text-[11px] py-1 px-2 min-h-[45px]" 
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2 border-t mt-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowMapsModal(false);
+                setOrderForMaps(null);
+                setMapsFormData({ link_ubicacion: '', nota_asesor: '' });
+              }}
+              className="h-7 px-3 text-[11px]"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={saveMapsModal}
+              disabled={isSavingMaps}
+              className={`px-4 shadow-lg h-7 text-[11px] ${
+                !isSavingMaps
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              {isSavingMaps ? (
+                <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Guardando...</>
+              ) : (
+                <><Save className="w-3 h-3 mr-1.5" />Guardar</>
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

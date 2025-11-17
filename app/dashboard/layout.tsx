@@ -35,17 +35,17 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen bg-gray-50/30 overflow-hidden">
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50/50 overflow-hidden">
       <Sidebar onMobileMenuChange={setIsMobileMenuOpen} />
       <main className={cn(
         "flex-1 overflow-auto transition-all duration-300 ease-in-out",
-        // El contenido principal se ajusta automáticamente
-        // En desktop: flex-1 (resto del espacio después del sidebar)
-        // En móvil: flex-1 (todo el ancho disponible)
-        "min-w-0" // Evita que el contenido se desborde
+        "min-w-0", // Evita que el contenido se desborde
+        "scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent" // Scrollbar personalizado
       )}>
-        <div className="p-4 sm:p-6 lg:p-8 max-w-full">
-          {children}
+        <div className="p-4 sm:p-5 md:p-6 lg:p-7 xl:p-8 max-w-full mx-auto w-full">
+          <div className="max-w-[1920px] mx-auto">
+            {children}
+          </div>
         </div>
       </main>
     </div>

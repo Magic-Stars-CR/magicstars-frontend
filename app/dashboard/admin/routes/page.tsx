@@ -615,7 +615,9 @@ export default function AdminRoutesPage() {
   };
 
   const getMessengerName = (messengerId: string) => {
-    const messenger = users.find(u => u.id === messengerId && u.role === 'mensajero');
+    const messenger = users.find(
+      u => u.id === messengerId && (u.role === 'mensajero' || u.role === 'mensajero-lider')
+    );
     return messenger?.name || 'Sin asignar';
   };
 

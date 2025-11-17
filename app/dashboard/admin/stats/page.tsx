@@ -72,7 +72,7 @@ export default function AdminStatsPage() {
 
   const getTopMessengers = () => {
     const messengerStats = users
-      .filter(u => u.role === 'mensajero')
+      .filter(u => u.role === 'mensajero' || u.role === 'mensajero-lider')
       .map(messenger => {
         const deliveredOrders = orders.filter(
           order => order.assignedMessenger?.id === messenger.id && order.status === 'entregado'
@@ -239,7 +239,7 @@ export default function AdminStatsPage() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Mensajeros Activos</p>
                 <p className="text-2xl font-bold">
-                  {users.filter(u => u.role === 'mensajero' && u.isActive).length}
+                  {users.filter(u => (u.role === 'mensajero' || u.role === 'mensajero-lider') && u.isActive).length}
                 </p>
                 <div className="flex items-center gap-1 text-xs">
                   <TrendingUp className="w-3 h-3 text-green-600" />
