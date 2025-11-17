@@ -1541,6 +1541,12 @@ export const getTiendasUnicas = async (): Promise<string[]> => {
       .not('nombre', 'eq', '')
       .order('nombre', { ascending: true });
 
+    // Si no hay error y hay datos, usarlos
+    // También verificar si el error es porque la tabla no existe (código 42P01 en PostgreSQL)
+    const tablaNoExiste = tiendasError?.code === '42P01' || 
+                          tiendasError?.message?.toLowerCase().includes('does not exist') ||
+                          tiendasError?.message?.toLowerCase().includes('no existe');
+
     if (!tiendasError && tiendasData && tiendasData.length > 0) {
       // Si hay datos en la tabla tiendas, usarlos
       const tiendasUnicas = tiendasData
@@ -1552,8 +1558,14 @@ export const getTiendasUnicas = async (): Promise<string[]> => {
       return tiendasUnicas;
     }
 
-    // Si no hay tabla tiendas o está vacía, intentar obtener de pedidos como fallback
-    console.log('⚠️ No se encontró tabla tiendas o está vacía, usando pedidos como fallback...');
+    // Si la tabla no existe o está vacía, usar pedidos como fallback
+    if (tablaNoExiste) {
+      console.log('ℹ️ La tabla tiendas no existe, usando pedidos como fuente de datos...');
+    } else if (tiendasError) {
+      console.log('⚠️ Error al acceder a tabla tiendas, usando pedidos como fallback:', tiendasError.message);
+    } else {
+      console.log('⚠️ La tabla tiendas está vacía, usando pedidos como fallback...');
+    }
     const { data: pedidosData, error: pedidosError } = await supabasePedidos
       .from('pedidos')
       .select('tienda')
