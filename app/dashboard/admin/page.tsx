@@ -10,6 +10,7 @@ import { API_URLS, apiRequest } from '@/lib/config';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ProgressLoader, LoaderStep } from '@/components/ui/progress-loader';
 import {
   AlertDialog,
@@ -435,6 +436,9 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<User[]>([]);
   const [messengerMetricsMap, setMessengerMetricsMap] = useState<Record<string, DashboardEntityMetrics>>({});
   const [advisorMetricsMap, setAdvisorMetricsMap] = useState<Record<string, DashboardEntityMetrics>>({});
+  const [pedidosDelDiaRaw, setPedidosDelDiaRaw] = useState<PedidoTest[]>([]);
+  const [showMessengersModal, setShowMessengersModal] = useState(false);
+  const [showTiendasModal, setShowTiendasModal] = useState(false);
   const [loaderSteps, setLoaderSteps] = useState<LoaderStep[]>(() => INITIAL_LOADER_STEPS.map(step => ({ ...step })));
   const [loaderCurrentStep, setLoaderCurrentStep] = useState<string | undefined>(undefined);
   const [loaderProgress, setLoaderProgress] = useState(0);
@@ -496,7 +500,6 @@ export default function AdminDashboard() {
 
   const getLatestSyncTimestamp = useCallback(async (): Promise<number | null> => {
     try {
-      console.log('[SyncButton] Consultando MSControl...');
       const { data, error } = await supabasePedidos
         .from('MSControl')
         .select('ultima_activacion')
@@ -510,12 +513,10 @@ export default function AdminDashboard() {
       }
 
       if (!data) {
-        console.warn('[SyncButton] No se encontró registro en MSControl');
         return null;
       }
 
       const parsedTime = parseActivationTimeToUTC(data.ultima_activacion as string | null);
-      console.log('[SyncButton] Data MSControl:', data, 'Parsed UTC:', parsedTime, 'Display CR:', formatLastSyncForDisplay(parsedTime));
       return parsedTime;
     } catch (error) {
       console.error('Error inesperado al consultar MSControl:', error);
@@ -571,7 +572,6 @@ useEffect(() => {
     const { utcTimestamp } = getCostaRicaNowInfo();
     const diff = utcTimestamp - lastSyncTime;
     const allowed = diff > fiveMinutes;
-    console.log('[SyncButton] canSync?', allowed, 'diff(ms):', diff, 'lastSync:', formatLastSyncForDisplay(lastSyncTime));
     return allowed;
   };
 
@@ -585,7 +585,6 @@ useEffect(() => {
     const minutes = Math.floor(timeLeft / 60000);
     const seconds = Math.floor((timeLeft % 60000) / 1000);
     const formatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    console.log('[SyncButton] Tiempo restante para habilitar:', formatted, 'ms restantes:', timeLeft);
     return formatted;
   };
 
@@ -594,7 +593,6 @@ useEffect(() => {
       setSyncing(true);
       setSyncMessage(null);
       
-      console.log('Iniciando sincronización de pedidos y rutas...');
       
       // Sincronizar pedidos y rutas
       const syncPedidosResponse = await apiRequest(API_URLS.SYNC_PEDIDOS, {
@@ -606,13 +604,11 @@ useEffect(() => {
       }
 
       const syncPedidosResult = await syncPedidosResponse.json();
-      console.log('Sincronización de pedidos exitosa:', syncPedidosResult);
       
       setSyncMessage('Sincronización exitosa. Los datos se han actualizado.');
       const { utcTimestamp } = getCostaRicaNowInfo();
       const now = utcTimestamp;
       const previousSupabaseTimestamp = lastSyncTime;
-      console.log('[SyncButton] Registrando sincronización local (preventivo) a las', formatLastSyncForDisplay(now));
       setLastSyncTime(now);
 
       const waitForSupabaseUpdate = async () => {
@@ -625,12 +621,10 @@ useEffect(() => {
           await new Promise(resolve => setTimeout(resolve, pollInterval));
           latest = await getLatestSyncTimestamp();
           if (latest && (!previousSupabaseTimestamp || latest > previousSupabaseTimestamp + 1000)) {
-            console.log('[SyncButton] Nueva hora detectada en Supabase:', formatLastSyncForDisplay(latest));
             return latest;
           }
         }
 
-        console.warn('[SyncButton] No se detectó actualización en Supabase dentro del tiempo esperado');
         return latest;
       };
 
@@ -670,12 +664,20 @@ useEffect(() => {
       resetLoaderSteps();
       setIsLoaderVisible(true);
 
-      console.log('Cargando datos del día de hoy para admin...');
+      console.log('🔍 [DEBUG] Cargando datos del día de hoy para admin...');
       setLoaderStepStatus('fetch-today', 'loading');
       const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
       const today = getCostaRicaDateISO();
+      console.log('📅 [DEBUG] Fecha de hoy (Costa Rica):', today);
       const pedidosDelDia = await getPedidosDelDia(today);
-      console.log('Pedidos del día cargados:', pedidosDelDia.length);
+      console.log('✅ [DEBUG] Pedidos del día cargados:', pedidosDelDia.length);
+      console.log('📋 [DEBUG] Primeros 3 pedidos:', pedidosDelDia.slice(0, 3).map(p => ({
+        id: p.id_pedido,
+        cliente: p.cliente_nombre,
+        fecha: p.fecha_creacion,
+        estado: p.estado_pedido
+      })));
+      setPedidosDelDiaRaw(pedidosDelDia);
       setLoaderStepStatus('fetch-today', 'completed');
 
       const fetchAllPedidosWithProgress = async () => {
@@ -722,17 +724,14 @@ useEffect(() => {
       };
 
       const pedidosData = await fetchAllPedidosWithProgress();
-      console.log('Total pedidos cargados:', pedidosData.length);
+      console.log('📊 [DEBUG] Total pedidos históricos cargados:', pedidosData.length);
 
       setLoaderStepStatus('transform-orders', 'loading');
       const pedidosParaMostrar = pedidosDelDia.length > 0 ? pedidosDelDia : pedidosData;
       const hayPedidosHoy = pedidosDelDia.length > 0;
       setIsShowingTodayOrders(hayPedidosHoy);
-      console.log(
-        'Pedidos para mostrar:',
-        pedidosParaMostrar.length,
-        hayPedidosHoy ? '(del día de hoy)' : '(más recientes)',
-      );
+      console.log('📊 [DEBUG] Pedidos para mostrar:', pedidosParaMostrar.length, hayPedidosHoy ? '(del día de hoy)' : '(más recientes)');
+      console.log('📊 [DEBUG] Hay pedidos hoy?', hayPedidosHoy, '| Cantidad:', pedidosDelDia.length);
 
       const orders: Order[] = pedidosParaMostrar.map((pedido: PedidoTest) => {
         const valorTotal =
@@ -800,12 +799,15 @@ useEffect(() => {
       setPaginatedOrders(orders.slice(0, ORDERS_PER_PAGE));
 
       setLoaderStepStatus('compute-stats', 'loading');
-      const totalOrders = pedidosData.length;
-      const deliveredOrders = pedidosData.filter(p => p.mensajero_concretado).length;
-      const pendingOrders = pedidosData.filter(p => !p.mensajero_asignado).length;
-      const returnedOrders = pedidosData.filter(p => p.estado_pedido?.toLowerCase() === 'devolucion').length;
-      const rescheduledOrders = pedidosData.filter(p => p.estado_pedido?.toLowerCase() === 'reagendado').length;
-      const totalCash = pedidosData.reduce(
+      // Usar solo pedidos del día actual para todas las estadísticas
+      const pedidosParaEstadisticas = pedidosDelDia.length > 0 ? pedidosDelDia : [];
+      console.log('📊 [DEBUG] Pedidos para estadísticas:', pedidosParaEstadisticas.length);
+      const totalOrders = pedidosParaEstadisticas.length;
+      const deliveredOrders = pedidosParaEstadisticas.filter(p => p.mensajero_concretado || p.estado_pedido?.toLowerCase() === 'entregado').length;
+      const pendingOrders = pedidosParaEstadisticas.filter(p => !p.mensajero_asignado && !p.mensajero_concretado && p.estado_pedido?.toLowerCase() !== 'entregado').length;
+      const returnedOrders = pedidosParaEstadisticas.filter(p => p.estado_pedido?.toLowerCase() === 'devolucion').length;
+      const rescheduledOrders = pedidosParaEstadisticas.filter(p => p.estado_pedido?.toLowerCase() === 'reagendado').length;
+      const totalCash = pedidosParaEstadisticas.reduce(
         (sum, p) =>
           sum +
           (typeof p.valor_total === 'number'
@@ -832,10 +834,15 @@ useEffect(() => {
       };
 
       setStats(realStats);
+      console.log('📊 [DEBUG] Estadísticas calculadas:', realStats);
       setLoaderStepStatus('compute-stats', 'completed');
 
       setLoaderStepStatus('finalize', 'loading');
-      const derivedUsers = deriveUsersAndMetricsFromPedidos(pedidosData);
+      // Usar solo pedidos del día para derivar usuarios y métricas
+      console.log('👥 [DEBUG] Derivando usuarios y métricas de', pedidosParaEstadisticas.length, 'pedidos');
+      const derivedUsers = deriveUsersAndMetricsFromPedidos(pedidosParaEstadisticas);
+      console.log('👥 [DEBUG] Mensajeros derivados:', derivedUsers.messengers.length);
+      console.log('👥 [DEBUG] Asesores derivados:', derivedUsers.advisors.length);
       const combinedUsers = [
         ...derivedUsers.messengers.map(entry => entry.user),
         ...derivedUsers.advisors.map(entry => entry.user),
@@ -878,74 +885,235 @@ useEffect(() => {
 
   const messengers = users.filter(u => u.role === 'mensajero' || u.role === 'mensajero-lider');
   const advisors = users.filter(u => u.role === 'asesor');
+
+  // Función para obtener resumen diario por mensajero
+  const getMessengerDailySummary = () => {
+    const messengerSummary: Record<string, {
+      messenger: User;
+      totalAsignados: number;
+      totalEntregados: number;
+      totalDevueltos: number;
+      entregas: Array<{
+        id: string;
+        cliente: string;
+        hora: string;
+        estado: string;
+        valor: number;
+      }>;
+    }> = {};
+
+    pedidosDelDiaRaw.forEach(pedido => {
+      const mensajeroNombre = pedido.mensajero_asignado || pedido.mensajero_concretado;
+      if (!mensajeroNombre) return;
+
+      // Buscar mensajero existente o crear uno dinámico
+      let messenger = messengers.find(m => m.name === mensajeroNombre);
+      if (!messenger) {
+        // Crear mensajero dinámico si no existe
+        const slugSegment = mensajeroNombre.toLowerCase().replace(/\s+/g, '-');
+        messenger = {
+          id: `msg-${slugSegment}`,
+          name: mensajeroNombre,
+          email: `${slugSegment}@magicstars.com`,
+          role: 'mensajero' as const,
+          phone: '+506 0000-0000',
+          isActive: true,
+          createdAt: pedido.fecha_creacion || new Date().toISOString(),
+          updatedAt: pedido.fecha_creacion || new Date().toISOString(),
+        };
+      }
+
+      if (!messengerSummary[messenger.id]) {
+        messengerSummary[messenger.id] = {
+          messenger,
+          totalAsignados: 0,
+          totalEntregados: 0,
+          totalDevueltos: 0,
+          entregas: [],
+        };
+      }
+
+      const summary = messengerSummary[messenger.id];
+      summary.totalAsignados += 1;
+
+      const estado = pedido.estado_pedido?.toLowerCase() || 
+        (pedido.mensajero_concretado ? 'entregado' : pedido.mensajero_asignado ? 'en_ruta' : 'pendiente');
+      
+      if (estado === 'entregado' || pedido.mensajero_concretado) {
+        summary.totalEntregados += 1;
+      }
+      if (estado === 'devolucion') {
+        summary.totalDevueltos += 1;
+      }
+
+      // Agregar a entregas si está entregado, en ruta o devuelto
+      if (estado === 'entregado' || estado === 'en_ruta' || estado === 'devolucion') {
+        const fechaEntrega = pedido.fecha_entrega || pedido.fecha_creacion;
+        try {
+          const fecha = new Date(fechaEntrega);
+          const hora = fecha.toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' });
+          
+          summary.entregas.push({
+            id: pedido.id_pedido,
+            cliente: pedido.cliente_nombre || 'Sin nombre',
+            hora,
+            estado,
+            valor: typeof pedido.valor_total === 'number' ? pedido.valor_total : Number.parseFloat(String(pedido.valor_total ?? '0')) || 0,
+          });
+        } catch (error) {
+          // Error al parsear fecha, continuar sin esta entrega
+        }
+      }
+    });
+
+    // Ordenar entregas por hora (más reciente primero)
+    Object.values(messengerSummary).forEach(summary => {
+      summary.entregas.sort((a, b) => {
+        // Comparar por hora (formato HH:MM)
+        return b.hora.localeCompare(a.hora);
+      });
+    });
+
+    return Object.values(messengerSummary).filter(s => s.totalAsignados > 0);
+  };
+
+  // Función para obtener resumen diario por tienda
+  const getTiendaDailySummary = () => {
+    const tiendaSummary: Record<string, {
+      tienda: string;
+      totalPedidos: number;
+      totalEntregados: number;
+      totalDevueltos: number;
+      pedidos: Array<{
+        id: string;
+        cliente: string;
+        valor: number;
+        estado: string;
+        fechaCreacion: string;
+      }>;
+    }> = {};
+
+    pedidosDelDiaRaw.forEach(pedido => {
+      const tienda = pedido.tienda || 'Sin tienda';
+      
+      if (!tiendaSummary[tienda]) {
+        tiendaSummary[tienda] = {
+          tienda,
+          totalPedidos: 0,
+          totalEntregados: 0,
+          totalDevueltos: 0,
+          pedidos: [],
+        };
+      }
+
+      const summary = tiendaSummary[tienda];
+      summary.totalPedidos += 1;
+
+      const estado = pedido.estado_pedido?.toLowerCase() || 
+        (pedido.mensajero_concretado ? 'entregado' : pedido.mensajero_asignado ? 'en_ruta' : 'pendiente');
+      
+      if (estado === 'entregado' || pedido.mensajero_concretado) {
+        summary.totalEntregados += 1;
+      }
+      if (estado === 'devolucion') {
+        summary.totalDevueltos += 1;
+      }
+
+      summary.pedidos.push({
+        id: pedido.id_pedido,
+        cliente: pedido.cliente_nombre || 'Sin nombre',
+        valor: typeof pedido.valor_total === 'number' ? pedido.valor_total : Number.parseFloat(String(pedido.valor_total ?? '0')) || 0,
+        estado,
+        fechaCreacion: pedido.fecha_creacion,
+      });
+    });
+
+    // Ordenar pedidos por fecha de creación (más reciente primero)
+    Object.values(tiendaSummary).forEach(summary => {
+      summary.pedidos.sort((a, b) => {
+        try {
+          const fechaA = new Date(a.fechaCreacion).getTime();
+          const fechaB = new Date(b.fechaCreacion).getTime();
+          return fechaB - fechaA;
+        } catch {
+          return 0;
+        }
+      });
+    });
+
+    return Object.values(tiendaSummary).filter(s => s.totalPedidos > 0);
+  };
+
+  const messengerDailySummary = getMessengerDailySummary();
+  const tiendaDailySummary = getTiendaDailySummary();
   const overviewMetrics = stats
     ? [
         {
           key: 'visibleOrders',
-          title: 'Pedidos visibles',
+          title: 'Pedidos visibles (hoy)',
           value: recentOrders.length,
           icon: Package,
           palette: 'blue' as StatsPaletteKey,
         },
         {
           key: 'totalOrders',
-          title: 'Total pedidos',
+          title: 'Total pedidos (hoy)',
           value: stats.totalOrders,
           icon: BarChart3,
           palette: 'slate' as StatsPaletteKey,
         },
         {
           key: 'pendingOrders',
-          title: 'Pendientes',
+          title: 'Pendientes (hoy)',
           value: stats.pendingOrders,
           icon: Clock,
           palette: 'amber' as StatsPaletteKey,
         },
         {
           key: 'deliveredOrders',
-          title: 'Entregados',
+          title: 'Entregados (hoy)',
           value: stats.deliveredOrders,
           icon: CheckCircle,
           palette: 'emerald' as StatsPaletteKey,
         },
         {
           key: 'activeMessengers',
-          title: 'Mensajeros activos',
+          title: 'Mensajeros activos (hoy)',
           value: messengers.length,
           icon: Truck,
           palette: 'violet' as StatsPaletteKey,
         },
         {
           key: 'activeAdvisors',
-          title: 'Asesores / tiendas',
+          title: 'Asesores activos (hoy)',
           value: advisors.length,
           icon: Users,
           palette: 'slate' as StatsPaletteKey,
         },
         {
           key: 'rescheduledOrders',
-          title: 'Reagendados',
+          title: 'Reagendados (hoy)',
           value: stats.rescheduledOrders,
           icon: RefreshCw,
           palette: 'indigo' as StatsPaletteKey,
         },
         {
           key: 'returnedOrders',
-          title: 'Devueltos',
+          title: 'Devueltos (hoy)',
           value: stats.returnedOrders,
           icon: RotateCcw,
           palette: 'rose' as StatsPaletteKey,
         },
         {
           key: 'deliveryRate',
-          title: 'Tasa entrega',
+          title: 'Tasa entrega (hoy)',
           value: `${stats.deliveryRate}%`,
           icon: TrendingUp,
           palette: 'teal' as StatsPaletteKey,
         },
         {
           key: 'revenue',
-          title: 'Ingresos estimados',
+          title: 'Ingresos estimados (hoy)',
           value: formatCurrency(stats.totalCash),
           icon: DollarSign,
           palette: 'emerald' as StatsPaletteKey,
@@ -1082,33 +1250,33 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
         onClose={() => setIsLoaderVisible(false)}
       />
       {/* Cabecera estilo módulo */}
-      <section className="rounded-3xl border border-slate-200 bg-white px-6 py-7 shadow-sm">
-        <div className="space-y-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-3">
-              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-200/70 bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.32em] text-slate-500">
+      <section className="rounded-2xl border border-slate-200/80 bg-white/95 backdrop-blur-sm px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7 shadow-sm">
+        <div className="space-y-5 sm:space-y-6">
+          <div className="flex flex-col gap-4 sm:gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-2.5 sm:space-y-3 flex-1 min-w-0">
+              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-200/80 bg-gradient-to-r from-slate-50 to-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.32em] text-slate-600 shadow-sm">
                 Panel Administrativo
               </div>
               <div className="space-y-1.5">
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl">
+                <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">
                   Dashboard Administrador
                 </h1>
-                <p className="max-w-2xl text-sm text-slate-600">
-                  Resumen diario de pedidos, mensajeros y sincronizaciones.
+                <p className="max-w-2xl text-sm sm:text-base text-slate-600 leading-relaxed">
+                  Resumen exclusivo del día actual: pedidos, mensajeros y tiendas de hoy.
                 </p>
               </div>
             </div>
 
             {stats && (
-              <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-                  <RefreshCw className="h-3.5 w-3.5 text-slate-400" />
-                  <span>Última sync: {formatLastSyncForDisplay(lastSyncTime)}</span>
+              <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end lg:flex-shrink-0">
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-slate-50/80 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
+                  <RefreshCw className="h-3.5 w-3.5 text-slate-500" />
+                  <span className="whitespace-nowrap">Última sync: {formatLastSyncForDisplay(lastSyncTime)}</span>
                 </div>
                 {!canSync() && lastSyncTime && (
-                  <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-amber-200/80 bg-amber-50/80 px-3 py-1.5 text-xs font-medium text-amber-700 shadow-sm">
                     <Clock className="h-3.5 w-3.5" />
-                    <span>Disponible en {getTimeUntilNextSync()}</span>
+                    <span className="whitespace-nowrap">Disponible en {getTimeUntilNextSync()}</span>
                   </div>
                 )}
               </div>
@@ -1116,11 +1284,11 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
           </div>
 
           {stats && (
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-              <div className="space-y-4">
-                <Card className="rounded-3xl border border-slate-200/80 bg-white/90 shadow-sm">
-                  <CardContent className="flex flex-col gap-4 p-4">
-                    <div className="grid grid-flow-dense gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+            <div className="grid gap-5 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="space-y-4 sm:space-y-5 min-w-0">
+                <Card className="rounded-2xl border border-slate-200/80 bg-white/95 backdrop-blur-sm shadow-sm">
+                  <CardContent className="flex flex-col gap-4 sm:gap-5 p-4 sm:p-5">
+                    <div className="grid grid-flow-dense gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
                       {highlightMetrics.map(({ metric, span }) => {
                         const paletteClasses = statsPaletteStyles[metric.palette];
                         return (
@@ -1130,7 +1298,7 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                             value={metric.value}
                             icon={metric.icon}
                             className={cn(
-                              'min-h-[120px] rounded-3xl border bg-white p-5 shadow-sm transition-shadow hover:shadow-lg',
+                              'min-h-[100px] sm:min-h-[120px] rounded-2xl border bg-white/95 backdrop-blur-sm p-4 sm:p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5',
                               paletteClasses.card,
                               span,
                             )}
@@ -1146,7 +1314,7 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                         );
                       })}
                     </div>
-                    <div className="grid grid-flow-dense gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+                    <div className="grid grid-flow-dense gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
                       {secondaryMetrics.map(({ metric, span }) => {
                         const paletteClasses = statsPaletteStyles[metric.palette];
                         return (
@@ -1156,7 +1324,7 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                             value={metric.value}
                             icon={metric.icon}
                             className={cn(
-                              'min-h-[88px] rounded-2xl border bg-white/80 p-3 shadow-sm transition-shadow hover:shadow-md',
+                              'min-h-[80px] sm:min-h-[88px] rounded-xl border bg-white/90 backdrop-blur-sm p-3 sm:p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5',
                               paletteClasses.card,
                               span,
                             )}
@@ -1172,14 +1340,14 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                         );
                       })}
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-5">
+                    <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-5">
                       <StatsCard
                         key="secondary-delivery-rate"
                         title={metricsByKey.deliveryRate?.title ?? 'Tasa entrega'}
                         value={metricsByKey.deliveryRate?.value ?? `${stats.deliveryRate}%`}
                         icon={metricsByKey.deliveryRate?.icon ?? TrendingUp}
                         className={cn(
-                          'min-h-[88px] rounded-2xl border bg-white/80 p-3 shadow-sm transition-shadow hover:shadow-md',
+                          'min-h-[80px] sm:min-h-[88px] rounded-xl border bg-white/90 backdrop-blur-sm p-3 sm:p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5',
                           statsPaletteStyles[metricsByKey.deliveryRate?.palette ?? 'teal'].card,
                         )}
                         titleClassName={cn(
@@ -1201,17 +1369,17 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                         <div
                           key={chip.key}
                           className={cn(
-                            'flex items-center justify-between rounded-2xl border px-4 py-3 text-sm font-medium shadow-inner',
+                            'flex items-center justify-between rounded-xl border px-3 py-2.5 sm:px-4 sm:py-3 text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5',
                             chip.accent,
                           )}
                         >
-                          <div className="space-y-1">
-                            <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-500">
+                          <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1">
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-600">
                               {chip.label}
                             </span>
-                            <p className="text-lg font-semibold text-slate-900">{chip.value}</p>
+                            <p className="text-base sm:text-lg font-semibold text-slate-900 truncate">{chip.value}</p>
                           </div>
-                          <chip.icon className="h-5 w-5 opacity-70" />
+                          <chip.icon className="h-5 w-5 opacity-70 flex-shrink-0 ml-2" />
                         </div>
                       ))}
                     </div>
@@ -1219,7 +1387,57 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                 </Card>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-4 sm:space-y-5">
+                {/* Botón de Mensajeros */}
+                <Card className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/80 to-blue-50/70 shadow-sm backdrop-blur-sm">
+                  <CardContent className="space-y-3 sm:space-y-4 px-4 py-3 sm:px-5 sm:py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-blue-500">Mensajeros</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-800">Resumen Diario</p>
+                        <p className="text-xs text-slate-500">Ver mensajeros activos y sus entregas de hoy.</p>
+                      </div>
+                      <div className="flex items-center gap-2 rounded-xl border border-white/80 bg-white/70 px-3 py-2 text-blue-500 shadow-inner backdrop-blur">
+                        <Truck className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => setShowMessengersModal(true)}
+                      className="w-full rounded-xl border border-blue-200/80 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-blue-400/70 focus-visible:ring-offset-2"
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <UserCheck className="h-4 w-4" />
+                        <span>Ver Mensajeros ({messengerDailySummary.length})</span>
+                      </div>
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Botón de Tiendas */}
+                <Card className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/80 to-emerald-50/70 shadow-sm">
+                  <CardContent className="space-y-4 px-5 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-500">Tiendas</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-800">Resumen Diario</p>
+                        <p className="text-xs text-slate-500">Ver tiendas con pedidos creados hoy.</p>
+                      </div>
+                      <div className="flex items-center gap-2 rounded-xl border border-white/80 bg-white/70 px-3 py-2 text-emerald-500 shadow-inner backdrop-blur">
+                        <Package className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => setShowTiendasModal(true)}
+                      className="w-full rounded-xl border border-emerald-200/80 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-emerald-400/70 focus-visible:ring-offset-2"
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <Users className="h-4 w-4" />
+                        <span>Ver Tiendas ({tiendaDailySummary.length})</span>
+                      </div>
+                    </Button>
+                  </CardContent>
+                </Card>
+
                 <Card className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/80 to-blue-50/70 shadow-sm">
                   <CardContent className="space-y-4 px-5 py-4">
                     <div className="flex items-start justify-between gap-3">
@@ -1239,8 +1457,8 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                         <Button
                           disabled={syncing || !canSync()}
                           className={cn(
-                            'group relative w-full overflow-hidden rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-500 via-indigo-500 to-cyan-500 px-6 py-6 text-base font-semibold text-white shadow-sm transition-all duration-200 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-blue-400/70 focus-visible:ring-offset-2',
-                            'disabled:cursor-not-allowed disabled:border-blue-100 disabled:bg-slate-50/80 disabled:text-slate-400 disabled:shadow-none',
+                            'group relative w-full overflow-hidden rounded-xl border border-blue-200/80 bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 px-5 py-5 sm:px-6 sm:py-6 text-base font-semibold text-white shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-blue-400/70 focus-visible:ring-offset-2',
+                            'disabled:cursor-not-allowed disabled:border-slate-200/80 disabled:bg-slate-50/80 disabled:text-slate-400 disabled:shadow-none disabled:hover:translate-y-0',
                           )}
                         >
                           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.25),transparent_60%)]" />
@@ -1308,7 +1526,7 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                     <Button
                       asChild
                       size="sm"
-                      className="w-full rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-500/90 via-blue-500/90 to-indigo-500/90 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:shadow-md focus-visible:ring-2 focus-visible:ring-indigo-400/70 focus-visible:ring-offset-2"
+                      className="w-full rounded-xl border border-indigo-200/80 bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-indigo-400/70 focus-visible:ring-offset-2"
                     >
                       <Link href="/dashboard/admin/pedidos" className="flex items-center justify-center gap-2">
                         <span>Ir al panel</span>
@@ -1333,7 +1551,7 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                     <Button
                       asChild
                       size="sm"
-                      className="w-full rounded-xl border border-purple-200 bg-gradient-to-r from-purple-500/90 via-fuchsia-500/90 to-purple-500/90 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:shadow-md focus-visible:ring-2 focus-visible:ring-purple-400/70 focus-visible:ring-offset-2"
+                      className="w-full rounded-xl border border-purple-200/80 bg-gradient-to-r from-purple-600 via-fuchsia-600 to-purple-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-purple-400/70 focus-visible:ring-offset-2"
                     >
                       <Link href="/dashboard/admin/usuarios" className="flex items-center justify-center gap-2">
                         <span>Ir a usuarios</span>
@@ -1358,7 +1576,7 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                 <Button
                   asChild
                   size="sm"
-                      className="w-full rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-500/90 via-teal-500/90 to-emerald-500/90 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:shadow-md focus-visible:ring-2 focus-visible:ring-emerald-400/70 focus-visible:ring-offset-2"
+                      className="w-full rounded-xl border border-emerald-200/80 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-emerald-400/70 focus-visible:ring-offset-2"
                 >
                   <Link href="/dashboard/admin/liquidation" className="flex items-center justify-center gap-2">
                     <span>Ir a liquidaciones</span>
@@ -1377,75 +1595,87 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
       {syncMessage && (
         <div
           className={cn(
-            'flex items-start gap-3 rounded-2xl border px-5 py-4 shadow-sm',
+            'flex items-start gap-3 rounded-xl border px-4 py-3 sm:px-5 sm:py-4 shadow-sm backdrop-blur-sm transition-all duration-200',
             syncMessage.includes('exitoso')
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-              : 'border-rose-200 bg-rose-50 text-rose-700',
+              ? 'border-emerald-200/80 bg-emerald-50/90 text-emerald-700'
+              : 'border-rose-200/80 bg-rose-50/90 text-rose-700',
           )}
         >
           {syncMessage.includes('exitoso') ? (
-            <CheckCircle className="h-5 w-5 flex-shrink-0" />
+            <CheckCircle className="h-5 w-5 flex-shrink-0 text-emerald-600" />
           ) : (
-            <RotateCcw className="h-5 w-5 flex-shrink-0" />
+            <RotateCcw className="h-5 w-5 flex-shrink-0 text-rose-600" />
           )}
-          <span className="text-sm font-medium">{syncMessage}</span>
+          <span className="text-sm font-medium leading-relaxed">{syncMessage}</span>
         </div>
       )}
 
       {/* Sistema de Pestañas */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="overview" className="flex items-center gap-2">
+        <TabsList className="grid w-full grid-cols-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-1.5 shadow-sm">
+          <TabsTrigger 
+            value="overview" 
+            className="flex items-center gap-2 rounded-xl transition-all duration-200 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
             <Package className="w-4 h-4" />
-            {isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Recientes'}
+            <span className="hidden sm:inline">{isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Recientes'}</span>
+            <span className="sm:hidden">Pedidos</span>
           </TabsTrigger>
-          <TabsTrigger value="messengers" className="flex items-center gap-2">
+          <TabsTrigger 
+            value="messengers" 
+            className="flex items-center gap-2 rounded-xl transition-all duration-200 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
             <UserCheck className="w-4 h-4" />
-            Mensajeros ({messengers.length})
+            <span className="hidden sm:inline">Mensajeros ({messengerDailySummary.length})</span>
+            <span className="sm:hidden">Mens. ({messengerDailySummary.length})</span>
           </TabsTrigger>
-          <TabsTrigger value="advisors" className="flex items-center gap-2">
+          <TabsTrigger 
+            value="advisors" 
+            className="flex items-center gap-2 rounded-xl transition-all duration-200 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
             <Users className="w-4 h-4" />
-            Asesores ({advisors.length})
+            <span className="hidden sm:inline">Tiendas ({tiendaDailySummary.length})</span>
+            <span className="sm:hidden">Tiendas ({tiendaDailySummary.length})</span>
           </TabsTrigger>
         </TabsList>
 
         {/* Pestaña de Pedidos de Hoy */}
-        <TabsContent value="overview" className="mt-6">
-          <Card>
-            <CardHeader className="flex flex-col gap-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-3">
-                    <CardTitle className="flex items-center gap-2">
-                      <Package className="w-5 h-5" />
+        <TabsContent value="overview" className="mt-5 sm:mt-6">
+          <Card className="rounded-2xl border border-slate-200/80 bg-white/95 backdrop-blur-sm shadow-sm">
+            <CardHeader className="flex flex-col gap-4 sm:gap-5 p-4 sm:p-5 lg:p-6">
+              <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-1.5 sm:space-y-2 flex-1 min-w-0">
+                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                    <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+                      <Package className="w-5 h-5 text-blue-600" />
                       {recentOrdersLabel}
                     </CardTitle>
                     {!isShowingTodayOrders && (
-                      <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
+                      <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200 shadow-sm">
                         Sin pedidos hoy
                       </Badge>
                     )}
                   </div>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
                     Mostrando {recentOrdersSummary.total.toLocaleString('es-CR')} pedidos{' '}
                     {isShowingTodayOrders ? 'registrados hoy.' : 'más recientes disponibles.'}
                   </p>
                 </div>
-                <div className="flex flex-col items-stretch gap-2 sm:flex-row">
+                <div className="flex flex-col items-stretch gap-2 sm:flex-row lg:flex-shrink-0">
                   <Button
                     asChild
                     size="sm"
-                    className="rounded-lg border border-blue-200 bg-blue-500/90 px-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-600"
+                    className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-500 to-indigo-500 px-4 text-sm font-semibold text-white shadow-sm hover:shadow-md transition-all duration-200"
                   >
                     <Link href="/dashboard/admin/liquidation">Ir a liquidaciones</Link>
                   </Button>
-                  <Button asChild variant="outline" size="sm" className="rounded-lg px-4">
+                  <Button asChild variant="outline" size="sm" className="rounded-xl px-4 border-slate-200/80 hover:bg-slate-50">
                     <Link href="/dashboard/admin/pedidos">Ver todos</Link>
                   </Button>
                 </div>
               </div>
               {recentOrders.length > 0 && (
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                       {recentOrdersHighlights.map(({ key, label, value, accent, bg }) => (
                     <div
                       key={key}
@@ -1463,65 +1693,72 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                 </div>
               )}
             </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
+            <CardContent className="p-4 sm:p-5 lg:p-6">
+              <div className="overflow-x-auto rounded-lg border border-slate-200/80">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-3 font-medium text-sm text-muted-foreground">ID Pedido</th>
-                      <th className="text-left p-3 font-medium text-sm text-muted-foreground">Cliente</th>
-                      <th className="text-left p-3 font-medium text-sm text-muted-foreground">Estado</th>
-                      <th className="text-left p-3 font-medium text-sm text-muted-foreground">Mensajero</th>
-                      <th className="text-left p-3 font-medium text-sm text-muted-foreground">Valor</th>
-                      <th className="text-left p-3 font-medium text-sm text-muted-foreground">Fecha</th>
+                    <tr className="border-b border-slate-200/80 bg-slate-50/50">
+                      <th className="text-left p-3 font-semibold text-xs uppercase tracking-wider text-slate-600">ID Pedido</th>
+                      <th className="text-left p-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Cliente</th>
+                      <th className="text-left p-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Estado</th>
+                      <th className="text-left p-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Mensajero</th>
+                      <th className="text-left p-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Valor</th>
+                      <th className="text-left p-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Fecha</th>
                     </tr>
                   </thead>
                   <tbody>
                     {paginatedOrders.map((order) => (
-                      <tr key={order.id} className="border-b hover:bg-gray-50 transition-colors">
+                      <tr key={order.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors duration-150">
                         <td className="p-3">
                           <div className="flex items-center gap-2">
-                            <Package className="w-4 h-4 text-blue-600" />
-                            <span className="font-medium text-sm">{order.id}</span>
+                            <Package className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                            <span className="font-medium text-sm text-slate-900">{order.id}</span>
                           </div>
                         </td>
                         <td className="p-3">
-                          <div>
-                            <p className="font-medium text-sm">{order.customerName}</p>
-                            <p className="text-xs text-muted-foreground">{order.customerAddress}</p>
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm text-slate-900 truncate">{order.customerName}</p>
+                            <p className="text-xs text-slate-500 truncate">{order.customerAddress}</p>
                           </div>
                         </td>
                         <td className="p-3">
                           <OrderStatusBadge status={order.status} />
                         </td>
                         <td className="p-3">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
                             {order.assignedMessenger ? (
                               <>
-                                <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs">
-                                  {order.assignedMessenger.name.charAt(0)}
+                                <div className="w-7 h-7 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 shadow-sm">
+                                  {order.assignedMessenger.name.charAt(0).toUpperCase()}
                                 </div>
-                                <span className="text-sm">{order.assignedMessenger.name}</span>
+                                <span className="text-sm text-slate-900 truncate">{order.assignedMessenger.name}</span>
                               </>
                             ) : (
-                              <span className="text-sm text-muted-foreground">Sin asignar</span>
+                              <span className="text-sm text-slate-500 italic">Sin asignar</span>
                             )}
                           </div>
                         </td>
                         <td className="p-3">
-                          <span className="font-bold text-sm">{formatCurrency(order.totalAmount)}</span>
+                          <span className="font-semibold text-sm text-slate-900">{formatCurrency(order.totalAmount)}</span>
                         </td>
                         <td className="p-3">
-                          <span className="text-sm text-muted-foreground">
-                            {new Date(order.createdAt).toLocaleDateString('es-CR')}
+                          <span className="text-sm text-slate-600">
+                            {new Date(order.createdAt).toLocaleDateString('es-CR', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
                           </span>
                         </td>
                       </tr>
                     ))}
                     {paginatedOrders.length === 0 && (
                       <tr className="border-b">
-                        <td colSpan={6} className="p-6 text-center text-sm text-muted-foreground">
-                          No se encontraron pedidos para la fecha actual.
+                        <td colSpan={6} className="p-8 sm:p-10 text-center">
+                          <div className="flex flex-col items-center gap-2 text-slate-500">
+                            <Package className="w-8 h-8 text-slate-300" />
+                            <p className="text-sm font-medium">No se encontraron pedidos para la fecha actual.</p>
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -1529,8 +1766,8 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                 </table>
               </div>
               {recentOrders.length > ORDERS_PER_PAGE && (
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
+                <div className="mt-4 sm:mt-5 p-4 sm:p-5 lg:p-6 pt-0 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 border-t border-slate-200/80">
+                  <span className="text-sm text-slate-600 font-medium">
                     Página {ordersPage} de {Math.ceil(recentOrders.length / ORDERS_PER_PAGE)}
                   </span>
                   <div className="flex items-center gap-2">
@@ -1545,6 +1782,7 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                           recentOrders.slice((next - 1) * ORDERS_PER_PAGE, next * ORDERS_PER_PAGE),
                         );
                       }}
+                      className="rounded-xl border-slate-200/80 hover:bg-slate-50 disabled:opacity-50"
                     >
                       Anterior
                     </Button>
@@ -1559,6 +1797,7 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
                           recentOrders.slice((next - 1) * ORDERS_PER_PAGE, next * ORDERS_PER_PAGE),
                         );
                       }}
+                      className="rounded-xl border-slate-200/80 hover:bg-slate-50 disabled:opacity-50"
                     >
                       Siguiente
                     </Button>
@@ -1569,172 +1808,412 @@ const recentOrdersLabel = isShowingTodayOrders ? 'Pedidos de Hoy' : 'Pedidos Rec
           </Card>
         </TabsContent>
 
-        {/* Pestaña de Mensajeros */}
-        <TabsContent value="messengers" className="mt-6">
+        {/* Pestaña de Mensajeros - Resumen Diario */}
+        <TabsContent value="messengers" className="mt-6 space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <UserCheck className="w-5 h-5" />
-                Mensajeros Activos ({messengers.length})
+                Resumen Diario por Mensajero - Hoy ({messengerDailySummary.length})
               </CardTitle>
+              <p className="text-sm text-slate-500 mt-1">
+                Solo se muestran mensajeros que tienen pedidos asignados hoy
+              </p>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {messengers.map(messenger => {
-                  const metrics = messengerMetricsMap[messenger.id];
-                  const createdLabel = messenger.createdAt
-                    ? new Date(messenger.createdAt).toLocaleDateString('es-CR')
-                    : 'Sin registro';
-                  return (
-                    <div
-                      key={messenger.id}
-                      className="flex h-full flex-col rounded-xl border border-slate-200 bg-white/80 p-4 shadow-sm transition-shadow hover:shadow-md"
-                    >
-                      <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500 text-sm font-semibold text-white">
-                          {messenger.name.charAt(0)}
+              {messengerDailySummary.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                  <Truck className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                  <p>No hay mensajeros con pedidos asignados hoy</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {messengerDailySummary.map((summary) => (
+                    <Card key={summary.messenger.id} className="border-slate-200">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500 text-base font-semibold text-white">
+                              {summary.messenger.name.charAt(0)}
+                            </div>
+                            <div>
+                              <CardTitle className="text-lg">{summary.messenger.name}</CardTitle>
+                              <p className="text-xs text-slate-500">Mensajero</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-4">
+                            <div className="text-center">
+                              <p className="text-xs text-slate-500">Asignados</p>
+                              <p className="text-lg font-bold text-blue-600">{summary.totalAsignados}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-slate-500">Entregados</p>
+                              <p className="text-lg font-bold text-emerald-600">{summary.totalEntregados}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-slate-500">Devueltos</p>
+                              <p className="text-lg font-bold text-rose-600">{summary.totalDevueltos}</p>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="text-sm font-semibold text-slate-900">{messenger.name}</h3>
-                          <p className="text-[11px] uppercase tracking-wide text-blue-500">Mensajero</p>
-                        </div>
-                        <Badge variant={messenger.isActive ? 'default' : 'secondary'} className="ml-auto text-[10px]">
-                          {messenger.isActive ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </div>
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-lg border border-blue-100 bg-blue-50/70 p-3">
-                          <p className="font-medium text-blue-600/80">Asignados</p>
-                          <p className="text-lg font-semibold text-blue-900">
-                            {metrics?.totalOrders ?? 0}
+                      </CardHeader>
+                      <CardContent>
+                        {summary.entregas.length > 0 ? (
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-semibold text-slate-700 mb-3">Entregas del día:</h4>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b">
+                                    <th className="text-left p-2 font-medium text-slate-600">Hora</th>
+                                    <th className="text-left p-2 font-medium text-slate-600">ID Pedido</th>
+                                    <th className="text-left p-2 font-medium text-slate-600">Cliente</th>
+                                    <th className="text-left p-2 font-medium text-slate-600">Estado</th>
+                                    <th className="text-right p-2 font-medium text-slate-600">Valor</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {summary.entregas.map((entrega) => (
+                                    <tr key={entrega.id} className="border-b hover:bg-slate-50">
+                                      <td className="p-2 font-mono text-xs">{entrega.hora}</td>
+                                      <td className="p-2">
+                                        <span className="font-medium">{entrega.id}</span>
+                                      </td>
+                                      <td className="p-2">{entrega.cliente}</td>
+                                      <td className="p-2">
+                                        <OrderStatusBadge status={entrega.estado as any} />
+                                      </td>
+                                      <td className="p-2 text-right font-semibold">
+                                        {formatCurrency(entrega.valor)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-500 text-center py-4">
+                            No hay entregas registradas para hoy
                           </p>
-                        </div>
-                        <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3">
-                          <p className="font-medium text-emerald-600/80">Entregados</p>
-                          <p className="text-lg font-semibold text-emerald-900">
-                            {metrics?.deliveredOrders ?? 0}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-amber-100 bg-amber-50/70 p-3">
-                          <p className="font-medium text-amber-600/80">Pendientes</p>
-                          <p className="text-lg font-semibold text-amber-900">
-                            {metrics?.pendingOrders ?? 0}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-rose-100 bg-rose-50/70 p-3">
-                          <p className="font-medium text-rose-600/80">Devueltos</p>
-                          <p className="text-lg font-semibold text-rose-900">
-                            {metrics?.returnedOrders ?? 0}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-indigo-100 bg-indigo-50/70 p-3">
-                          <p className="font-medium text-indigo-600/80">Reagendados</p>
-                          <p className="text-lg font-semibold text-indigo-900">
-                            {metrics?.rescheduledOrders ?? 0}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
-                          <p className="font-medium text-slate-600/80">Valor gestionado</p>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {formatCurrency(metrics?.totalAmount ?? 0)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-[11px] text-slate-500">
-                        <span>Activo desde</span>
-                        <span className="font-medium text-slate-700">{createdLabel}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Pestaña de Asesores */}
-        <TabsContent value="advisors" className="mt-6">
+        {/* Pestaña de Tiendas - Resumen Diario */}
+        <TabsContent value="advisors" className="mt-6 space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="w-5 h-5" />
-                Asesores Activos ({advisors.length})
+                Resumen Diario por Tienda - Hoy ({tiendaDailySummary.length})
               </CardTitle>
+              <p className="text-sm text-slate-500 mt-1">
+                Solo se muestran tiendas que tienen pedidos creados hoy
+              </p>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {advisors.map(advisor => {
-                  const metrics = advisorMetricsMap[advisor.id];
-                  const createdLabel = advisor.createdAt
-                    ? new Date(advisor.createdAt).toLocaleDateString('es-CR')
-                    : 'Sin registro';
-                  return (
-                    <div
-                      key={advisor.id}
-                      className="flex h-full flex-col rounded-xl border border-slate-200 bg-white/80 p-4 shadow-sm transition-shadow hover:shadow-md"
-                    >
-                      <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-sm font-semibold text-white">
-                          {advisor.name.charAt(0)}
+              {tiendaDailySummary.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                  <Package className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                  <p>No hay tiendas con pedidos creados hoy</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {tiendaDailySummary.map((summary, index) => (
+                    <Card key={index} className="border-slate-200">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-base font-semibold text-white">
+                              {summary.tienda.charAt(0)}
+                            </div>
+                            <div>
+                              <CardTitle className="text-lg">{summary.tienda}</CardTitle>
+                              <p className="text-xs text-slate-500">Tienda</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-4">
+                            <div className="text-center">
+                              <p className="text-xs text-slate-500">Total Pedidos</p>
+                              <p className="text-lg font-bold text-blue-600">{summary.totalPedidos}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-slate-500">Entregados</p>
+                              <p className="text-lg font-bold text-emerald-600">{summary.totalEntregados}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-slate-500">Devueltos</p>
+                              <p className="text-lg font-bold text-rose-600">{summary.totalDevueltos}</p>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="text-sm font-semibold text-slate-900">{advisor.name}</h3>
-                          <p className="text-[11px] uppercase tracking-wide text-emerald-600">Asesor / Tienda</p>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-semibold text-slate-700 mb-3">Pedidos generados hoy:</h4>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b">
+                                  <th className="text-left p-2 font-medium text-slate-600">ID Pedido</th>
+                                  <th className="text-left p-2 font-medium text-slate-600">Cliente</th>
+                                  <th className="text-left p-2 font-medium text-slate-600">Estado</th>
+                                  <th className="text-left p-2 font-medium text-slate-600">Fecha Creación</th>
+                                  <th className="text-right p-2 font-medium text-slate-600">Valor</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {summary.pedidos.map((pedido) => {
+                                  const fechaCreacion = new Date(pedido.fechaCreacion);
+                                  const fechaFormateada = fechaCreacion.toLocaleDateString('es-CR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                  });
+                                  const horaFormateada = fechaCreacion.toLocaleTimeString('es-CR', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  });
+                                  return (
+                                    <tr key={pedido.id} className="border-b hover:bg-slate-50">
+                                      <td className="p-2">
+                                        <span className="font-medium">{pedido.id}</span>
+                                      </td>
+                                      <td className="p-2">{pedido.cliente}</td>
+                                      <td className="p-2">
+                                        <OrderStatusBadge status={pedido.estado as any} />
+                                      </td>
+                                      <td className="p-2 text-xs text-slate-500">
+                                        {fechaFormateada} {horaFormateada}
+                                      </td>
+                                      <td className="p-2 text-right font-semibold">
+                                        {formatCurrency(pedido.valor)}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
-                        <Badge variant={advisor.isActive ? 'default' : 'secondary'} className="ml-auto text-[10px]">
-                          {advisor.isActive ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </div>
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-                          <p className="font-medium text-slate-600/80">Pedidos</p>
-                          <p className="text-lg font-semibold text-slate-900">
-                            {metrics?.totalOrders ?? 0}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-emerald-100 bg-emerald-50/80 p-3">
-                          <p className="font-medium text-emerald-600/80">Entregados</p>
-                          <p className="text-lg font-semibold text-emerald-900">
-                            {metrics?.deliveredOrders ?? 0}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-amber-100 bg-amber-50/80 p-3">
-                          <p className="font-medium text-amber-600/80">Pendientes</p>
-                          <p className="text-lg font-semibold text-amber-900">
-                            {metrics?.pendingOrders ?? 0}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-rose-100 bg-rose-50/80 p-3">
-                          <p className="font-medium text-rose-600/80">Devueltos</p>
-                          <p className="text-lg font-semibold text-rose-900">
-                            {metrics?.returnedOrders ?? 0}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-indigo-100 bg-indigo-50/80 p-3">
-                          <p className="font-medium text-indigo-600/80">Reagendados</p>
-                          <p className="text-lg font-semibold text-indigo-900">
-                            {metrics?.rescheduledOrders ?? 0}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
-                          <p className="font-medium text-emerald-600/80">Valor total</p>
-                          <p className="text-sm font-semibold text-emerald-900">
-                            {formatCurrency(metrics?.totalAmount ?? 0)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-[11px] text-slate-500">
-                        <span>Activo desde</span>
-                        <span className="font-medium text-slate-700">{createdLabel}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Modal de Mensajeros */}
+      <Dialog open={showMessengersModal} onOpenChange={setShowMessengersModal}>
+        <DialogContent className="sm:max-w-[900px] w-[95vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserCheck className="w-5 h-5 text-blue-600" />
+              Resumen Diario por Mensajero - Hoy ({messengerDailySummary.length})
+            </DialogTitle>
+            <DialogDescription>
+              Solo se muestran mensajeros que tienen pedidos asignados hoy
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            {messengerDailySummary.length === 0 ? (
+              <div className="text-center py-12 text-slate-500">
+                <Truck className="w-16 h-16 mx-auto mb-4 text-slate-300" />
+                <p className="text-lg font-medium">No hay mensajeros con pedidos asignados hoy</p>
+                <p className="text-sm mt-2">Los mensajeros aparecerán aquí cuando tengan pedidos asignados</p>
+              </div>
+            ) : (
+              messengerDailySummary.map((summary) => (
+                <Card key={summary.messenger.id} className="border-slate-200">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500 text-base font-semibold text-white">
+                          {summary.messenger.name.charAt(0)}
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg">{summary.messenger.name}</CardTitle>
+                          <p className="text-xs text-slate-500">Mensajero</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-4">
+                        <div className="text-center">
+                          <p className="text-xs text-slate-500">Asignados</p>
+                          <p className="text-xl font-bold text-blue-600">{summary.totalAsignados}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-slate-500">Entregados</p>
+                          <p className="text-xl font-bold text-emerald-600">{summary.totalEntregados}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-slate-500">Devueltos</p>
+                          <p className="text-xl font-bold text-rose-600">{summary.totalDevueltos}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {summary.entregas.length > 0 ? (
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold text-slate-700 mb-3">Entregas del día:</h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b bg-slate-50">
+                                <th className="text-left p-3 font-medium text-slate-600">Hora</th>
+                                <th className="text-left p-3 font-medium text-slate-600">ID Pedido</th>
+                                <th className="text-left p-3 font-medium text-slate-600">Cliente</th>
+                                <th className="text-left p-3 font-medium text-slate-600">Estado</th>
+                                <th className="text-right p-3 font-medium text-slate-600">Valor</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {summary.entregas.map((entrega) => (
+                                <tr key={entrega.id} className="border-b hover:bg-slate-50 transition-colors">
+                                  <td className="p-3 font-mono text-xs font-medium">{entrega.hora}</td>
+                                  <td className="p-3">
+                                    <span className="font-medium">{entrega.id}</span>
+                                  </td>
+                                  <td className="p-3">{entrega.cliente}</td>
+                                  <td className="p-3">
+                                    <OrderStatusBadge status={entrega.estado as any} />
+                                  </td>
+                                  <td className="p-3 text-right font-semibold">
+                                    {formatCurrency(entrega.valor)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-500 text-center py-6">
+                        No hay entregas registradas para hoy
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Tiendas */}
+      <Dialog open={showTiendasModal} onOpenChange={setShowTiendasModal}>
+        <DialogContent className="sm:max-w-[900px] w-[95vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-emerald-600" />
+              Resumen Diario por Tienda - Hoy ({tiendaDailySummary.length})
+            </DialogTitle>
+            <DialogDescription>
+              Solo se muestran tiendas que tienen pedidos creados hoy
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            {tiendaDailySummary.length === 0 ? (
+              <div className="text-center py-12 text-slate-500">
+                <Package className="w-16 h-16 mx-auto mb-4 text-slate-300" />
+                <p className="text-lg font-medium">No hay tiendas con pedidos creados hoy</p>
+                <p className="text-sm mt-2">Las tiendas aparecerán aquí cuando tengan pedidos creados</p>
+              </div>
+            ) : (
+              tiendaDailySummary.map((summary, index) => (
+                <Card key={index} className="border-slate-200">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-base font-semibold text-white">
+                          {summary.tienda.charAt(0)}
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg">{summary.tienda}</CardTitle>
+                          <p className="text-xs text-slate-500">Tienda</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-4">
+                        <div className="text-center">
+                          <p className="text-xs text-slate-500">Total Pedidos</p>
+                          <p className="text-xl font-bold text-blue-600">{summary.totalPedidos}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-slate-500">Entregados</p>
+                          <p className="text-xl font-bold text-emerald-600">{summary.totalEntregados}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-slate-500">Devueltos</p>
+                          <p className="text-xl font-bold text-rose-600">{summary.totalDevueltos}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold text-slate-700 mb-3">Pedidos generados hoy:</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-slate-50">
+                              <th className="text-left p-3 font-medium text-slate-600">ID Pedido</th>
+                              <th className="text-left p-3 font-medium text-slate-600">Cliente</th>
+                              <th className="text-left p-3 font-medium text-slate-600">Estado</th>
+                              <th className="text-left p-3 font-medium text-slate-600">Fecha Creación</th>
+                              <th className="text-right p-3 font-medium text-slate-600">Valor</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {summary.pedidos.map((pedido) => {
+                              const fechaCreacion = new Date(pedido.fechaCreacion);
+                              const fechaFormateada = fechaCreacion.toLocaleDateString('es-CR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                              });
+                              const horaFormateada = fechaCreacion.toLocaleTimeString('es-CR', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              });
+                              return (
+                                <tr key={pedido.id} className="border-b hover:bg-slate-50 transition-colors">
+                                  <td className="p-3">
+                                    <span className="font-medium">{pedido.id}</span>
+                                  </td>
+                                  <td className="p-3">{pedido.cliente}</td>
+                                  <td className="p-3">
+                                    <OrderStatusBadge status={pedido.estado as any} />
+                                  </td>
+                                  <td className="p-3 text-xs text-slate-500">
+                                    {fechaFormateada} {horaFormateada}
+                                  </td>
+                                  <td className="p-3 text-right font-semibold">
+                                    {formatCurrency(pedido.valor)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
