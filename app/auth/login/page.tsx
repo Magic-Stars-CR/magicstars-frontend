@@ -80,7 +80,7 @@ export default function LoginPage() {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       // Redirigir según el rol del usuario
-      if (user?.role === 'admin') {
+      if (user?.role === 'admin' || user?.role === 'master') {
         console.log('🔄 Redirigiendo a admin dashboard');
         router.push('/dashboard/admin');
       } else if (user?.role === 'asesor') {
@@ -92,6 +92,12 @@ export default function LoginPage() {
       } else if (user?.role === 'mensajero-lider') {
         console.log('🔄 Redirigiendo a gestión de rutas');
         router.push('/dashboard/mensajero-lider');
+      } else if (user?.role === 'mensajero-extra') {
+        console.log('🔄 Redirigiendo a mi ruta de hoy');
+        router.push('/dashboard/mensajero/mi-ruta-hoy');
+      } else if (user?.role === 'tienda') {
+        console.log('🔄 Redirigiendo a tienda dashboard');
+        router.push('/dashboard/tienda');
       } else {
         console.log('🔄 Redirigiendo a página principal');
         router.push('/');

@@ -141,6 +141,7 @@ export type UsuarioRow = {
 const normalizeRole = (role: string): UserRole => {
   const value = role?.toLowerCase().trim();
   if (value === 'admin') return 'admin';
+  if (value === 'master') return 'master';
   if (value === 'asesor') return 'asesor';
   if (value === 'mensajero') return 'mensajero';
   if (value === 'mensajero-lider' || value === 'mensajero líder' || value === 'mensajero-líder') return 'mensajero-lider';

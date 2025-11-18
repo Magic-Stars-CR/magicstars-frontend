@@ -41,12 +41,24 @@ const menuItems = {
     // { icon: Building2, label: 'Empresas', href: '/dashboard/admin/companies' },
     { icon: BarChart3, label: 'Estadísticas', href: '/dashboard/admin/stats' },
   ],
+  master: [
+    { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/admin' },
+    { icon: Package, label: 'Pedidos', href: '/dashboard/admin/pedidos' },
+    { icon: Warehouse, label: 'Inventario', href: '/dashboard/admin/inventory' },
+    // { icon: Network, label: 'Logística Externa', href: '/dashboard/admin/red-logistic' },
+    { icon: Truck, label: 'Rutas', href: '/dashboard/admin/routes' },
+    // { icon: Route, label: 'Gestión de Rutas', href: '/dashboard/admin/route-management' },
+    { icon: DollarSign, label: 'Liquidación', href: '/dashboard/admin/liquidation' },
+    { icon: Users, label: 'Usuarios', href: '/dashboard/admin/usuarios' },
+    // { icon: Building2, label: 'Empresas', href: '/dashboard/admin/companies' },
+    { icon: BarChart3, label: 'Estadísticas', href: '/dashboard/admin/stats' },
+  ],
   asesor: [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/asesor' },
     { icon: Package, label: 'Pedidos Sin Confirmar', href: '/dashboard/asesor/pedidos-sin-confirmar' },
     { icon: Warehouse, label: 'Inventario', href: '/dashboard/asesor/inventory' },
-                    { icon: Network, label: 'Logística Externa', href: '/dashboard/asesor/red-logistic' },
-    { icon: BarChart3, label: 'Estadísticas', href: '/dashboard/asesor/stats' },
+    { icon: Network, label: 'Logística Externa', href: '/dashboard/asesor/red-logistic' },
+    // { icon: BarChart3, label: 'Estadísticas', href: '/dashboard/asesor/stats' },
   ],
   mensajero: [
     { icon: Route, label: 'Mi Ruta de Hoy', href: '/dashboard/mensajero/mi-ruta-hoy' },
@@ -115,6 +127,11 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
   // Obtener menú base según el rol
   let userMenuItems = menuItems[user.role] || [];
   
+  // Master usa el mismo menú que admin
+  if (user.role === 'master') {
+    userMenuItems = menuItems['admin'];
+  }
+  
   // Fallback para mensajeros anteriores con flag de líder
   if (user.role === 'mensajero' && user.isMessengerLeader) {
     userMenuItems = menuItems['mensajero-lider'];
@@ -149,7 +166,9 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
                 Asesor
               </p>
             ) : (
-              <p className="text-xs text-slate-500 capitalize">{user.role}</p>
+              <p className="text-xs text-slate-500 capitalize">
+                {user.role === 'master' ? 'Master' : user.role}
+              </p>
             )}
           </div>
         </div>
