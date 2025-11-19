@@ -112,6 +112,7 @@ export default function AdminLiquidationPage() {
   const [tiendaCurrentPage, setTiendaCurrentPage] = useState<{ [key: string]: number }>({});
   const [isQuickFilterLoading, setIsQuickFilterLoading] = useState(false);
   const isQuickLoadRef = useRef(false);
+  const [quickFilterRange, setQuickFilterRange] = useState<{ start: string; end: string } | null>(null);
   
   
   // Estados para el loader de progreso
@@ -254,7 +255,7 @@ export default function AdminLiquidationPage() {
 
   // Recargar datos cuando cambie la fecha
   useEffect(() => {
-    if (selectedDate) {
+    if (selectedDate || quickFilterRange) {
       // Si es una carga rápida desde filtros, usar modo optimizado
       const isQuickLoad = isQuickLoadRef.current;
       
@@ -276,7 +277,7 @@ export default function AdminLiquidationPage() {
         }
       });
     }
-  }, [selectedDate]);
+  }, [selectedDate, quickFilterRange]);
 
   // Recargar tiendas cuando cambien las fechas del rango
   useEffect(() => {
@@ -329,13 +330,89 @@ export default function AdminLiquidationPage() {
         updateStep('mensajeros', { status: 'loading' });
       }
       
-      let fechaParaUsar = selectedDate;
-      if (!fechaParaUsar) {
-        const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
-        fechaParaUsar = getCostaRicaDateISO();
-      }
+      let liquidacionesReales = [];
       
-      const liquidacionesReales = await getLiquidacionesReales(fechaParaUsar);
+      // Si hay un rango de fechas del filtro rápido, cargar datos de todas las fechas
+      if (quickFilterRange && quickFilterRange.start && quickFilterRange.end) {
+        const fechas: string[] = [];
+        const fechaInicio = new Date(quickFilterRange.start + 'T00:00:00');
+        const fechaFin = new Date(quickFilterRange.end + 'T23:59:59');
+        
+        // Generar array de fechas en el rango
+        for (let fecha = new Date(fechaInicio); fecha <= fechaFin; fecha = new Date(fecha.getTime() + 24 * 60 * 60 * 1000)) {
+          fechas.push(fecha.toISOString().split('T')[0]);
+        }
+        
+        // Cargar datos de todas las fechas en paralelo
+        const promesasFechas = fechas.map(fecha => getLiquidacionesReales(fecha));
+        const resultadosFechas = await Promise.all(promesasFechas);
+        
+        // Consolidar datos por mensajero
+        const mensajerosConsolidados = new Map<string, {
+          mensajero: string;
+          pedidos: PedidoTest[];
+          totalCollected: number;
+          sinpePayments: number;
+          cashPayments: number;
+          tarjetaPayments: number;
+          totalSpent: number;
+          initialAmount: number;
+          finalAmount: number;
+          gastos: any[];
+          isLiquidated: boolean;
+        }>();
+        
+        resultadosFechas.forEach((liquidacionesFecha) => {
+          liquidacionesFecha.forEach(liquidacion => {
+            const mensajeroKey = liquidacion.mensajero.trim().toUpperCase();
+            
+            if (mensajerosConsolidados.has(mensajeroKey)) {
+              const existente = mensajerosConsolidados.get(mensajeroKey)!;
+              existente.pedidos = [...existente.pedidos, ...(liquidacion.pedidos || [])];
+              existente.totalCollected += Number(liquidacion.totalCollected || 0);
+              existente.sinpePayments += Number(liquidacion.sinpePayments || 0);
+              existente.cashPayments += Number(liquidacion.cashPayments || 0);
+              existente.tarjetaPayments += Number(liquidacion.tarjetaPayments || 0);
+              existente.totalSpent += Number(liquidacion.totalSpent || 0);
+              // Recalcular finalAmount basado en los totales consolidados
+              existente.finalAmount = existente.initialAmount + existente.cashPayments - existente.totalSpent;
+              existente.gastos = [...existente.gastos, ...(liquidacion.gastos || [])];
+              // Si alguna fecha está liquidada, considerar liquidado
+              if (liquidacion.isLiquidated) {
+                existente.isLiquidated = true;
+              }
+            } else {
+              const initialAmount = Number(liquidacion.initialAmount || 0);
+              const cashPayments = Number(liquidacion.cashPayments || 0);
+              const totalSpent = Number(liquidacion.totalSpent || 0);
+              mensajerosConsolidados.set(mensajeroKey, {
+                mensajero: mensajeroKey,
+                pedidos: liquidacion.pedidos || [],
+                totalCollected: Number(liquidacion.totalCollected || 0),
+                sinpePayments: Number(liquidacion.sinpePayments || 0),
+                cashPayments: cashPayments,
+                tarjetaPayments: Number(liquidacion.tarjetaPayments || 0),
+                totalSpent: totalSpent,
+                initialAmount: initialAmount,
+                finalAmount: initialAmount + cashPayments - totalSpent,
+                gastos: liquidacion.gastos || [],
+                isLiquidated: liquidacion.isLiquidated || false
+              });
+            }
+          });
+        });
+        
+        liquidacionesReales = Array.from(mensajerosConsolidados.values());
+      } else {
+        // Modo normal: una sola fecha
+        let fechaParaUsar = selectedDate;
+        if (!fechaParaUsar) {
+          const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
+          fechaParaUsar = getCostaRicaDateISO();
+        }
+        
+        liquidacionesReales = await getLiquidacionesReales(fechaParaUsar);
+      }
       
       // Paso 2: Procesar pedidos
       if (!isReload) {
@@ -346,14 +423,28 @@ export default function AdminLiquidationPage() {
       // Convertir a formato LiquidationCalculation
       // IMPORTANTE: Verificar el estado de liquidación para cada mensajero
       const { checkLiquidationStatus } = await import('@/lib/supabase-pedidos');
+      let fechaParaUsar = selectedDate;
+      if (!fechaParaUsar && !quickFilterRange) {
+        const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
+        fechaParaUsar = getCostaRicaDateISO();
+      }
+      
+      // Si hay un rango, usar la fecha de inicio para mostrar
+      const fechaParaMostrar = quickFilterRange ? quickFilterRange.start : fechaParaUsar;
+      
       const calculationsData: LiquidationCalculation[] = await Promise.all(
         liquidacionesReales.map(async (liquidacion) => {
-          // Verificar estado actualizado de liquidación
-          const isLiquidated = await checkLiquidationStatus(liquidacion.mensajero, fechaParaUsar);
+          // Si hay rango, no verificar estado (ya está consolidado)
+          // Si no hay rango, verificar estado de liquidación
+          let isLiquidated = liquidacion.isLiquidated;
+          if (!quickFilterRange && fechaParaUsar) {
+            isLiquidated = await checkLiquidationStatus(liquidacion.mensajero, fechaParaUsar);
+          }
+          
           return {
             messengerId: liquidacion.mensajero,
             messengerName: liquidacion.mensajero,
-            routeDate: fechaParaUsar,
+            routeDate: fechaParaMostrar || fechaParaUsar,
             initialAmount: 0, // Se puede editar después
             totalCollected: liquidacion.totalCollected || 0,
             totalSpent: liquidacion.totalSpent || 0,
@@ -1523,7 +1614,10 @@ export default function AdminLiquidationPage() {
                 <Input
                   type="date"
                   value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value);
+                    setQuickFilterRange(null); // Limpiar rango cuando se cambia manualmente
+                  }}
                   className="w-40 h-10 bg-white/10 backdrop-blur-sm border-white/20 text-white placeholder:text-white/70 focus:ring-2 focus:ring-white/50"
                   disabled={isLoadingData}
                 />
@@ -1532,6 +1626,7 @@ export default function AdminLiquidationPage() {
                   onClick={() => {
                     const today = new Date().toISOString().split('T')[0];
                     setSelectedDate(today);
+                    setQuickFilterRange(null); // Limpiar rango cuando se cambia manualmente
                   }}
                   disabled={isLoadingData}
                   className="bg-white/10 backdrop-blur-sm border-white/20 text-white hover:bg-white/20 transition-all duration-200 hover:scale-105"
@@ -1938,11 +2033,33 @@ export default function AdminLiquidationPage() {
       {/* Filtros Rápidos de Fecha */}
       <Card className="border-2 border-sky-200 bg-gradient-to-br from-sky-50 to-indigo-50">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sky-800">
-            <Filter className="w-5 h-5" />
-            Filtros Rápidos de Fecha
-            {isQuickFilterLoading && (
-              <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
+          <CardTitle className="flex items-center justify-between text-sky-800">
+            <div className="flex items-center gap-2">
+              <Filter className="w-5 h-5" />
+              Filtros Rápidos de Fecha
+              {isQuickFilterLoading && (
+                <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
+              )}
+              {quickFilterRange && (
+                <Badge className="bg-sky-600 text-white ml-2">
+                  {quickFilterRange.start} a {quickFilterRange.end}
+                </Badge>
+              )}
+            </div>
+            {quickFilterRange && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  setQuickFilterRange(null);
+                  const { getCostaRicaDateISO } = await import('@/lib/supabase-pedidos');
+                  setSelectedDate(getCostaRicaDateISO());
+                }}
+                className="text-sky-600 hover:text-sky-800 hover:bg-sky-100"
+              >
+                <X className="w-4 h-4 mr-1" />
+                Limpiar filtro
+              </Button>
             )}
           </CardTitle>
         </CardHeader>
@@ -1955,9 +2072,14 @@ export default function AdminLiquidationPage() {
               onClick={() => {
                 isQuickLoadRef.current = true;
                 setIsQuickFilterLoading(true);
-                const fecha = new Date();
-                fecha.setDate(fecha.getDate() - 7);
-                setSelectedDate(fecha.toISOString().split('T')[0]);
+                const hoy = new Date();
+                const fechaInicio = new Date();
+                fechaInicio.setDate(fechaInicio.getDate() - 7);
+                setQuickFilterRange({
+                  start: fechaInicio.toISOString().split('T')[0],
+                  end: hoy.toISOString().split('T')[0]
+                });
+                setSelectedDate(''); // Limpiar fecha específica
               }}
               className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all"
             >
@@ -1977,9 +2099,14 @@ export default function AdminLiquidationPage() {
               onClick={() => {
                 isQuickLoadRef.current = true;
                 setIsQuickFilterLoading(true);
-                const fecha = new Date();
-                fecha.setDate(fecha.getDate() - 14);
-                setSelectedDate(fecha.toISOString().split('T')[0]);
+                const hoy = new Date();
+                const fechaInicio = new Date();
+                fechaInicio.setDate(fechaInicio.getDate() - 14);
+                setQuickFilterRange({
+                  start: fechaInicio.toISOString().split('T')[0],
+                  end: hoy.toISOString().split('T')[0]
+                });
+                setSelectedDate(''); // Limpiar fecha específica
               }}
               className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all"
             >
@@ -1999,9 +2126,14 @@ export default function AdminLiquidationPage() {
               onClick={() => {
                 isQuickLoadRef.current = true;
                 setIsQuickFilterLoading(true);
-                const fecha = new Date();
-                fecha.setDate(fecha.getDate() - 30);
-                setSelectedDate(fecha.toISOString().split('T')[0]);
+                const hoy = new Date();
+                const fechaInicio = new Date();
+                fechaInicio.setDate(fechaInicio.getDate() - 30);
+                setQuickFilterRange({
+                  start: fechaInicio.toISOString().split('T')[0],
+                  end: hoy.toISOString().split('T')[0]
+                });
+                setSelectedDate(''); // Limpiar fecha específica
               }}
               className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all"
             >
@@ -2023,7 +2155,11 @@ export default function AdminLiquidationPage() {
                 setIsQuickFilterLoading(true);
                 const hoy = new Date();
                 const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-                setSelectedDate(primerDia.toISOString().split('T')[0]);
+                setQuickFilterRange({
+                  start: primerDia.toISOString().split('T')[0],
+                  end: hoy.toISOString().split('T')[0]
+                });
+                setSelectedDate(''); // Limpiar fecha específica
               }}
               className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all"
             >
@@ -2045,7 +2181,12 @@ export default function AdminLiquidationPage() {
                 setIsQuickFilterLoading(true);
                 const hoy = new Date();
                 const primerDiaMesPasado = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-                setSelectedDate(primerDiaMesPasado.toISOString().split('T')[0]);
+                const ultimoDiaMesPasado = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+                setQuickFilterRange({
+                  start: primerDiaMesPasado.toISOString().split('T')[0],
+                  end: ultimoDiaMesPasado.toISOString().split('T')[0]
+                });
+                setSelectedDate(''); // Limpiar fecha específica
               }}
               className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all"
             >
@@ -2176,7 +2317,9 @@ export default function AdminLiquidationPage() {
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Calculator className="w-5 h-5" />
-              Liquidaciones por Ruta - {selectedDate}
+              Liquidaciones por Ruta - {quickFilterRange 
+                ? `${quickFilterRange.start} a ${quickFilterRange.end}` 
+                : selectedDate}
             </CardTitle>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded-lg border border-green-200">

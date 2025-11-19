@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -93,7 +93,7 @@ const menuItems = {
   ],
 };
 
-export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: boolean) => void }) {
+export const Sidebar = memo(function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: boolean) => void }) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
@@ -125,30 +125,37 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
     };
   }, [isOpen]);
 
+  // Memoizar los items del menú para evitar recálculos innecesarios
+  const userMenuItems = useMemo(() => {
+    if (!user) return [];
+    
+    // Obtener menú base según el rol
+    let items = menuItems[user.role] || [];
+    
+    // Master usa el mismo menú que admin
+    if (user.role === 'master') {
+      items = menuItems['admin'];
+    }
+    
+    // Fallback para mensajeros anteriores con flag de líder
+    if (user.role === 'mensajero' && user.isMessengerLeader) {
+      items = menuItems['mensajero-lider'];
+    }
+
+    // Agregar botón de escaneo para mensajeros
+    if (user.role === 'mensajero' || user.role === 'mensajero-lider' || user.role === 'mensajero-extra') {
+      const messengerName = user.name || '';
+      const escaneoUrl = `https://inventario-magic-stars.vercel.app/?mensajero=${encodeURIComponent(messengerName)}`;
+      items = [
+        ...items,
+        { icon: ScanLine, label: 'Escaneo', href: escaneoUrl, isExternal: true },
+      ];
+    }
+    
+    return items;
+  }, [user?.role, user?.isMessengerLeader, user?.name]);
+
   if (!user) return null;
-
-  // Obtener menú base según el rol
-  let userMenuItems = menuItems[user.role] || [];
-  
-  // Master usa el mismo menú que admin
-  if (user.role === 'master') {
-    userMenuItems = menuItems['admin'];
-  }
-  
-  // Fallback para mensajeros anteriores con flag de líder
-  if (user.role === 'mensajero' && user.isMessengerLeader) {
-    userMenuItems = menuItems['mensajero-lider'];
-  }
-
-  // Agregar botón de escaneo para mensajeros
-  if (user.role === 'mensajero' || user.role === 'mensajero-lider' || user.role === 'mensajero-extra') {
-    const messengerName = user.name || '';
-    const escaneoUrl = `https://inventario-magic-stars.vercel.app/?mensajero=${encodeURIComponent(messengerName)}`;
-    userMenuItems = [
-      ...userMenuItems,
-      { icon: ScanLine, label: 'Escaneo', href: escaneoUrl, isExternal: true },
-    ];
-  }
 
   const SidebarContent = () => (
     <>
@@ -217,7 +224,7 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
                 rel="noopener noreferrer"
                 onClick={() => setIsOpen(false)}
                 className={cn(
-                  "group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 min-h-[44px]",
+                  "group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors duration-150 min-h-[44px]",
                   "hover:bg-gradient-to-r hover:from-sky-50 hover:to-indigo-50 dark:hover:from-sky-950/30 dark:hover:to-indigo-950/30",
                   "hover:shadow-sm hover:scale-[1.02] active:scale-[0.98]",
                   "text-slate-700 dark:text-slate-300 border border-transparent hover:border-slate-200/50 dark:hover:border-slate-700/50"
@@ -237,11 +244,12 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
               href={item.href}
               onClick={() => setIsOpen(false)}
               className={cn(
-                "group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 min-h-[44px] relative",
+                "group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors duration-150 min-h-[44px] relative",
                 isActive 
                   ? "bg-gradient-to-r from-sky-500 via-indigo-500 to-purple-500 text-white shadow-lg shadow-sky-500/20 scale-[1.02]" 
                   : "hover:bg-gradient-to-r hover:from-sky-50 hover:to-indigo-50 dark:hover:from-sky-950/30 dark:hover:to-indigo-950/30 hover:shadow-sm hover:scale-[1.02] active:scale-[0.98] text-slate-700 dark:text-slate-300 border border-transparent hover:border-slate-200/50 dark:hover:border-slate-700/50"
               )}
+              prefetch={true}
               role="menuitem"
               tabIndex={0}
               aria-current={isActive ? "page" : undefined}
@@ -274,7 +282,7 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
         {/* Botón de cerrar sesión - siempre visible - Mejorado */}
         <Button
           variant="ghost"
-          className="w-full justify-start gap-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gradient-to-r hover:from-red-50 hover:to-rose-50 dark:hover:from-red-950/30 dark:hover:to-rose-950/30 min-h-[42px] px-3 py-2.5 transition-all duration-200 rounded-xl border border-transparent hover:border-red-200/50 dark:hover:border-red-800/50 hover:shadow-sm hover:scale-[1.02] active:scale-[0.98] group/logout"
+          className="w-full justify-start gap-2.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gradient-to-r hover:from-red-50 hover:to-rose-50 dark:hover:from-red-950/30 dark:hover:to-rose-950/30 min-h-[42px] px-3 py-2.5 transition-colors duration-150 rounded-xl border border-transparent hover:border-red-200/50 dark:hover:border-red-800/50 hover:shadow-sm hover:scale-[1.02] active:scale-[0.98] group/logout"
           onClick={logout}
           aria-label="Cerrar sesión"
         >
@@ -295,7 +303,7 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
       <Button
         variant="ghost"
         size="icon"
-        className="lg:hidden fixed top-4 left-4 sm:top-6 sm:left-6 z-[60] bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-800 border border-slate-200/80 dark:border-slate-700/80 shadow-lg hover:shadow-xl hover:bg-gradient-to-br hover:from-sky-50 hover:to-indigo-50 dark:hover:from-sky-950 dark:hover:to-indigo-950 transition-all duration-200 hover:scale-110 active:scale-95 w-12 h-12 sm:w-14 sm:h-14 rounded-full"
+        className="lg:hidden fixed top-4 left-4 sm:top-6 sm:left-6 z-[60] bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-800 border border-slate-200/80 dark:border-slate-700/80 shadow-lg hover:shadow-xl hover:bg-gradient-to-br hover:from-sky-50 hover:to-indigo-50 dark:hover:from-sky-950 dark:hover:to-indigo-950 transition-colors duration-150 hover:scale-110 active:scale-95 w-12 h-12 sm:w-14 sm:h-14 rounded-full"
         onClick={() => setIsOpen(true)}
         aria-label="Abrir menú de navegación"
         aria-expanded={isOpen}
@@ -322,7 +330,7 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
           {/* Sidebar móvil con z-index más alto - Mejorado */}
           <aside 
             id="mobile-sidebar"
-            className="lg:hidden fixed left-0 top-0 h-full w-72 sm:w-80 bg-gradient-to-b from-white/98 to-slate-50/98 dark:from-slate-950/98 dark:to-slate-900/98 backdrop-blur-lg border-r border-slate-200/80 dark:border-slate-800/80 z-[80] shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col"
+            className="lg:hidden fixed left-0 top-0 h-full w-72 sm:w-80 bg-gradient-to-b from-white/98 to-slate-50/98 dark:from-slate-950/98 dark:to-slate-900/98 backdrop-blur-lg border-r border-slate-200/80 dark:border-slate-800/80 z-[80] shadow-2xl transform transition-transform duration-200 ease-out flex flex-col"
             role="navigation"
             aria-label="Menú de navegación principal"
           >
@@ -338,7 +346,7 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsOpen(false)}
-                className="relative hover:bg-white/20 text-white w-10 h-10 rounded-xl flex-shrink-0 transition-all duration-200 hover:scale-110"
+                className="relative hover:bg-white/20 text-white w-10 h-10 rounded-xl flex-shrink-0 transition-colors duration-150 hover:scale-110"
                 aria-label="Cerrar menú de navegación"
               >
                 <X className="w-5 h-5" />
@@ -352,4 +360,4 @@ export function Sidebar({ onMobileMenuChange }: { onMobileMenuChange?: (isOpen: 
       )}
     </>
   );
-}
+});

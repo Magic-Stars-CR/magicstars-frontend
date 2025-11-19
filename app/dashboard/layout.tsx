@@ -42,7 +42,7 @@ export default function DashboardLayout({
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50/50 overflow-hidden">
       <Sidebar onMobileMenuChange={setIsMobileMenuOpen} />
       <main className={cn(
-        "flex-1 overflow-auto transition-all duration-300 ease-in-out",
+        "flex-1 overflow-auto transition-opacity duration-150 ease-out",
         "min-w-0", // Evita que el contenido se desborde
         "scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent", // Scrollbar personalizado
         "flex flex-col" // Flex para optimizar espacio
