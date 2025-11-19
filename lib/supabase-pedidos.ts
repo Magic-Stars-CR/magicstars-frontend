@@ -1782,7 +1782,7 @@ export const getLiquidacionesRealesByTienda = async (fecha: string): Promise<{
       
       // Calcular gastos totales:
       // - Para ALL STARS/MAGIC STARS: sumar TODOS los gastos de TODOS los mensajeros
-      // - Para otras tiendas: solo gastos de mensajeros que trabajaron en esa tienda
+      // - Para otras tiendas: NO incluir gastos (solo ALL STARS tiene gastos)
       let totalSpent = 0;
       let gastosParaTienda = [];
       
@@ -1792,22 +1792,17 @@ export const getLiquidacionesRealesByTienda = async (fecha: string): Promise<{
         gastosParaTienda = gastosData.flatMap(g => g.gastos);
         console.log(`💰 ALL STARS: Sumando TODOS los gastos de ${gastosData.length} mensajeros = ${totalSpent}`);
       } else {
-        // Para otras tiendas: solo gastos de mensajeros que trabajaron en esa tienda
-        const mensajerosDeLaTienda = Array.from(new Set(
-          pedidos.map(p => p.mensajero_concretado || p.mensajero_asignado).filter(Boolean)
-        ));
-        totalSpent = gastosData
-          .filter(g => mensajerosDeLaTienda.includes(g.mensajero))
-          .reduce((sum, g) => sum + g.totalGastos, 0);
-        gastosParaTienda = gastosData
-          .filter(g => mensajerosDeLaTienda.includes(g.mensajero))
-          .flatMap(g => g.gastos);
+        // Para otras tiendas: NO incluir gastos (los gastos son SOLO para ALL STARS)
+        totalSpent = 0;
+        gastosParaTienda = [];
+        console.log(`💰 ${tienda}: No incluye gastos (solo ALL STARS tiene gastos)`);
       }
 
       const initialAmount = 0; // Monto inicial por defecto
       // Solo restar gastos si es ALL STARS o MAGIC STARS, para otras tiendas el monto final es el total recaudado
+      // Asegurar que finalAmount no sea negativo para ALL STARS (si los gastos superan el efectivo, debe ser 0 mínimo)
       const finalAmount = esAllStars 
-        ? initialAmount + cashPayments - totalSpent
+        ? Math.max(0, initialAmount + cashPayments - totalSpent)  // No permitir valores negativos
         : totalCollected;
 
       liquidaciones.push({

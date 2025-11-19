@@ -531,14 +531,72 @@ export default function AdminLiquidationPage() {
         throw new Error(`Error HTTP: ${response.status}`);
       }
 
-      const pendingLiquidations = await response.json();
+      const pendingLiquidationsRaw = await response.json();
       
-      console.log('📋 Liquidaciones pendientes obtenidas:', pendingLiquidations);
-      console.log('📊 Total de liquidaciones pendientes:', Array.isArray(pendingLiquidations) ? pendingLiquidations.length : 'No es un array');
+      console.log('📋 Liquidaciones pendientes obtenidas:', pendingLiquidationsRaw);
+      console.log('📊 Total de liquidaciones pendientes:', Array.isArray(pendingLiquidationsRaw) ? pendingLiquidationsRaw.length : 'No es un array');
       
       // Guardar liquidaciones pendientes para la notificación
-      if (Array.isArray(pendingLiquidations) && pendingLiquidations.length > 0) {
-        setPendingLiquidations(pendingLiquidations);
+      if (Array.isArray(pendingLiquidationsRaw) && pendingLiquidationsRaw.length > 0) {
+        // Obtener datos completos de liquidación para cada fecha/mensajero
+        const { getLiquidacionesReales } = await import('@/lib/supabase-pedidos');
+        
+        // Agrupar por fecha única para optimizar las consultas
+        const fechasUnicas = Array.from(new Set(pendingLiquidationsRaw.map((liq: any) => liq.fecha)));
+        
+        // Crear un mapa para almacenar las liquidaciones completas por fecha
+        const liquidacionesCompletasMap = new Map<string, Map<string, any>>();
+        
+        // Obtener liquidaciones completas para cada fecha
+        for (const fecha of fechasUnicas) {
+          try {
+            const liquidacionesDeFecha = await getLiquidacionesReales(fecha);
+            const liquidacionesMap = new Map<string, any>();
+            
+            liquidacionesDeFecha.forEach(liq => {
+              liquidacionesMap.set(liq.mensajero.toUpperCase(), {
+                totalCollected: liq.totalCollected,
+                cashPayments: liq.cashPayments,
+                initialAmount: liq.initialAmount,
+                finalAmount: liq.finalAmount,
+                totalSpent: liq.totalSpent
+              });
+            });
+            
+            liquidacionesCompletasMap.set(fecha, liquidacionesMap);
+          } catch (error) {
+            console.error(`❌ Error obteniendo liquidaciones para fecha ${fecha}:`, error);
+          }
+        }
+        
+        // Combinar los datos básicos con los datos completos
+        const pendingLiquidationsWithData = pendingLiquidationsRaw.map((liquidation: any) => {
+          const fecha = liquidation.fecha;
+          const mensajero = liquidation.mensajero?.toUpperCase() || '';
+          const liquidacionesDeFecha = liquidacionesCompletasMap.get(fecha);
+          const liquidacionCompleta = liquidacionesDeFecha?.get(mensajero);
+          
+          if (liquidacionCompleta) {
+            return {
+              ...liquidation,
+              total_recaudado: liquidacionCompleta.totalCollected || liquidation.total_recaudado || '0',
+              plata_inicial: liquidacionCompleta.initialAmount?.toString() || '0',
+              monto_final: liquidacionCompleta.finalAmount?.toString() || '0',
+              cashPayments: liquidacionCompleta.cashPayments || 0,
+              totalSpent: liquidacionCompleta.totalSpent || 0
+            };
+          }
+          
+          // Si no se encontraron datos completos, usar los datos básicos
+          return {
+            ...liquidation,
+            total_recaudado: liquidation.total_recaudado || '0',
+            plata_inicial: '0',
+            monto_final: '0'
+          };
+        });
+        
+        setPendingLiquidations(pendingLiquidationsWithData);
         setShowPendingNotification(true);
       } else {
         setPendingLiquidations([]);
@@ -546,8 +604,8 @@ export default function AdminLiquidationPage() {
       }
       
       // Mostrar detalles de cada liquidación pendiente
-      if (Array.isArray(pendingLiquidations)) {
-        pendingLiquidations.forEach((liquidation, index) => {
+      if (Array.isArray(pendingLiquidationsRaw)) {
+        pendingLiquidationsRaw.forEach((liquidation, index) => {
           console.log(`📄 Liquidación ${index + 1}:`, {
             fecha: liquidation.fecha,
             mensajero: liquidation.mensajero,
@@ -557,10 +615,10 @@ export default function AdminLiquidationPage() {
           });
         });
       } else {
-        console.log('⚠️ La respuesta no es un array:', pendingLiquidations);
+        console.log('⚠️ La respuesta no es un array:', pendingLiquidationsRaw);
       }
 
-      return pendingLiquidations;
+      return pendingLiquidationsRaw;
       
     } catch (error) {
       console.error('❌ Error obteniendo liquidaciones pendientes:', error);
@@ -4145,13 +4203,19 @@ export default function AdminLiquidationPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="font-semibold text-green-600">
-                          {formatCurrency(parseFloat(liquidation.total_recaudado || '0'))}
+                          {formatCurrency(typeof liquidation.total_recaudado === 'number' 
+                            ? liquidation.total_recaudado 
+                            : parseFloat(liquidation.total_recaudado || '0'))}
                         </TableCell>
                         <TableCell className="text-gray-600">
-                          {formatCurrency(parseFloat(liquidation.plata_inicial || '0'))}
+                          {formatCurrency(typeof liquidation.plata_inicial === 'number' 
+                            ? liquidation.plata_inicial 
+                            : parseFloat(liquidation.plata_inicial || '0'))}
                         </TableCell>
                         <TableCell className="font-bold text-purple-600">
-                          {formatCurrency(parseFloat(liquidation.monto_final || '0'))}
+                          {formatCurrency(typeof liquidation.monto_final === 'number' 
+                            ? liquidation.monto_final 
+                            : parseFloat(liquidation.monto_final || '0'))}
                         </TableCell>
                         <TableCell>
                             <Button

@@ -236,28 +236,35 @@ export function PedidosTable({
   }
 
   return (
-    <Card className="shadow-sm">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2">
-          <Package className="w-5 h-5 text-blue-600" />
-          Pedidos ({pedidos.length})
-        </CardTitle>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <BarChart3 className="w-4 h-4 mr-2" />
-            Métricas
-          </Button>
-        </div>
-      </CardHeader>
-      
-      <CardContent>
-        <div className="rounded-md border overflow-hidden">
-          <div className="overflow-x-auto">
+    <div className="relative group">
+      <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-400 to-teal-400 rounded-2xl opacity-10 group-hover:opacity-20 blur transition duration-300"></div>
+      <Card className="relative border-0 shadow-lg bg-gradient-to-br from-emerald-50/30 to-teal-50/30 dark:from-emerald-950/30 dark:to-teal-950/30">
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-md">
+                <Package className="w-5 h-5" />
+              </div>
+              <div>
+                <CardTitle className="text-lg font-semibold">Lista de Pedidos</CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Información completa de todos los pedidos del sistema
+                </p>
+              </div>
+            </div>
+            <Badge variant="secondary" className="text-sm px-4 py-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
+              {pedidos.length} pedido{pedidos.length === 1 ? '' : 's'}
+            </Badge>
+          </div>
+        </CardHeader>
+        
+        <CardContent>
+          <div className="overflow-x-auto rounded-lg border border-emerald-200/50 dark:border-emerald-800/50">
             <Table>
               <TableHeader>
-                <TableRow className="bg-gray-50">
+                <TableRow className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/50 dark:to-teal-950/50 border-b border-emerald-200 dark:border-emerald-800">
                   <TableHead 
-                    className="min-w-[120px] cursor-pointer hover:bg-gray-100"
+                    className="font-semibold min-w-[120px] cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
                     onClick={() => handleSort('id_pedido')}
                   >
                     <div className="flex items-center gap-2">
@@ -267,9 +274,9 @@ export function PedidosTable({
                       )}
                     </div>
                   </TableHead>
-                  <TableHead className="min-w-[180px]">Cliente</TableHead>
+                  <TableHead className="font-semibold min-w-[180px]">Cliente</TableHead>
                   <TableHead 
-                    className="min-w-[100px] cursor-pointer hover:bg-gray-100"
+                    className="font-semibold min-w-[100px] cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
                     onClick={() => handleSort('valor_total')}
                   >
                     <div className="flex items-center gap-2">
@@ -279,12 +286,12 @@ export function PedidosTable({
                       )}
                     </div>
                   </TableHead>
-                  <TableHead className="min-w-[120px]">Método Pago</TableHead>
-                  <TableHead className="min-w-[200px]">Dirección Completa</TableHead>
-                  <TableHead className="min-w-[120px]">Tienda</TableHead>
-                  <TableHead className="min-w-[120px]">Mensajero</TableHead>
+                  <TableHead className="font-semibold min-w-[120px]">Método Pago</TableHead>
+                  <TableHead className="font-semibold min-w-[200px]">Dirección Completa</TableHead>
+                  <TableHead className="font-semibold min-w-[120px]">Tienda</TableHead>
+                  <TableHead className="font-semibold min-w-[120px]">Mensajero</TableHead>
                   <TableHead 
-                    className="min-w-[180px] cursor-pointer hover:bg-gray-100"
+                    className="font-semibold min-w-[180px] cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
                     onClick={() => handleSort('fecha_creacion')}
                   >
                     <div className="flex items-center gap-2">
@@ -294,14 +301,18 @@ export function PedidosTable({
                       )}
                     </div>
                   </TableHead>
-                  <TableHead className="min-w-[120px]">Estado</TableHead>
-                  <TableHead className="min-w-[200px]">Notas</TableHead>
-                  <TableHead className="min-w-[100px]">Acciones</TableHead>
+                  <TableHead className="font-semibold min-w-[120px]">Estado</TableHead>
+                  <TableHead className="font-semibold min-w-[200px]">Notas</TableHead>
+                  <TableHead className="text-right font-semibold min-w-[100px]">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedPedidos.map((pedido) => (
-                  <TableRow key={pedido.id_pedido} className="hover:bg-gray-50 transition-colors">
+                {sortedPedidos.map((pedido, index) => (
+                  <TableRow 
+                    key={pedido.id_pedido} 
+                    className="hover:bg-gradient-to-r hover:from-emerald-50/50 hover:to-teal-50/50 dark:hover:from-emerald-950/30 dark:hover:to-teal-950/30 transition-all duration-200 border-b border-emerald-100/50 dark:border-emerald-900/30"
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         <Package className="w-4 h-4 text-blue-600" />
@@ -555,8 +566,22 @@ export function PedidosTable({
               </TableBody>
             </Table>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+
+          {pedidos.length === 0 && (
+            <div className="text-center py-12">
+              <div className="flex flex-col items-center gap-4">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                  <Package className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-lg font-semibold text-foreground mb-1">No se encontraron pedidos</p>
+                  <p className="text-sm text-muted-foreground">Intenta ajustar los filtros de búsqueda</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

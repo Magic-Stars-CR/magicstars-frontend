@@ -532,12 +532,13 @@ export default function TiendaOrdersPage() {
 
       {/* Filtros de Pedidos */}
       <PedidosFilters
-        filters={filters}
+        filters={{ ...filters, searchQuery: filters.searchTerm }}
         filterOptions={filterOptions}
         stats={stats}
         onFilterChange={updateFilters}
         onClearFilters={clearAllFilters}
         hasActiveFilters={hasActiveFilters}
+        onExecuteSearch={loadPedidos}
       />
 
       {/* Tabla de Pedidos - Estilo Mensajeros */}

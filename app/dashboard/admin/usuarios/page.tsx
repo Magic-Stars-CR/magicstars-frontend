@@ -345,7 +345,7 @@ export default function UsuariosPage() {
 
   const openEditModal = (usuario: UsuarioRow) => {
     // Verificar si el usuario actual es master y está intentando editar un admin o master
-    if (currentUser?.role === 'master' && (usuario.rol === 'admin' || usuario.rol === 'master')) {
+    if (currentUser && currentUser.role === 'master' && (usuario.rol === 'admin' || usuario.rol === 'master')) {
       toast({
         variant: 'destructive',
         title: 'Acceso denegado',
@@ -446,7 +446,7 @@ export default function UsuariosPage() {
     }
 
     // Verificar restricciones para master
-    if (currentUser?.role === 'master') {
+    if (currentUser && currentUser.role === 'master') {
       // Master no puede crear admin o master
       if (formMode === 'create' && (payload.rol === 'admin' || payload.rol === 'master')) {
         setFormError('Los usuarios master no pueden crear administradores ni otros masters.');
@@ -536,7 +536,7 @@ export default function UsuariosPage() {
     if (!deleteTarget) return;
 
     // Verificar si el usuario actual es master y está intentando eliminar un admin o master
-    if (currentUser?.role === 'master' && (deleteTarget.rol === 'admin' || deleteTarget.rol === 'master')) {
+    if (currentUser && currentUser.role === 'master' && (deleteTarget.rol === 'admin' || deleteTarget.rol === 'master')) {
       toast({
         variant: 'destructive',
         title: 'Acceso denegado',
@@ -1088,9 +1088,9 @@ export default function UsuariosPage() {
                           size="icon"
                           onClick={() => openEditModal(usuario)}
                           aria-label="Editar usuario"
-                          disabled={currentUser?.role === 'master' && (usuario.rol === 'admin' || usuario.rol === 'master')}
+                          disabled={!!(currentUser && currentUser.role === 'master' && (usuario.rol === 'admin' || usuario.rol === 'master'))}
                             className="transition-all duration-200 hover:scale-110 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={currentUser?.role === 'master' && (usuario.rol === 'admin' || usuario.rol === 'master') ? 'No puedes editar administradores ni masters' : 'Editar usuario'}
+                          title={currentUser && currentUser.role === 'master' && (usuario.rol === 'admin' || usuario.rol === 'master') ? 'No puedes editar administradores ni masters' : 'Editar usuario'}
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
@@ -1100,8 +1100,8 @@ export default function UsuariosPage() {
                             className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all duration-200 hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
                           onClick={() => setDeleteTarget(usuario)}
                           aria-label="Eliminar usuario"
-                          disabled={currentUser?.role === 'master' && (usuario.rol === 'admin' || usuario.rol === 'master')}
-                          title={currentUser?.role === 'master' && (usuario.rol === 'admin' || usuario.rol === 'master') ? 'No puedes eliminar administradores ni masters' : 'Eliminar usuario'}
+                          disabled={!!(currentUser && currentUser.role === 'master' && (usuario.rol === 'admin' || usuario.rol === 'master'))}
+                          title={currentUser && currentUser.role === 'master' && (usuario.rol === 'admin' || usuario.rol === 'master') ? 'No puedes eliminar administradores ni masters' : 'Eliminar usuario'}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
