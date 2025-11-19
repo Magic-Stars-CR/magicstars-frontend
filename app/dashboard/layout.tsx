@@ -24,8 +24,12 @@ export default function DashboardLayout({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin" />
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
+        <div className="relative w-6 h-6">
+          <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+          <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 border-b-purple-500 animate-spin"></div>
+        </div>
+        <span className="text-sm text-muted-foreground">Cargando...</span>
       </div>
     );
   }

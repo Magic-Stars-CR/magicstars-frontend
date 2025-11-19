@@ -187,8 +187,12 @@ export default function AdminInventoryPage() {
 
   if (isInitialLoading) {
     return (
-      <div className="flex h-80 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="flex flex-col items-center justify-center gap-3 py-12">
+        <div className="relative w-6 h-6">
+          <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+          <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 border-b-purple-500 animate-spin"></div>
+        </div>
+        <span className="text-sm text-muted-foreground">Cargando inventario...</span>
       </div>
     );
   }
@@ -438,7 +442,10 @@ export default function AdminInventoryPage() {
               </div>
               {isRefreshing && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <div className="relative w-4 h-4">
+                    <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+                    <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 animate-spin"></div>
+                  </div>
                   Actualizando...
                 </div>
               )}

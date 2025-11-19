@@ -876,8 +876,12 @@ export default function AdminRoutesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin" />
+      <div className="flex flex-col items-center justify-center gap-3 py-12">
+        <div className="relative w-6 h-6">
+          <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+          <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 border-b-purple-500 animate-spin"></div>
+        </div>
+        <span className="text-sm text-muted-foreground">Cargando rutas...</span>
       </div>
     );
   }
@@ -922,7 +926,10 @@ export default function AdminRoutesPage() {
             >
               {generatingRoutes ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <div className="relative w-4 h-4">
+                    <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+                    <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 animate-spin"></div>
+                  </div>
                   <span>Generando...</span>
                 </>
               ) : (
@@ -1371,7 +1378,10 @@ export default function AdminRoutesPage() {
               >
                 {loadingUnassigned ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <div className="relative w-4 h-4 mr-2">
+                      <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+                      <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 animate-spin"></div>
+                    </div>
                     Cargando...
                   </>
                 ) : (
@@ -1548,7 +1558,10 @@ export default function AdminRoutesPage() {
             >
               {loading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <div className="relative w-4 h-4 mr-2">
+                    <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+                    <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 animate-spin"></div>
+                  </div>
                   Generando...
                 </>
               ) : (
@@ -1638,7 +1651,10 @@ export default function AdminRoutesPage() {
             >
               {loading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <div className="relative w-4 h-4 mr-2">
+                    <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+                    <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 animate-spin"></div>
+                  </div>
                   Reasignando...
                 </>
               ) : (

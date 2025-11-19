@@ -597,11 +597,12 @@ export default function UsuariosPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p>Cargando usuarios...</p>
+      <div className="flex flex-col items-center justify-center gap-3 py-12 min-h-[60vh]">
+        <div className="relative w-6 h-6">
+          <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+          <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 border-b-purple-500 animate-spin"></div>
         </div>
+        <p className="text-sm text-muted-foreground">Cargando usuarios...</p>
       </div>
     );
   }

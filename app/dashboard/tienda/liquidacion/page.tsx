@@ -241,11 +241,12 @@ export default function TiendaLiquidacion() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 mx-auto mb-4 text-blue-600 animate-spin" />
-          <p className="text-muted-foreground">Cargando liquidación...</p>
+      <div className="flex flex-col items-center justify-center gap-3 py-12 min-h-[60vh]">
+        <div className="relative w-6 h-6">
+          <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+          <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 border-b-purple-500 animate-spin"></div>
         </div>
+        <p className="text-sm text-muted-foreground">Cargando liquidación...</p>
       </div>
     );
   }

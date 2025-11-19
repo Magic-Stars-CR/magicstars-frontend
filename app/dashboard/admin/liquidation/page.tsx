@@ -1470,11 +1470,14 @@ export default function AdminLiquidationPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 space-y-4">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-        <p className="text-gray-600">Cargando liquidaciones de Supabase...</p>
-        <div className="text-sm text-gray-500">
-          Obteniendo datos de mensajeros y pedidos reales
+      <div className="flex flex-col items-center justify-center gap-3 py-12 min-h-[60vh]">
+        <div className="relative w-6 h-6">
+          <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+          <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 border-b-purple-500 animate-spin"></div>
+        </div>
+        <p className="text-sm text-muted-foreground">Cargando liquidaciones...</p>
+        <div className="text-xs text-muted-foreground">
+          Obteniendo datos de mensajeros y pedidos
         </div>
       </div>
     );
@@ -1506,8 +1509,11 @@ export default function AdminLiquidationPage() {
           <div className="flex flex-wrap items-center gap-3">
             {isLoadingData && (
               <div className="flex items-center gap-2 text-sm text-white bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg border border-white/30">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Cargando datos...</span>
+                <div className="relative w-4 h-4">
+                  <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+                  <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 animate-spin"></div>
+                </div>
+                <span className="text-sm">Cargando datos...</span>
               </div>
             )}
             
@@ -2341,8 +2347,11 @@ export default function AdminLiquidationPage() {
           {loadingRangoFechas && (
             <div className="flex items-center justify-center py-8">
               <div className="flex items-center gap-3 text-blue-600">
-                <Loader2 className="w-6 h-6 animate-spin" />
-                <span className="text-lg font-medium">Cargando datos del rango de fechas...</span>
+                <div className="relative w-5 h-5">
+                  <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+                  <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 border-b-purple-500 animate-spin"></div>
+                </div>
+                <span className="text-sm font-medium text-muted-foreground">Cargando datos del rango de fechas...</span>
                   </div>
                 </div>
           )}
@@ -4055,7 +4064,10 @@ export default function AdminLiquidationPage() {
               </div>
             ) : (
               // Spinner de carga
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <div className="relative w-6 h-6">
+                <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+                <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 border-b-purple-500 animate-spin"></div>
+              </div>
             )}
             <div className="text-center">
               <h3 className={`text-lg font-semibold ${
@@ -4412,8 +4424,11 @@ export default function AdminLiquidationPage() {
             
             {loadingAllExpenses ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                <span className="ml-2 text-gray-600">Cargando gastos...</span>
+                <div className="relative w-5 h-5">
+                  <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+                  <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 border-b-purple-500 animate-spin"></div>
+                </div>
+                <span className="text-sm text-muted-foreground">Cargando gastos...</span>
               </div>
             ) : allExpensesData.length === 0 ? (
               <div className="text-center py-8">

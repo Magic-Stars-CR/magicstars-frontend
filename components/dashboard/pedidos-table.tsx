@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { 
   Package, 
   CheckCircle, 
@@ -225,10 +226,13 @@ export function PedidosTable({
   if (loading) {
     return (
       <Card>
-        <CardContent className="p-8">
-          <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <span className="ml-2 text-gray-600">Cargando pedidos...</span>
+        <CardContent className="p-4">
+          <div className="flex flex-col items-center justify-center gap-3 py-6">
+            <div className="relative w-6 h-6">
+              <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+              <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 border-b-purple-500 animate-spin"></div>
+            </div>
+            <span className="text-sm text-muted-foreground">Cargando pedidos...</span>
           </div>
         </CardContent>
       </Card>
@@ -259,51 +263,64 @@ export function PedidosTable({
         </CardHeader>
         
         <CardContent className="p-3">
-          <div className="overflow-x-auto rounded-lg border border-emerald-200/50 dark:border-emerald-800/50">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/50 dark:to-teal-950/50 border-b border-emerald-200 dark:border-emerald-800 h-10">
-                  <TableHead 
-                    className="font-semibold text-xs px-1.5 py-1.5 min-w-[85px] cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
-                    onClick={() => handleSort('id_pedido')}
-                  >
-                    <div className="flex items-center gap-1">
-                      ID Pedido
-                      {sortField === 'id_pedido' && (
-                        <span className="text-[10px]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                      )}
-                    </div>
-                  </TableHead>
-                  <TableHead className="font-semibold text-xs px-1.5 py-1.5 min-w-[130px]">Cliente</TableHead>
-                  <TableHead className="font-semibold text-xs px-1.5 py-1.5 min-w-[180px] max-w-[200px]">Dirección</TableHead>
-                  <TableHead 
-                    className="font-semibold text-xs px-1.5 py-1.5 min-w-[75px] cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
-                    onClick={() => handleSort('valor_total')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Valor
-                      {sortField === 'valor_total' && (
-                        <span className="text-[10px]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                      )}
-                    </div>
-                  </TableHead>
-                  <TableHead className="font-semibold text-xs px-1.5 py-1.5 min-w-[70px]">Pago</TableHead>
-                  <TableHead className="font-semibold text-xs px-1.5 py-1.5 min-w-[85px]">Mensajero</TableHead>
-                  <TableHead 
-                    className="font-semibold text-xs px-1.5 py-1.5 min-w-[85px] cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
-                    onClick={() => handleSort('fecha_creacion')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Fecha
-                      {sortField === 'fecha_creacion' && (
-                        <span className="text-[10px]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                      )}
-                    </div>
-                  </TableHead>
-                  <TableHead className="font-semibold text-xs px-1.5 py-1.5 min-w-[85px]">Estado</TableHead>
-                  <TableHead className="font-semibold text-xs px-1.5 py-1.5 min-w-[70px] text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
+          <div className="rounded-lg border border-emerald-200/50 dark:border-emerald-800/50 overflow-hidden">
+            <TooltipProvider>
+              <div className="overflow-x-auto">
+                <Table className="w-full">
+                  <colgroup>
+                    <col className="w-[8%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[18%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[6%]" />
+                  </colgroup>
+                  <TableHeader>
+                    <TableRow className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/50 dark:to-teal-950/50 border-b border-emerald-200 dark:border-emerald-800 h-10">
+                      <TableHead 
+                        className="font-semibold text-xs px-2 py-2 cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
+                        onClick={() => handleSort('id_pedido')}
+                      >
+                        <div className="flex items-center gap-1">
+                          ID
+                          {sortField === 'id_pedido' && (
+                            <span className="text-[10px]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                          )}
+                        </div>
+                      </TableHead>
+                      <TableHead className="font-semibold text-xs px-2 py-2">Cliente</TableHead>
+                      <TableHead className="font-semibold text-xs px-2 py-2 hidden md:table-cell">Dirección</TableHead>
+                      <TableHead 
+                        className="font-semibold text-xs px-2 py-2 cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
+                        onClick={() => handleSort('valor_total')}
+                      >
+                        <div className="flex items-center gap-1">
+                          Valor
+                          {sortField === 'valor_total' && (
+                            <span className="text-[10px]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                          )}
+                        </div>
+                      </TableHead>
+                      <TableHead className="font-semibold text-xs px-2 py-2 hidden lg:table-cell">Pago</TableHead>
+                      <TableHead className="font-semibold text-xs px-2 py-2">Mensajero</TableHead>
+                      <TableHead 
+                        className="font-semibold text-xs px-2 py-2 hidden xl:table-cell cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
+                        onClick={() => handleSort('fecha_creacion')}
+                      >
+                        <div className="flex items-center gap-1">
+                          Fecha
+                          {sortField === 'fecha_creacion' && (
+                            <span className="text-[10px]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                          )}
+                        </div>
+                      </TableHead>
+                      <TableHead className="font-semibold text-xs px-2 py-2">Estado</TableHead>
+                      <TableHead className="font-semibold text-xs px-2 py-2 text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
               <TableBody>
                 {sortedPedidos.map((pedido, index) => (
                   <TableRow 
@@ -311,114 +328,194 @@ export function PedidosTable({
                     className="hover:bg-gradient-to-r hover:from-emerald-50/50 hover:to-teal-50/50 dark:hover:from-emerald-950/30 dark:hover:to-teal-950/30 transition-all duration-200 border-b border-emerald-100/50 dark:border-emerald-900/30 h-auto"
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
-                    <TableCell className="px-1.5 py-2">
-                      <div className="flex items-center gap-1.5">
-                        <Package className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
-                        <span className="text-xs font-bold">{pedido.id_pedido}</span>
-                      </div>
+                    <TableCell className="px-2 py-2">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center gap-1.5">
+                            <Package className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                            <span className="text-xs font-bold truncate">{pedido.id_pedido}</span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{pedido.id_pedido}</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </TableCell>
                     
-                    <TableCell className="px-1.5 py-2">
-                      <div className="space-y-0.5">
-                        <p className="font-medium text-xs leading-tight">{pedido.cliente_nombre || 'Sin nombre'}</p>
+                    <TableCell className="px-2 py-2">
+                      <div className="space-y-0.5 min-w-0">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <p className="font-medium text-xs leading-tight truncate">{pedido.cliente_nombre || 'Sin nombre'}</p>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{pedido.cliente_nombre || 'Sin nombre'}</p>
+                            {pedido.cliente_telefono && <p className="text-xs mt-1">📞 {pedido.cliente_telefono}</p>}
+                            {pedido.tienda && <p className="text-xs mt-1">🏪 {pedido.tienda}</p>}
+                          </TooltipContent>
+                        </Tooltip>
                         {pedido.cliente_telefono && (
                           <div className="flex items-center gap-1">
                             <span className="text-[10px] text-muted-foreground">📞</span>
-                            <span className="text-[10px] text-muted-foreground">{pedido.cliente_telefono}</span>
+                            <span className="text-[10px] text-muted-foreground truncate">{pedido.cliente_telefono}</span>
                           </div>
                         )}
                         {pedido.tienda && (
-                          <div className="flex items-center gap-1">
-                            <Building2 className="w-2.5 h-2.5 text-gray-400" />
-                            <span className="text-[10px] text-muted-foreground truncate">{pedido.tienda}</span>
-                          </div>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center gap-1">
+                                <Building2 className="w-2.5 h-2.5 text-gray-400 flex-shrink-0" />
+                                <span className="text-[10px] text-muted-foreground truncate">{pedido.tienda}</span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{pedido.tienda}</p>
+                            </TooltipContent>
+                          </Tooltip>
                         )}
                       </div>
                     </TableCell>
                     
-                    <TableCell className="px-1.5 py-2">
-                      <div className="space-y-0.5">
-                        {pedido.direccion && (
-                          <p className="text-xs text-muted-foreground line-clamp-2 leading-tight" title={pedido.direccion}>
-                            {pedido.direccion}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {pedido.distrito && (
-                            <span className="text-[10px] text-muted-foreground">{pedido.distrito}</span>
-                          )}
-                          {pedido.canton && (
-                            <span className="text-[10px] text-muted-foreground">• {pedido.canton}</span>
-                          )}
-                        </div>
-                        {pedido.provincia && (
-                          <span className="text-[10px] text-muted-foreground">{pedido.provincia}</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell className="px-1.5 py-2">
-                      <p className="font-bold text-xs">{formatCurrency(pedido.valor_total)}</p>
-                      {pedido.productos && (
-                        <p className="text-[10px] text-muted-foreground truncate max-w-[75px]" title={pedido.productos}>
-                          {pedido.productos}
-                        </p>
-                      )}
-                    </TableCell>
-                    
-                    <TableCell className="px-1.5 py-2">
-                      <div className="flex items-center gap-1">
-                        {getPaymentMethodIcon(pedido.metodo_pago || 'efectivo')}
-                        <span className="text-[10px]">
-                          {(pedido.metodo_pago || 'Efectivo').charAt(0).toUpperCase() + (pedido.metodo_pago || 'Efectivo').slice(1)}
-                        </span>
-                      </div>
-                      {pedido.numero_sinpe && (
-                        <p className="text-[10px] text-muted-foreground font-mono mt-0.5 truncate max-w-[70px]" title={pedido.numero_sinpe}>SINPE: {pedido.numero_sinpe}</p>
-                      )}
-                    </TableCell>
-                    
-                    <TableCell className="px-1.5 py-2">
-                      <div className="space-y-0.5">
-                        {pedido.mensajero_asignado ? (
-                          <div className="flex items-center gap-1">
-                            <div className="w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                              <span className="text-[9px] font-bold text-blue-700">
-                                {pedido.mensajero_asignado.charAt(0).toUpperCase()}
-                              </span>
+                    <TableCell className="px-2 py-2 hidden md:table-cell">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="space-y-0.5 min-w-0">
+                            {pedido.direccion && (
+                              <p className="text-xs text-muted-foreground line-clamp-2 leading-tight">
+                                {pedido.direccion}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {pedido.distrito && (
+                                <span className="text-[10px] text-muted-foreground">{pedido.distrito}</span>
+                              )}
+                              {pedido.canton && (
+                                <span className="text-[10px] text-muted-foreground">• {pedido.canton}</span>
+                              )}
+                              {pedido.provincia && (
+                                <span className="text-[10px] text-muted-foreground">• {pedido.provincia}</span>
+                              )}
                             </div>
-                            <span className="text-xs truncate max-w-[60px]">{pedido.mensajero_asignado}</span>
                           </div>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p className="font-semibold mb-1">Dirección completa:</p>
+                          {pedido.direccion && <p className="text-sm">{pedido.direccion}</p>}
+                          <p className="text-xs mt-1">
+                            {[pedido.distrito, pedido.canton, pedido.provincia].filter(Boolean).join(', ')}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TableCell>
+                    
+                    <TableCell className="px-2 py-2">
+                      <div className="space-y-0.5">
+                        <p className="font-bold text-xs">{formatCurrency(pedido.valor_total)}</p>
+                        {pedido.productos && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <p className="text-[10px] text-muted-foreground truncate" title={pedido.productos}>
+                                {pedido.productos}
+                              </p>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <p className="font-semibold mb-1">Productos:</p>
+                              <p className="text-sm">{pedido.productos}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell className="px-2 py-2 hidden lg:table-cell">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1">
+                          {getPaymentMethodIcon(pedido.metodo_pago || 'efectivo')}
+                          <span className="text-[10px] truncate">
+                            {(pedido.metodo_pago || 'Efectivo').charAt(0).toUpperCase() + (pedido.metodo_pago || 'Efectivo').slice(1)}
+                          </span>
+                        </div>
+                        {pedido.numero_sinpe && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <p className="text-[10px] text-muted-foreground font-mono truncate">SINPE: {pedido.numero_sinpe}</p>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>SINPE: {pedido.numero_sinpe}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell className="px-2 py-2">
+                      <div className="space-y-0.5 min-w-0">
+                        {pedido.mensajero_asignado ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center gap-1">
+                                <div className="w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-[9px] font-bold text-blue-700">
+                                    {pedido.mensajero_asignado.charAt(0).toUpperCase()}
+                                  </span>
+                                </div>
+                                <span className="text-xs truncate">{pedido.mensajero_asignado}</span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Asignado: {pedido.mensajero_asignado}</p>
+                              {pedido.mensajero_concretado && (
+                                <p className="text-xs mt-1">Concretado: {pedido.mensajero_concretado}</p>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
                         ) : (
                           <span className="text-[10px] text-muted-foreground">Sin asignar</span>
                         )}
                         {pedido.mensajero_concretado && pedido.mensajero_concretado !== pedido.mensajero_asignado && (
                           <div className="flex items-center gap-1">
-                            <CheckCircle className="w-2.5 h-2.5 text-green-600" />
-                            <span className="text-[10px] text-green-600 truncate max-w-[60px]">{pedido.mensajero_concretado}</span>
+                            <CheckCircle className="w-2.5 h-2.5 text-green-600 flex-shrink-0" />
+                            <span className="text-[10px] text-green-600 truncate">{pedido.mensajero_concretado}</span>
                           </div>
                         )}
                         {pedido.jornada_ruta && (
-                          <div className="flex items-center gap-1">
-                            <Navigation className="w-2.5 h-2.5 text-orange-600" />
-                            <span className="text-[10px] text-orange-600 truncate max-w-[60px]">{pedido.jornada_ruta}</span>
-                          </div>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center gap-1">
+                                <Navigation className="w-2.5 h-2.5 text-orange-600 flex-shrink-0" />
+                                <span className="text-[10px] text-orange-600 truncate">{pedido.jornada_ruta}</span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Jornada: {pedido.jornada_ruta}</p>
+                            </TooltipContent>
+                          </Tooltip>
                         )}
                       </div>
                     </TableCell>
                     
-                    <TableCell className="px-1.5 py-2">
+                    <TableCell className="px-2 py-2 hidden xl:table-cell">
                       <div className="space-y-0.5">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3 text-gray-500" />
-                          <span className="text-[10px] text-gray-700">
-                            {formatDateSimple(pedido.fecha_creacion)}
-                          </span>
-                        </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-gray-500 flex-shrink-0" />
+                              <span className="text-[10px] text-gray-700 truncate">
+                                {formatDateSimple(pedido.fecha_creacion)}
+                              </span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Creación: {formatDate(pedido.fecha_creacion || '')}</p>
+                            {pedido.fecha_entrega && (
+                              <p className="text-xs mt-1">Entrega: {formatDateSimple(pedido.fecha_entrega)}</p>
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
                         {pedido.fecha_entrega && (
                           <div className="flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-blue-500" />
-                            <span className="text-[10px] text-blue-700">
+                            <Clock className="w-3 h-3 text-blue-500 flex-shrink-0" />
+                            <span className="text-[10px] text-blue-700 truncate">
                               {formatDateSimple(pedido.fecha_entrega)}
                             </span>
                           </div>
@@ -426,44 +523,69 @@ export function PedidosTable({
                       </div>
                     </TableCell>
                     
-                    <TableCell className="px-1.5 py-2">
+                    <TableCell className="px-2 py-2">
                       <div className="flex items-center gap-1.5">
                         {getStatusIcon(getStatusForBadge(pedido))}
                         <OrderStatusBadge status={getStatusForBadge(pedido)} />
                       </div>
                       {(pedido.notas || pedido.nota_asesor) && (
-                        <div className="mt-1 flex items-center gap-1">
-                          <MessageSquare className="w-2.5 h-2.5 text-blue-500" />
-                          <span className="text-[10px] text-blue-600">Notas</span>
-                        </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="mt-1 flex items-center gap-1">
+                              <MessageSquare className="w-2.5 h-2.5 text-blue-500" />
+                              <span className="text-[10px] text-blue-600">Notas</span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p className="font-semibold mb-1">Notas:</p>
+                            {pedido.notas && <p className="text-sm mb-1">{pedido.notas}</p>}
+                            {pedido.nota_asesor && <p className="text-sm">Asesor: {pedido.nota_asesor}</p>}
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                     </TableCell>
                     
-                    <TableCell className="px-1.5 py-2">
+                    <TableCell className="px-2 py-2">
                       <div className="flex gap-1 justify-end">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onViewPedido(pedido)}
-                          className="h-6 w-6 p-0"
-                        >
-                          <Eye className="w-3 h-3" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onEditPedido(pedido)}
-                          disabled={updatingPedido === pedido.id_pedido}
-                          className="h-6 w-6 p-0"
-                        >
-                          <Edit3 className="w-3 h-3" />
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onViewPedido(pedido)}
+                              className="h-6 w-6 p-0"
+                            >
+                              <Eye className="w-3 h-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Ver detalles</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onEditPedido(pedido)}
+                              disabled={updatingPedido === pedido.id_pedido}
+                              className="h-6 w-6 p-0"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Editar pedido</p>
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+              </div>
+            </TooltipProvider>
           </div>
 
           {pedidos.length === 0 && (
