@@ -1784,7 +1784,13 @@ export const getLiquidacionesRealesByTienda = async (fecha: string): Promise<{
       // - Para ALL STARS/MAGIC STARS: sumar TODOS los gastos de TODOS los mensajeros
       // - Para otras tiendas: NO incluir gastos (solo ALL STARS tiene gastos)
       let totalSpent = 0;
-      let gastosParaTienda = [];
+      let gastosParaTienda: {
+        id: string;
+        monto: number;
+        tipo_gasto: string;
+        comprobante_link: string;
+        fecha: string;
+      }[] = [];
       
       if (esAllStars) {
         // Para ALL STARS: sumar TODOS los gastos de todos los mensajeros
