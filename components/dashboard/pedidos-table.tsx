@@ -239,325 +239,224 @@ export function PedidosTable({
     <div className="relative group">
       <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-400 to-teal-400 rounded-2xl opacity-10 group-hover:opacity-20 blur transition duration-300"></div>
       <Card className="relative border-0 shadow-lg bg-gradient-to-br from-emerald-50/30 to-teal-50/30 dark:from-emerald-950/30 dark:to-teal-950/30">
-        <CardHeader className="pb-4">
+        <CardHeader className="pb-2 pt-3 px-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-md">
-                <Package className="w-5 h-5" />
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-md">
+                <Package className="w-4 h-4" />
               </div>
               <div>
-                <CardTitle className="text-lg font-semibold">Lista de Pedidos</CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
+                <CardTitle className="text-base font-semibold">Lista de Pedidos</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Información completa de todos los pedidos del sistema
                 </p>
               </div>
             </div>
-            <Badge variant="secondary" className="text-sm px-4 py-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
+            <Badge variant="secondary" className="text-xs px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
               {pedidos.length} pedido{pedidos.length === 1 ? '' : 's'}
             </Badge>
           </div>
         </CardHeader>
         
-        <CardContent>
+        <CardContent className="p-3">
           <div className="overflow-x-auto rounded-lg border border-emerald-200/50 dark:border-emerald-800/50">
             <Table>
               <TableHeader>
-                <TableRow className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/50 dark:to-teal-950/50 border-b border-emerald-200 dark:border-emerald-800">
+                <TableRow className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/50 dark:to-teal-950/50 border-b border-emerald-200 dark:border-emerald-800 h-10">
                   <TableHead 
-                    className="font-semibold min-w-[120px] cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
+                    className="font-semibold text-xs px-1.5 py-1.5 min-w-[85px] cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
                     onClick={() => handleSort('id_pedido')}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                       ID Pedido
                       {sortField === 'id_pedido' && (
-                        <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                        <span className="text-[10px]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
                       )}
                     </div>
                   </TableHead>
-                  <TableHead className="font-semibold min-w-[180px]">Cliente</TableHead>
+                  <TableHead className="font-semibold text-xs px-1.5 py-1.5 min-w-[130px]">Cliente</TableHead>
+                  <TableHead className="font-semibold text-xs px-1.5 py-1.5 min-w-[180px] max-w-[200px]">Dirección</TableHead>
                   <TableHead 
-                    className="font-semibold min-w-[100px] cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
+                    className="font-semibold text-xs px-1.5 py-1.5 min-w-[75px] cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
                     onClick={() => handleSort('valor_total')}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                       Valor
                       {sortField === 'valor_total' && (
-                        <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                        <span className="text-[10px]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
                       )}
                     </div>
                   </TableHead>
-                  <TableHead className="font-semibold min-w-[120px]">Método Pago</TableHead>
-                  <TableHead className="font-semibold min-w-[200px]">Dirección Completa</TableHead>
-                  <TableHead className="font-semibold min-w-[120px]">Tienda</TableHead>
-                  <TableHead className="font-semibold min-w-[120px]">Mensajero</TableHead>
+                  <TableHead className="font-semibold text-xs px-1.5 py-1.5 min-w-[70px]">Pago</TableHead>
+                  <TableHead className="font-semibold text-xs px-1.5 py-1.5 min-w-[85px]">Mensajero</TableHead>
                   <TableHead 
-                    className="font-semibold min-w-[180px] cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
+                    className="font-semibold text-xs px-1.5 py-1.5 min-w-[85px] cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors"
                     onClick={() => handleSort('fecha_creacion')}
                   >
-                    <div className="flex items-center gap-2">
-                      Fecha Creación / Entrega
+                    <div className="flex items-center gap-1">
+                      Fecha
                       {sortField === 'fecha_creacion' && (
-                        <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                        <span className="text-[10px]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
                       )}
                     </div>
                   </TableHead>
-                  <TableHead className="font-semibold min-w-[120px]">Estado</TableHead>
-                  <TableHead className="font-semibold min-w-[200px]">Notas</TableHead>
-                  <TableHead className="text-right font-semibold min-w-[100px]">Acciones</TableHead>
+                  <TableHead className="font-semibold text-xs px-1.5 py-1.5 min-w-[85px]">Estado</TableHead>
+                  <TableHead className="font-semibold text-xs px-1.5 py-1.5 min-w-[70px] text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sortedPedidos.map((pedido, index) => (
                   <TableRow 
                     key={pedido.id_pedido} 
-                    className="hover:bg-gradient-to-r hover:from-emerald-50/50 hover:to-teal-50/50 dark:hover:from-emerald-950/30 dark:hover:to-teal-950/30 transition-all duration-200 border-b border-emerald-100/50 dark:border-emerald-900/30"
+                    className="hover:bg-gradient-to-r hover:from-emerald-50/50 hover:to-teal-50/50 dark:hover:from-emerald-950/30 dark:hover:to-teal-950/30 transition-all duration-200 border-b border-emerald-100/50 dark:border-emerald-900/30 h-auto"
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <Package className="w-4 h-4 text-blue-600" />
-                        <span className="text-sm font-bold">{pedido.id_pedido}</span>
+                    <TableCell className="px-1.5 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <Package className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                        <span className="text-xs font-bold">{pedido.id_pedido}</span>
                       </div>
                     </TableCell>
                     
-                    <TableCell>
-                      <div className="space-y-1">
-                        <p className="font-medium text-sm">{pedido.cliente_nombre || 'Sin nombre'}</p>
-                        <div className="flex items-center gap-1">
-                          <span className="text-xs text-muted-foreground">📞</span>
-                          <span className="text-xs text-muted-foreground">{pedido.cliente_telefono || 'Sin teléfono'}</span>
-                        </div>
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <p className="font-bold text-sm">{formatCurrency(pedido.valor_total)}</p>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {getPaymentMethodIcon(pedido.metodo_pago || 'efectivo')}
-                        <span className="text-xs">
-                          {(pedido.metodo_pago || 'Efectivo').charAt(0).toUpperCase() + (pedido.metodo_pago || 'Efectivo').slice(1)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-gray-500" />
-                          <span className="text-xs font-medium">{pedido.distrito || 'Sin distrito'}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">{pedido.canton || 'Sin cantón'}</p>
-                        <p className="text-xs text-muted-foreground">{pedido.provincia || 'Sin provincia'}</p>
-                        {pedido.direccion && (
-                          <p className="text-xs text-muted-foreground truncate max-w-[150px]" title={pedido.direccion}>
-                            {pedido.direccion}
-                          </p>
+                    <TableCell className="px-1.5 py-2">
+                      <div className="space-y-0.5">
+                        <p className="font-medium text-xs leading-tight">{pedido.cliente_nombre || 'Sin nombre'}</p>
+                        {pedido.cliente_telefono && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-muted-foreground">📞</span>
+                            <span className="text-[10px] text-muted-foreground">{pedido.cliente_telefono}</span>
+                          </div>
+                        )}
+                        {pedido.tienda && (
+                          <div className="flex items-center gap-1">
+                            <Building2 className="w-2.5 h-2.5 text-gray-400" />
+                            <span className="text-[10px] text-muted-foreground truncate">{pedido.tienda}</span>
+                          </div>
                         )}
                       </div>
                     </TableCell>
                     
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Building2 className="w-3 h-3 text-gray-500" />
-                        <span className="text-xs">{pedido.tienda || 'Sin tienda'}</span>
+                    <TableCell className="px-1.5 py-2">
+                      <div className="space-y-0.5">
+                        {pedido.direccion && (
+                          <p className="text-xs text-muted-foreground line-clamp-2 leading-tight" title={pedido.direccion}>
+                            {pedido.direccion}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {pedido.distrito && (
+                            <span className="text-[10px] text-muted-foreground">{pedido.distrito}</span>
+                          )}
+                          {pedido.canton && (
+                            <span className="text-[10px] text-muted-foreground">• {pedido.canton}</span>
+                          )}
+                        </div>
+                        {pedido.provincia && (
+                          <span className="text-[10px] text-muted-foreground">{pedido.provincia}</span>
+                        )}
                       </div>
                     </TableCell>
                     
-                    <TableCell>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1">
-                          {pedido.mensajero_asignado ? (
-                            <>
-                              <User className="w-3 h-3 text-blue-600" />
-                              <span className="text-xs">{pedido.mensajero_asignado}</span>
-                            </>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Sin asignar</span>
-                          )}
-                        </div>
-                        {pedido.mensajero_concretado && (
+                    <TableCell className="px-1.5 py-2">
+                      <p className="font-bold text-xs">{formatCurrency(pedido.valor_total)}</p>
+                      {pedido.productos && (
+                        <p className="text-[10px] text-muted-foreground truncate max-w-[75px]" title={pedido.productos}>
+                          {pedido.productos}
+                        </p>
+                      )}
+                    </TableCell>
+                    
+                    <TableCell className="px-1.5 py-2">
+                      <div className="flex items-center gap-1">
+                        {getPaymentMethodIcon(pedido.metodo_pago || 'efectivo')}
+                        <span className="text-[10px]">
+                          {(pedido.metodo_pago || 'Efectivo').charAt(0).toUpperCase() + (pedido.metodo_pago || 'Efectivo').slice(1)}
+                        </span>
+                      </div>
+                      {pedido.numero_sinpe && (
+                        <p className="text-[10px] text-muted-foreground font-mono mt-0.5 truncate max-w-[70px]" title={pedido.numero_sinpe}>SINPE: {pedido.numero_sinpe}</p>
+                      )}
+                    </TableCell>
+                    
+                    <TableCell className="px-1.5 py-2">
+                      <div className="space-y-0.5">
+                        {pedido.mensajero_asignado ? (
                           <div className="flex items-center gap-1">
-                            <CheckCircle className="w-3 h-3 text-green-600" />
-                            <span className="text-xs text-green-600">Concretado: {pedido.mensajero_concretado}</span>
+                            <div className="w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                              <span className="text-[9px] font-bold text-blue-700">
+                                {pedido.mensajero_asignado.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <span className="text-xs truncate max-w-[60px]">{pedido.mensajero_asignado}</span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">Sin asignar</span>
+                        )}
+                        {pedido.mensajero_concretado && pedido.mensajero_concretado !== pedido.mensajero_asignado && (
+                          <div className="flex items-center gap-1">
+                            <CheckCircle className="w-2.5 h-2.5 text-green-600" />
+                            <span className="text-[10px] text-green-600 truncate max-w-[60px]">{pedido.mensajero_concretado}</span>
                           </div>
                         )}
                         {pedido.jornada_ruta && (
                           <div className="flex items-center gap-1">
-                            <Navigation className="w-3 h-3 text-orange-600" />
-                            <span className="text-xs text-orange-600">{pedido.jornada_ruta}</span>
+                            <Navigation className="w-2.5 h-2.5 text-orange-600" />
+                            <span className="text-[10px] text-orange-600 truncate max-w-[60px]">{pedido.jornada_ruta}</span>
                           </div>
                         )}
                       </div>
                     </TableCell>
                     
-                    <TableCell>
-                      <div className="space-y-2">
-                        {/* Fecha de Creación */}
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-gray-600" />
-                          <div>
-                            <div className="text-xs text-gray-500 font-medium">Creación:</div>
-                            <div className="text-sm font-semibold text-gray-900">
-                              {formatDateSimple(pedido.fecha_creacion)}
-                            </div>
-                          </div>
+                    <TableCell className="px-1.5 py-2">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-gray-500" />
+                          <span className="text-[10px] text-gray-700">
+                            {formatDateSimple(pedido.fecha_creacion)}
+                          </span>
                         </div>
-                        
-                        {/* Fecha de Entrega */}
                         {pedido.fecha_entrega && (
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-4 h-4 text-blue-600" />
-                            <div>
-                              <div className="text-xs text-gray-500 font-medium">Entrega:</div>
-                              <div className="text-sm font-semibold text-blue-700">
-                                {formatDateSimple(pedido.fecha_entrega)}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <div className="space-y-2">
-                        {/* Estado actual */}
-                        <div className="flex items-center gap-2">
-                          {getStatusIcon(getStatusForBadge(pedido))}
-                          <OrderStatusBadge status={getStatusForBadge(pedido)} />
-                        </div>
-                        
-                        {/* Botón Editar Estado */}
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onUpdateStatus(pedido)}
-                            disabled={updatingPedido === pedido.id_pedido}
-                            className="h-6 px-2 text-xs bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                          >
-                            <Edit3 className="w-3 h-3 mr-1" />
-                            Editar Estado
-                          </Button>
-                        </div>
-                        
-                        {/* Loading indicator */}
-                        {updatingPedido === pedido.id_pedido && (
-                          <div className="flex items-center gap-1 text-xs text-gray-500">
-                            <div className="w-3 h-3 border border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
-                            Actualizando...
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <div className="space-y-2 max-w-[180px]">
-                        {pedido.notas && (
-                          <div className="bg-blue-50 p-2 rounded text-xs">
-                            <div className="flex items-center gap-1 mb-1">
-                              <MessageSquare className="w-3 h-3 text-blue-600" />
-                              <span className="font-medium text-blue-800">Notas:</span>
-                            </div>
-                            <p className="text-blue-700 truncate" title={pedido.notas}>
-                              {pedido.notas}
-                            </p>
-                          </div>
-                        )}
-                        {pedido.nota_asesor && (
-                          <div className="bg-green-50 p-2 rounded text-xs">
-                            <div className="flex items-center gap-1 mb-1">
-                              <Users className="w-3 h-3 text-green-600" />
-                              <span className="font-medium text-green-800">Asesor:</span>
-                            </div>
-                            <p className="text-green-700 truncate" title={pedido.nota_asesor}>
-                              {pedido.nota_asesor}
-                            </p>
-                          </div>
-                        )}
-                        {pedido.productos && (
-                          <div className="bg-gray-50 p-2 rounded text-xs">
-                            <div className="flex items-center gap-1 mb-1">
-                              <Package className="w-3 h-3 text-gray-600" />
-                              <span className="font-medium text-gray-800">Productos:</span>
-                            </div>
-                            <p className="text-gray-700 truncate" title={pedido.productos}>
-                              {pedido.productos}
-                            </p>
-                          </div>
-                        )}
-                        {pedido.numero_sinpe && (
-                          <div className="bg-blue-50 p-2 rounded text-xs">
-                            <div className="flex items-center gap-1 mb-1">
-                              <CreditCard className="w-3 h-3 text-blue-600" />
-                              <span className="font-medium text-blue-800">SINPE:</span>
-                            </div>
-                            <p className="text-blue-700 font-mono">{pedido.numero_sinpe}</p>
-                          </div>
-                        )}
-                        {pedido.comprobante_sinpe && (
-                          <div className="bg-blue-50 p-2 rounded text-xs">
-                            <div className="flex items-center gap-1 mb-1">
-                              <FileText className="w-3 h-3 text-blue-600" />
-                              <span className="font-medium text-blue-800">Comprobante:</span>
-                            </div>
-                            <p className="text-blue-700 truncate" title={pedido.comprobante_sinpe}>
-                              {pedido.comprobante_sinpe}
-                            </p>
-                          </div>
-                        )}
-                        {pedido.efectivo_2_pagos && (
-                          <div className="bg-orange-50 p-2 rounded text-xs">
-                            <div className="flex items-center gap-1 mb-1">
-                              <DollarSign className="w-3 h-3 text-orange-600" />
-                              <span className="font-medium text-orange-800">Efectivo 2P:</span>
-                            </div>
-                            <p className="text-orange-700">{formatCurrency(parseFloat(pedido.efectivo_2_pagos) || 0)}</p>
-                          </div>
-                        )}
-                        {pedido.sinpe_2_pagos && (
-                          <div className="bg-orange-50 p-2 rounded text-xs">
-                            <div className="flex items-center gap-1 mb-1">
-                              <CreditCard className="w-3 h-3 text-orange-600" />
-                              <span className="font-medium text-orange-800">SINPE 2P:</span>
-                            </div>
-                            <p className="text-orange-700">{formatCurrency(parseFloat(pedido.sinpe_2_pagos) || 0)}</p>
-                          </div>
-                        )}
-                        {pedido.link_ubicacion && (
                           <div className="flex items-center gap-1">
-                            <a 
-                              href={pedido.link_ubicacion} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 text-xs flex items-center gap-1"
-                            >
-                              <MapPin className="w-3 h-3" />
-                              Ver ubicación
-                            </a>
+                            <Clock className="w-3 h-3 text-blue-500" />
+                            <span className="text-[10px] text-blue-700">
+                              {formatDateSimple(pedido.fecha_entrega)}
+                            </span>
                           </div>
                         )}
                       </div>
                     </TableCell>
                     
-                    <TableCell>
-                      <div className="flex gap-1">
+                    <TableCell className="px-1.5 py-2">
+                      <div className="flex items-center gap-1.5">
+                        {getStatusIcon(getStatusForBadge(pedido))}
+                        <OrderStatusBadge status={getStatusForBadge(pedido)} />
+                      </div>
+                      {(pedido.notas || pedido.nota_asesor) && (
+                        <div className="mt-1 flex items-center gap-1">
+                          <MessageSquare className="w-2.5 h-2.5 text-blue-500" />
+                          <span className="text-[10px] text-blue-600">Notas</span>
+                        </div>
+                      )}
+                    </TableCell>
+                    
+                    <TableCell className="px-1.5 py-2">
+                      <div className="flex gap-1 justify-end">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => onViewPedido(pedido)}
+                          className="h-6 w-6 p-0"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-3 h-3" />
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => onEditPedido(pedido)}
                           disabled={updatingPedido === pedido.id_pedido}
+                          className="h-6 w-6 p-0"
                         >
-                          <Edit3 className="w-4 h-4" />
+                          <Edit3 className="w-3 h-3" />
                         </Button>
                       </div>
                     </TableCell>

@@ -290,62 +290,73 @@ export default function TiendaLiquidacion() {
         <CardContent>
           <div className="flex flex-col gap-4">
             {/* Botones de filtro rápido */}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const fecha = new Date();
-                  fecha.setDate(fecha.getDate() - 7);
-                  setSelectedDate(fecha.toISOString().split('T')[0]);
-                }}
-              >
-                7 días pasados
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const fecha = new Date();
-                  fecha.setDate(fecha.getDate() - 14);
-                  setSelectedDate(fecha.toISOString().split('T')[0]);
-                }}
-              >
-                14 días pasados
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const fecha = new Date();
-                  fecha.setDate(fecha.getDate() - 30);
-                  setSelectedDate(fecha.toISOString().split('T')[0]);
-                }}
-              >
-                30 días pasados
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const hoy = new Date();
-                  const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-                  setSelectedDate(primerDia.toISOString().split('T')[0]);
-                }}
-              >
-                Mes actual
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const hoy = new Date();
-                  const primerDiaMesPasado = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-                  setSelectedDate(primerDiaMesPasado.toISOString().split('T')[0]);
-                }}
-              >
-                Mes pasado
-              </Button>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <Filter className="w-4 h-4" />
+                Filtros Rápidos
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const fecha = new Date();
+                    fecha.setDate(fecha.getDate() - 7);
+                    setSelectedDate(fecha.toISOString().split('T')[0]);
+                  }}
+                  className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700"
+                >
+                  Última semana (7 días pasados)
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const fecha = new Date();
+                    fecha.setDate(fecha.getDate() - 14);
+                    setSelectedDate(fecha.toISOString().split('T')[0]);
+                  }}
+                  className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700"
+                >
+                  Últimos 14 días
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const fecha = new Date();
+                    fecha.setDate(fecha.getDate() - 30);
+                    setSelectedDate(fecha.toISOString().split('T')[0]);
+                  }}
+                  className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700"
+                >
+                  Últimos 30 días
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const hoy = new Date();
+                    const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+                    setSelectedDate(primerDia.toISOString().split('T')[0]);
+                  }}
+                  className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700"
+                >
+                  Mes actual
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const hoy = new Date();
+                    const primerDiaMesPasado = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+                    setSelectedDate(primerDiaMesPasado.toISOString().split('T')[0]);
+                  }}
+                  className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700"
+                >
+                  Mes pasado
+                </Button>
+              </div>
             </div>
             
             <div className="flex items-center gap-4">

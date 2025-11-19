@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { mockApi } from '@/lib/mock-api';
 import { RouteLiquidation, RouteLiquidationStats, RouteLiquidationFilters, PedidoTest, TiendaLiquidationCalculation } from '@/lib/types';
@@ -110,6 +110,8 @@ export default function AdminLiquidationPage() {
   // Estados para filtros y paginación de tiendas
   const [tiendaStatusFilter, setTiendaStatusFilter] = useState<string>('TODOS');
   const [tiendaCurrentPage, setTiendaCurrentPage] = useState<{ [key: string]: number }>({});
+  const [isQuickFilterLoading, setIsQuickFilterLoading] = useState(false);
+  const isQuickLoadRef = useRef(false);
   
   
   // Estados para el loader de progreso
@@ -253,10 +255,26 @@ export default function AdminLiquidationPage() {
   // Recargar datos cuando cambie la fecha
   useEffect(() => {
     if (selectedDate) {
-      loadData();
-      loadCalculations();
-      loadTiendaCalculations();
-      loadPendingLiquidations(); // Cargar liquidaciones pendientes
+      // Si es una carga rápida desde filtros, usar modo optimizado
+      const isQuickLoad = isQuickLoadRef.current;
+      
+      if (isQuickLoad) {
+        setIsLoadingData(true);
+        isQuickLoadRef.current = false; // Resetear el ref después de usarlo
+      }
+      
+      // Cargar datos en paralelo para mayor velocidad
+      Promise.all([
+        loadData(),
+        loadCalculations(isQuickLoad), // Pasar true para evitar el loader completo en filtros rápidos
+        loadTiendaCalculations(),
+        loadPendingLiquidations()
+      ]).finally(() => {
+        if (isQuickLoad) {
+          setIsQuickFilterLoading(false);
+          setIsLoadingData(false);
+        }
+      });
     }
   }, [selectedDate]);
 
@@ -1910,6 +1928,133 @@ export default function AdminLiquidationPage() {
             </Card>
 
       </div>
+
+      {/* Filtros Rápidos de Fecha */}
+      <Card className="border-2 border-sky-200 bg-gradient-to-br from-sky-50 to-indigo-50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sky-800">
+            <Filter className="w-5 h-5" />
+            Filtros Rápidos de Fecha
+            {isQuickFilterLoading && (
+              <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isQuickFilterLoading}
+              onClick={() => {
+                isQuickLoadRef.current = true;
+                setIsQuickFilterLoading(true);
+                const fecha = new Date();
+                fecha.setDate(fecha.getDate() - 7);
+                setSelectedDate(fecha.toISOString().split('T')[0]);
+              }}
+              className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all"
+            >
+              {isQuickFilterLoading ? (
+                <>
+                  <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                  Cargando...
+                </>
+              ) : (
+                'Última semana (7 días pasados)'
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isQuickFilterLoading}
+              onClick={() => {
+                isQuickLoadRef.current = true;
+                setIsQuickFilterLoading(true);
+                const fecha = new Date();
+                fecha.setDate(fecha.getDate() - 14);
+                setSelectedDate(fecha.toISOString().split('T')[0]);
+              }}
+              className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all"
+            >
+              {isQuickFilterLoading ? (
+                <>
+                  <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                  Cargando...
+                </>
+              ) : (
+                'Últimos 14 días'
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isQuickFilterLoading}
+              onClick={() => {
+                isQuickLoadRef.current = true;
+                setIsQuickFilterLoading(true);
+                const fecha = new Date();
+                fecha.setDate(fecha.getDate() - 30);
+                setSelectedDate(fecha.toISOString().split('T')[0]);
+              }}
+              className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all"
+            >
+              {isQuickFilterLoading ? (
+                <>
+                  <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                  Cargando...
+                </>
+              ) : (
+                'Últimos 30 días'
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isQuickFilterLoading}
+              onClick={() => {
+                isQuickLoadRef.current = true;
+                setIsQuickFilterLoading(true);
+                const hoy = new Date();
+                const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+                setSelectedDate(primerDia.toISOString().split('T')[0]);
+              }}
+              className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all"
+            >
+              {isQuickFilterLoading ? (
+                <>
+                  <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                  Cargando...
+                </>
+              ) : (
+                'Mes actual'
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isQuickFilterLoading}
+              onClick={() => {
+                isQuickLoadRef.current = true;
+                setIsQuickFilterLoading(true);
+                const hoy = new Date();
+                const primerDiaMesPasado = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+                setSelectedDate(primerDiaMesPasado.toISOString().split('T')[0]);
+              }}
+              className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all"
+            >
+              {isQuickFilterLoading ? (
+                <>
+                  <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                  Cargando...
+                </>
+              ) : (
+                'Mes pasado'
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Dropdown de Resumen de PRUEBA */}
       {pruebaMetrics && (

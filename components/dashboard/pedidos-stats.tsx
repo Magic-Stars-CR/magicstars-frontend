@@ -10,11 +10,8 @@ import {
   CreditCard, 
   FileText, 
   TrendingUp, 
-  AlertCircle,
-  BarChart3,
-  PieChart
+  AlertCircle
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 
 interface PedidosStatsProps {
   stats: {
@@ -50,15 +47,6 @@ export function PedidosStats({ stats, hasActiveFilters, totalPedidos }: PedidosS
   const getProgressWidth = (value: number, total: number) => {
     return total > 0 ? Math.min((value / total) * 100, 100) : 0;
   };
-
-  // Datos para gráficos
-  const statusChartData = [
-    { name: 'Entregados', value: stats.entregados, color: '#10b981' },
-    { name: 'Sin Asignar', value: stats.sinAsignar, color: '#f59e0b' },
-    { name: 'Asignados', value: stats.asignados, color: '#3b82f6' },
-    { name: 'Devoluciones', value: stats.devoluciones, color: '#ef4444' },
-    { name: 'Reagendados', value: stats.reagendados, color: '#f97316' }
-  ];
 
   const paymentChartData = [
     { name: 'Efectivo', value: stats.efectivo, color: '#10b981' },
@@ -151,56 +139,6 @@ export function PedidosStats({ stats, hasActiveFilters, totalPedidos }: PedidosS
         </div>
       </div>
 
-      {/* Gráficas de Comparación */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Gráfica de Barras - Pedidos por Estado */}
-        <Card className="shadow-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <BarChart3 className="w-5 h-5 text-blue-600" />
-              <h3 className="text-lg font-semibold">Distribución de Pedidos por Estado</h3>
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={statusChartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip formatter={(value) => [value, 'Pedidos']} />
-                <Bar dataKey="value" fill="#8884d8" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Gráfica de Pie - Métodos de Pago */}
-        <Card className="shadow-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <PieChart className="w-5 h-5 text-blue-600" />
-              <h3 className="text-lg font-semibold">Distribución de Métodos de Pago</h3>
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <RechartsPieChart>
-                <Pie
-                  data={paymentChartData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {paymentChartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </RechartsPieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }
