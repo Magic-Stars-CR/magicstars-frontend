@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,8 +13,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
+
+// Lazy load Calendar
+const CalendarComponent = dynamic(
+  () => import('@/components/ui/calendar').then(mod => ({ default: mod.Calendar })),
+  { ssr: false }
+);
 import { OrderStatusBadge } from '@/components/dashboard/order-status-badge';
 import { mockApi } from '@/lib/mock-api';
 

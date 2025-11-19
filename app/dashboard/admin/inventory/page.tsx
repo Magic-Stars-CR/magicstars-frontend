@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { obtenerInventario, ProductoInventario } from '@/lib/supabase-inventario';
 import { StatsCard } from '@/components/dashboard/stats-card';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -327,25 +328,51 @@ export default function AdminInventoryPage() {
 
   if (isInitialLoading) {
     return (
-      <div className="flex h-80 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="flex flex-col items-center justify-center gap-3 py-12">
+        <div className="relative w-6 h-6">
+          <div className="absolute inset-0 rounded-full border-2 border-sky-200/30"></div>
+          <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-sky-500 border-r-indigo-500 border-b-purple-500 animate-spin"></div>
+        </div>
+        <span className="text-sm text-muted-foreground">Cargando inventario...</span>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Inventario General</h1>
-          <p className="text-muted-foreground">
-            Consulta el inventario consolidado de todas las tiendas.
-          </p>
+    <div className="space-y-8">
+      {/* Header mejorado con gradiente */}
+      <div className="relative rounded-2xl bg-gradient-to-r from-sky-500 via-indigo-500 to-purple-500 p-8 text-white overflow-hidden">
+        <div className="absolute inset-0 opacity-20"></div>
+        <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm shadow-lg">
+              <Warehouse className="h-8 w-8 text-white" />
+            </div>
+            <div>
+              <p className="inline-flex items-center gap-2 rounded-full bg-white/20 backdrop-blur-sm px-4 py-1.5 text-sm font-medium text-white mb-3">
+                <Package className="h-4 w-4" />
+                Panel de gestión de inventario
+              </p>
+              <h1 className="text-4xl font-bold tracking-tight text-white mb-2">
+                Inventario General
+              </h1>
+              <p className="text-white/90 text-base">
+                Consulta el inventario consolidado de todas las tiendas.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button 
+              onClick={loadInventory} 
+              disabled={loading}
+              className="flex items-center gap-2 bg-white/10 backdrop-blur-sm border-white/20 text-white hover:bg-white/20 transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="outline"
+            >
+              <RefreshCw className={cn('w-4 h-4', loading ? 'animate-spin' : '')} />
+              <span>Recargar</span>
+            </Button>
+          </div>
         </div>
-        <Button variant="outline" size="sm" onClick={loadInventory} disabled={loading}>
-          <RefreshCw className={cn('mr-2 h-4 w-4', loading ? 'animate-spin' : '')} />
-          Recargar
-        </Button>
       </div>
 
       {error && (
@@ -359,98 +386,160 @@ export default function AdminInventoryPage() {
         </Alert>
       )}
 
+      {/* Cards de Estadísticas - Mejoradas */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatsCard
-          title="Productos listados"
-          value={statusCounts.all}
-          icon={Package}
-          className="bg-blue-50 border-blue-200"
-        />
-        <StatsCard
-          title="Unidades totales"
-          value={totalUnits.toLocaleString('es-CR')}
-          icon={TrendingUp}
-          className="bg-green-50 border-green-200"
-        />
-        <StatsCard
-          title="Tiendas activas"
-          value={totalStores}
-          icon={Building2}
-          className="bg-purple-50 border-purple-200"
-        />
-        <StatsCard
-          title="Alertas (bajo/agotado)"
-          value={lowStockTotal + outOfStockTotal}
-          icon={AlertTriangle}
-          className="bg-yellow-50 border-yellow-200"
-        />
+        <Card className="relative overflow-hidden hover:shadow-lg transition-all duration-200 border-2 border-sky-200 dark:border-sky-800">
+          <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br from-sky-400/30 to-blue-400/30 blur-xl" />
+          <CardContent className="relative p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Productos listados</p>
+                <p className="text-3xl font-bold text-sky-700 dark:text-sky-400">{statusCounts.all.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-1">Total de productos</p>
+              </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-blue-500 text-white shadow-lg">
+                <Package className="w-6 h-6" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="relative overflow-hidden hover:shadow-lg transition-all duration-200 border-2 border-emerald-200 dark:border-emerald-800">
+          <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br from-emerald-400/30 to-green-400/30 blur-xl" />
+          <CardContent className="relative p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Unidades totales</p>
+                <p className="text-3xl font-bold text-emerald-700 dark:text-emerald-400">{totalUnits.toLocaleString('es-CR')}</p>
+                <p className="text-xs text-muted-foreground mt-1">Stock disponible</p>
+              </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-green-500 text-white shadow-lg">
+                <TrendingUp className="w-6 h-6" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="relative overflow-hidden hover:shadow-lg transition-all duration-200 border-2 border-purple-200 dark:border-purple-800">
+          <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br from-purple-400/30 to-indigo-400/30 blur-xl" />
+          <CardContent className="relative p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Tiendas activas</p>
+                <p className="text-3xl font-bold text-purple-700 dark:text-purple-400">{totalStores}</p>
+                <p className="text-xs text-muted-foreground mt-1">Puntos de venta</p>
+              </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-indigo-500 text-white shadow-lg">
+                <Building2 className="w-6 h-6" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="relative overflow-hidden hover:shadow-lg transition-all duration-200 border-2 border-amber-200 dark:border-amber-800">
+          <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br from-amber-400/30 to-yellow-400/30 blur-xl" />
+          <CardContent className="relative p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Alertas</p>
+                <p className="text-3xl font-bold text-amber-700 dark:text-amber-400">{lowStockTotal + outOfStockTotal}</p>
+                <p className="text-xs text-muted-foreground mt-1">Bajo/Agotado</p>
+              </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-yellow-500 text-white shadow-lg">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <Card>
-        <CardHeader className="space-y-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap gap-2">
-              {storeOptions.map((option) => {
-                const isActive = selectedStore === option.value;
-                return (
-                  <Button
-                    key={option.value}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelectedStore(option.value)}
-                    className={cn(
-                      'flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium transition-colors',
-                      isActive
-                        ? 'border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100'
-                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                    )}
-                  >
-                    <span>{option.label}</span>
-                    <span
+      {/* Sección de Filtros - Mejorada */}
+      <div className="relative group">
+        <div className="absolute -inset-0.5 bg-gradient-to-r from-sky-400 to-indigo-400 rounded-2xl opacity-10 group-hover:opacity-20 blur transition duration-300"></div>
+        <Card className="relative border-0 shadow-lg bg-gradient-to-br from-sky-50/50 to-indigo-50/50 dark:from-sky-950/50 dark:to-indigo-950/50">
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-indigo-500 text-white shadow-md">
+                  <Filter className="w-5 h-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg font-semibold">Filtros y Búsqueda</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Filtra inventario por tienda, estado de stock o búsqueda de texto
+                  </p>
+                </div>
+              </div>
+              <Badge variant="secondary" className="text-sm px-3 py-1">
+                {filteredItems.length} resultado{filteredItems.length === 1 ? '' : 's'}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Filtros rápidos por tienda */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-sky-500" />
+                Filtros rápidos por tienda
+              </Label>
+              <div className="flex flex-wrap items-center gap-2">
+                {storeOptions.map((option) => {
+                  const isActive = selectedStore === option.value;
+                  return (
+                    <Button
+                      key={option.value}
+                      size="sm"
+                      variant={isActive ? 'default' : 'outline'}
+                      onClick={() => setSelectedStore(option.value)}
                       className={cn(
-                        'min-w-[1.75rem] rounded-full px-2 py-0.5 text-xs font-semibold',
-                        isActive ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                        'transition-all duration-200 hover:scale-105',
+                        isActive
+                          ? 'bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white shadow-md'
+                          : 'hover:bg-sky-50'
                       )}
                     >
-                      {option.count}
-                    </span>
-                  </Button>
-                );
-              })}
+                      <span>{option.label}</span>
+                      <span className="ml-2 px-2 py-0.5 rounded-full bg-white/20 text-xs font-semibold">
+                        {option.count}
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            {/* Separador */}
+            <div className="flex items-center gap-4">
+              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent"></div>
+              <span className="text-xs text-muted-foreground">Estado de Stock</span>
+              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent"></div>
+            </div>
+
+            {/* Filtros de estado */}
+            <div className="flex flex-wrap items-center gap-2">
               {stockFilterOptions.map((option) => {
                 const isActive = stockFilter === option.value;
                 return (
                   <Button
                     key={option.value}
-                    type="button"
-                    variant="outline"
                     size="sm"
+                    variant={isActive ? 'default' : 'outline'}
                     onClick={() => setStockFilter(option.value)}
                     className={cn(
-                      'flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium transition-colors',
+                      'transition-all duration-200 hover:scale-105',
                       isActive
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                        ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md'
+                        : 'hover:bg-emerald-50'
                     )}
                   >
                     <span>{option.label}</span>
-                    <span
-                      className={cn(
-                        'min-w-[1.75rem] rounded-full px-2 py-0.5 text-xs font-semibold',
-                        isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
-                      )}
-                    >
+                    <span className="ml-2 px-2 py-0.5 rounded-full bg-white/20 text-xs font-semibold">
                       {option.count}
                     </span>
                   </Button>
                 );
               })}
             </div>
-          </div>
 
           <div className="relative w-full">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
